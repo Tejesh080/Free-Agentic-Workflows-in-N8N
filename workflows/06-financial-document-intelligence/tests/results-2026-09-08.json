@@ -1,0 +1,147 @@
+{
+  "suite": "invoice-fixtures-v1",
+  "generated_at": "2026-09-08T05:21:17.024Z",
+  "n8n_execution_id": "262",
+  "workflow": "06 Financial Document Intelligence Agent",
+  "how_to_reproduce": "Run the 'Test Suite Trigger' manual trigger. Eleven cases need no credentials; I12 makes one real model call through the Model Router.",
+  "note": "All vendor names, invoice numbers and amounts are invented. Eleven cases supply a pre-parsed extraction so the reconciliation, duplicate and exception logic is exercised without model variance; I12 runs the real extraction path.",
+  "total": 12,
+  "passed": 12,
+  "failed": 0,
+  "all_passed": true,
+  "deterministic_latency_ms_p50_measured": 572,
+  "deterministic_latency_ms_max_measured": 865,
+  "model_path_latency_ms_measured": 27599,
+  "known_quirk": "I03 and I08 deliberately omit fields, so their fingerprints are stable across runs and they additionally report duplicate_invoice on a second run against the same ledger. That is correct behaviour for an identical fingerprint and does not affect any assertion.",
+  "cases": [
+    {
+      "case_id": "I01-clean-invoice",
+      "pass": true,
+      "status": "accepted",
+      "confidence": 0.97,
+      "codes": [],
+      "latency_ms_measured": 355
+    },
+    {
+      "case_id": "I02-totals-mismatch",
+      "pass": true,
+      "status": "rejected",
+      "codes": [
+        "totals_mismatch"
+      ],
+      "detail": "subtotal 1000.00 + tax 240.50 = 1240.50 but total is 1300.00",
+      "latency_ms_measured": 552
+    },
+    {
+      "case_id": "I03-missing-vendor",
+      "pass": true,
+      "status": "rejected",
+      "codes": [
+        "missing_required_field"
+      ],
+      "detail": "vendor_name",
+      "latency_ms_measured": 567
+    },
+    {
+      "case_id": "I04-line-items-do-not-sum",
+      "pass": true,
+      "status": "rejected",
+      "codes": [
+        "line_items_do_not_sum"
+      ],
+      "detail": "line items total 800.00 but subtotal is 1000.00",
+      "latency_ms_measured": 547
+    },
+    {
+      "case_id": "I05-low-confidence",
+      "pass": true,
+      "status": "needs_review",
+      "codes": [
+        "low_confidence"
+      ],
+      "detail": "reported confidence 0.42 is below the floor of 0.7",
+      "latency_ms_measured": 605
+    },
+    {
+      "case_id": "I06-unsupported-document-type",
+      "pass": true,
+      "status": "rejected",
+      "codes": [
+        "unsupported_document_type"
+      ],
+      "latency_ms_measured": 576
+    },
+    {
+      "case_id": "I07-duplicate-of-I01",
+      "pass": true,
+      "status": "rejected",
+      "codes": [
+        "duplicate_invoice"
+      ],
+      "detail": "fingerprint already recorded on ledger row 13",
+      "latency_ms_measured": 865
+    },
+    {
+      "case_id": "I08-malformed-extraction",
+      "pass": true,
+      "status": "rejected",
+      "codes": [
+        "extraction_failed"
+      ],
+      "detail": "extraction is not valid JSON: Unexpected end of JSON input",
+      "latency_ms_measured": 606
+    },
+    {
+      "case_id": "I09-invalid-date",
+      "pass": true,
+      "status": "needs_review",
+      "codes": [
+        "invalid_date"
+      ],
+      "detail": "invoice_date '13/45/2026' is not ISO YYYY-MM-DD",
+      "latency_ms_measured": 569
+    },
+    {
+      "case_id": "I10-invalid-currency",
+      "pass": true,
+      "status": "needs_review",
+      "codes": [
+        "invalid_currency"
+      ],
+      "detail": "currency 'EURO' is not a three-letter ISO 4217 code",
+      "latency_ms_measured": 572
+    },
+    {
+      "case_id": "I11-future-dated",
+      "pass": true,
+      "status": "needs_review",
+      "codes": [
+        "future_dated"
+      ],
+      "detail": "invoice_date 2099-01-01 is in the future",
+      "latency_ms_measured": 619
+    },
+    {
+      "case_id": "I12-real-model-extraction",
+      "pass": true,
+      "status": "accepted",
+      "confidence": 0.98,
+      "codes": [],
+      "extraction_source": "model",
+      "model_provider": "google",
+      "extracted_invoice_number": "INV-7781",
+      "extracted_total": 445.5,
+      "verification_verified": true,
+      "latency_ms_measured": 27599
+    }
+  ],
+  "regression_history": [
+    {
+      "execution_id": "220",
+      "passed": 11,
+      "failed": 1,
+      "failing_case": "I12-real-model-extraction",
+      "cause": "The model response was truncated mid-JSON. Root cause was a 2048 output-token cap in the Model Router: current-generation models spend part of that budget on reasoning tokens. Fixed by raising all router models to 8192 output tokens."
+    }
+  ]
+}
