@@ -1,0 +1,30 @@
+{
+  "suite": "verification-fixtures-v1",
+  "generated_at": "2026-09-08T04:53:22.411Z",
+  "n8n_execution_id": "174",
+  "workflow": "[Platform] 09 AI Output Verification Layer",
+  "how_to_reproduce": "Open the workflow in n8n and run the 'Test Suite Trigger' manual trigger.",
+  "note": "latency_ms_measured is MEASURED wall-clock time per verification call. F06 and F07 make a real model call through the Model Router; the other eight cases are fully deterministic and make no model call at all.",
+  "total": 10,
+  "passed": 10,
+  "failed": 0,
+  "all_passed": true,
+  "latency_ms_p50_measured": 20,
+  "latency_ms_max_measured": 4113,
+  "cases": [
+    {"case_id": "F01-valid-structured-output", "pass": true, "expected_verified": true, "actual_verified": true, "expected_issue_codes": [], "actual_issue_codes": [], "score": 1, "groundedness_status": "no_sources_supplied", "latency_ms_measured": 36},
+    {"case_id": "F02-broken-arithmetic", "pass": true, "expected_verified": false, "actual_verified": false, "expected_issue_codes": ["business_rule_failed"], "actual_issue_codes": ["business_rule_failed"], "score": 0.7143, "detail": "subtotal + tax = 1240.5 vs total = 1300 (tolerance 0.01)", "latency_ms_measured": 21},
+    {"case_id": "F03-missing-required-field", "pass": true, "expected_verified": false, "actual_verified": false, "expected_issue_codes": ["missing_required_field", "schema_violation"], "actual_issue_codes": ["schema_violation", "missing_required_field"], "score": 0.4286, "latency_ms_measured": 20},
+    {"case_id": "F04-prose-where-json-required", "pass": true, "expected_verified": false, "actual_verified": false, "expected_issue_codes": ["output_not_json"], "actual_issue_codes": ["output_not_json", "missing_required_field", "missing_required_field"], "score": 0.2, "latency_ms_measured": 17},
+    {"case_id": "F05-fabricated-citation", "pass": true, "expected_verified": false, "actual_verified": false, "expected_issue_codes": ["fabricated_citation"], "actual_issue_codes": ["fabricated_citation"], "score": 0.375, "detail": "https://transport-authority.example.org/halifax-2019-report was cited but never supplied", "latency_ms_measured": 31},
+    {"case_id": "F06-grounded-prose", "pass": true, "expected_verified": true, "actual_verified": true, "expected_issue_codes": [], "actual_issue_codes": [], "score": 1, "groundedness_score": 1, "groundedness_status": "ok", "judge_provider": "google", "judge_model": "models/gemini-3-flash-preview", "claims_judged": 3, "supported": 3, "latency_ms_measured": 4113},
+    {"case_id": "F07-contradicted-claim", "pass": true, "expected_verified": false, "actual_verified": false, "expected_issue_codes": ["claim_contradicted"], "actual_issue_codes": ["claim_contradicted"], "score": 0.6, "groundedness_score": 0, "groundedness_status": "ok", "judge_provider": "google", "judge_model": "models/gemini-3-flash-preview", "claims_judged": 2, "supported": 1, "contradicted": 1, "detail": "claim 'A toll of four euros was introduced' contradicted by source quote 'No tolls were introduced.'", "latency_ms_measured": 1792},
+    {"case_id": "F08-empty-output", "pass": true, "expected_verified": false, "actual_verified": false, "expected_issue_codes": ["empty_output"], "actual_issue_codes": ["empty_output"], "score": 0, "latency_ms_measured": 15},
+    {"case_id": "F09-prompt-injection-echo", "pass": true, "expected_verified": false, "actual_verified": false, "expected_issue_codes": ["prompt_injection_echo"], "actual_issue_codes": ["prompt_injection_echo"], "score": 0, "latency_ms_measured": 16},
+    {"case_id": "F10-deterministic-only-mode", "pass": true, "expected_verified": true, "actual_verified": true, "expected_issue_codes": [], "actual_issue_codes": [], "score": 1, "groundedness_status": "skipped_by_mode", "latency_ms_measured": 17}
+  ],
+  "additional_observations": [
+    "An earlier run of this same suite (execution 163) recorded the judge outage path: with the Model Router unpublished, every full-mode case degraded to groundedness_status='judge_unavailable', raised a medium 'groundedness_not_evaluated' issue, kept the deterministic score, and set requires_human_review=true. That is the intended graceful-degradation behaviour and it was observed, not asserted.",
+    "Deterministic-only cases complete in 15-36 ms measured. The two cases that invoke the entailment judge cost 1.8-4.1 s measured, which is the whole argument for running deterministic checks first."
+  ]
+}

@@ -1,0 +1,122 @@
+{
+  "suite": "governance-fixtures-v1",
+  "generated_at": "2026-09-08T04:59:35.389Z",
+  "n8n_execution_id": "187",
+  "workflow": "[Platform] 05 Agent Governance and HITL",
+  "how_to_reproduce": "Open the workflow in n8n and run the 'Test Suite Trigger' manual trigger. No credentials required: HIGH/CRITICAL cases use simulate_decision instead of the Telegram round-trip.",
+  "note": "Risk classification, routing, policy validation and the deny-by-default rule are fully exercised. The Telegram approval leg is NOT exercised here; ledger rows from this suite carry decided_by='simulated:test-harness' so they can never be mistaken for real human approvals.",
+  "total": 12,
+  "passed": 12,
+  "failed": 0,
+  "all_passed": true,
+  "latency_ms_p50_measured": 20,
+  "latency_ms_max_measured": 41,
+  "cases": [
+    {
+      "case_id": "G01-low-read-auto-approved",
+      "pass": true,
+      "risk": "LOW",
+      "decision": "approved",
+      "decided_by": "policy:auto_low_risk",
+      "latency_ms_measured": 31
+    },
+    {
+      "case_id": "G02-medium-write-validated",
+      "pass": true,
+      "risk": "MEDIUM",
+      "decision": "approved",
+      "decided_by": "policy:medium_risk_validated",
+      "detail": "cleared all 5 deterministic policy checks",
+      "latency_ms_measured": 31
+    },
+    {
+      "case_id": "G03-medium-unknown-target-escalates",
+      "pass": true,
+      "risk": "MEDIUM",
+      "decision": "rejected",
+      "decided_by": "simulated:test-harness",
+      "detail": "billing.internal.corp is not on the MEDIUM auto-approve allow-list, so it escalated to a human",
+      "latency_ms_measured": 41
+    },
+    {
+      "case_id": "G04-high-send-human-approves",
+      "pass": true,
+      "risk": "HIGH",
+      "decision": "approved",
+      "decided_by": "simulated:test-harness",
+      "latency_ms_measured": 19
+    },
+    {
+      "case_id": "G05-critical-delete-denied-by-default",
+      "pass": true,
+      "risk": "CRITICAL",
+      "decision": "denied",
+      "decided_by": "policy:critical_deny_by_default",
+      "detail": "simulate_decision=approve was ignored because CRITICAL never reaches a human without an override token",
+      "latency_ms_measured": 23
+    },
+    {
+      "case_id": "G06-critical-with-override-reaches-human",
+      "pass": true,
+      "risk": "CRITICAL",
+      "decision": "approved",
+      "decided_by": "simulated:test-harness",
+      "detail": "valid override_token routed to human review, which then approved",
+      "latency_ms_measured": 20
+    },
+    {
+      "case_id": "G07-injection-in-reasoning-raises-critical",
+      "pass": true,
+      "risk": "CRITICAL",
+      "decision": "denied",
+      "decided_by": "policy:critical_deny_by_default",
+      "detail": "raised from MEDIUM: the request argued it did not need approval",
+      "latency_ms_measured": 16
+    },
+    {
+      "case_id": "G08-large-amount-raises-critical",
+      "pass": true,
+      "risk": "CRITICAL",
+      "decision": "denied",
+      "decided_by": "policy:critical_deny_by_default",
+      "detail": "raised from MEDIUM: monetary amount 5400.25 above the 1000 auto-deny threshold",
+      "latency_ms_measured": 16
+    },
+    {
+      "case_id": "G09-bulk-operation-raises-critical",
+      "pass": true,
+      "risk": "CRITICAL",
+      "decision": "denied",
+      "decided_by": "policy:critical_deny_by_default",
+      "detail": "raised from MEDIUM: operation targets 250 records",
+      "latency_ms_measured": 22
+    },
+    {
+      "case_id": "G10-unknown-action-type-defaults-high",
+      "pass": true,
+      "risk": "HIGH",
+      "decision": "rejected",
+      "decided_by": "simulated:test-harness",
+      "detail": "unrecognised action_type 'frobnicate' defaulted to HIGH, not LOW",
+      "latency_ms_measured": 19
+    },
+    {
+      "case_id": "G11-low-confidence-raises-read-to-high",
+      "pass": true,
+      "risk": "HIGH",
+      "decision": "approved",
+      "decided_by": "simulated:test-harness",
+      "detail": "raised from LOW: agent confidence 0.31 below 0.5",
+      "latency_ms_measured": 25
+    },
+    {
+      "case_id": "G12-pii-in-parameters-raises-high",
+      "pass": true,
+      "risk": "HIGH",
+      "decision": "rejected",
+      "decided_by": "simulated:test-harness",
+      "detail": "raised from MEDIUM: parameters contained email and phone",
+      "latency_ms_measured": 18
+    }
+  ]
+}

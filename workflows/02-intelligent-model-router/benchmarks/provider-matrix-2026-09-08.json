@@ -1,0 +1,67 @@
+{
+  "benchmark": "router-provider-matrix-v1",
+  "generated_at": "2026-09-08T04:45:20.786Z",
+  "n8n_execution_id": "153",
+  "workflow": "[Platform] 02 Intelligent Model Router",
+  "how_to_reproduce": "Open the workflow in n8n and run the 'Benchmark Trigger' manual trigger. It calls the router's own public contract 9 times (3 tasks x 3 providers) and scores every response with deterministic checks.",
+  "note": "latency_ms_* are MEASURED wall-clock times inside n8n and include network, provider queueing and retry time. estimated_cost_usd values are ESTIMATES from configured list prices with tokens approximated as characters/4; the n8n LangChain chain nodes do not surface provider-reported token counts.",
+  "sample_size_caveat": "One run per (task, provider) cell. p50/p95 over 3 samples per provider are indicative only, not statistically stable. Do not quote these as production SLOs.",
+  "environment": {
+    "n8n": "n8n Cloud",
+    "credentials": "n8n AI Gateway credits (managed credentials, no user API keys)",
+    "region_note": "Latency includes the n8n Cloud to AI Gateway to provider hop, so absolute numbers will differ on self-hosted n8n."
+  },
+  "total_runs": 9,
+  "provider_summary": [
+    {
+      "requested_provider": "anthropic",
+      "model": "claude-sonnet-5",
+      "runs": 3,
+      "call_success_rate": 1,
+      "check_pass_rate": 1,
+      "fallback_rate": 0,
+      "latency_ms_p50_measured": 2006,
+      "latency_ms_p95_measured": 2531,
+      "latency_ms_min_measured": 1502,
+      "latency_ms_max_measured": 2531,
+      "total_estimated_cost_usd": 0.003858
+    },
+    {
+      "requested_provider": "gemini",
+      "model": "models/gemini-3-flash-preview",
+      "runs": 3,
+      "call_success_rate": 1,
+      "check_pass_rate": 1,
+      "fallback_rate": 0,
+      "latency_ms_p50_measured": 3716,
+      "latency_ms_p95_measured": 7597,
+      "latency_ms_min_measured": 2027,
+      "latency_ms_max_measured": 7597,
+      "total_estimated_cost_usd": 0.000537
+    },
+    {
+      "requested_provider": "openai",
+      "model": "gpt-5-mini",
+      "runs": 3,
+      "call_success_rate": 1,
+      "check_pass_rate": 1,
+      "fallback_rate": 0,
+      "latency_ms_p50_measured": 2129,
+      "latency_ms_p95_measured": 2334,
+      "latency_ms_min_measured": 1817,
+      "latency_ms_max_measured": 2334,
+      "total_estimated_cost_usd": 0.000328
+    }
+  ],
+  "runs": [
+    {"case_id": "reasoning-1", "check": "contains_all", "requested_provider": "gemini", "served_by_provider": "google", "served_by_model": "models/gemini-3-flash-preview", "call_ok": true, "fallback_used": false, "check_pass": true, "check_detail": "all required terms present", "latency_ms_measured": 3716, "output_chars_measured": 504, "estimated_cost_usd": 0.000326},
+    {"case_id": "reasoning-1", "check": "contains_all", "requested_provider": "openai", "served_by_provider": "openai", "served_by_model": "gpt-5-mini", "call_ok": true, "fallback_used": false, "check_pass": true, "check_detail": "all required terms present", "latency_ms_measured": 2129, "output_chars_measured": 334, "estimated_cost_usd": 0.000178},
+    {"case_id": "reasoning-1", "check": "contains_all", "requested_provider": "anthropic", "served_by_provider": "anthropic", "served_by_model": "claude-sonnet-5", "call_ok": true, "fallback_used": false, "check_pass": true, "check_detail": "all required terms present", "latency_ms_measured": 2531, "output_chars_measured": 636, "estimated_cost_usd": 0.002499},
+    {"case_id": "extraction-1", "check": "json_keys", "requested_provider": "gemini", "served_by_provider": "google", "served_by_model": "models/gemini-3-flash-preview", "call_ok": true, "fallback_used": false, "check_pass": true, "check_detail": "schema satisfied", "latency_ms_measured": 2027, "output_chars_measured": 108, "estimated_cost_usd": 0.000087},
+    {"case_id": "extraction-1", "check": "json_keys", "requested_provider": "openai", "served_by_provider": "openai", "served_by_model": "gpt-5-mini", "call_ok": true, "fallback_used": false, "check_pass": true, "check_detail": "schema satisfied", "latency_ms_measured": 1817, "output_chars_measured": 90, "estimated_cost_usd": 0.000062},
+    {"case_id": "extraction-1", "check": "json_keys", "requested_provider": "anthropic", "served_by_provider": "anthropic", "served_by_model": "claude-sonnet-5", "call_ok": true, "fallback_used": false, "check_pass": true, "check_detail": "schema satisfied", "latency_ms_measured": 1502, "output_chars_measured": 98, "estimated_cost_usd": 0.00057},
+    {"case_id": "summarization-1", "check": "grounded_no_fabrication", "requested_provider": "gemini", "served_by_provider": "google", "served_by_model": "models/gemini-3-flash-preview", "call_ok": true, "fallback_used": false, "check_pass": true, "check_detail": "grounded_facts=3/3; fabricated_tokens=none; words=27", "latency_ms_measured": 7597, "output_chars_measured": 161, "estimated_cost_usd": 0.000124},
+    {"case_id": "summarization-1", "check": "grounded_no_fabrication", "requested_provider": "openai", "served_by_provider": "openai", "served_by_model": "gpt-5-mini", "call_ok": true, "fallback_used": false, "check_pass": true, "check_detail": "grounded_facts=3/3; fabricated_tokens=none; words=24", "latency_ms_measured": 2334, "output_chars_measured": 138, "estimated_cost_usd": 0.000088},
+    {"case_id": "summarization-1", "check": "grounded_no_fabrication", "requested_provider": "anthropic", "served_by_provider": "anthropic", "served_by_model": "claude-sonnet-5", "call_ok": true, "fallback_used": false, "check_pass": true, "check_detail": "grounded_facts=3/3; fabricated_tokens=none; words=25", "latency_ms_measured": 2006, "output_chars_measured": 150, "estimated_cost_usd": 0.000789}
+  ]
+}

@@ -1,0 +1,41 @@
+# ---------------------------------------------------------------------------
+# Secrets and local-only material. Nothing here may ever reach git history.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+credentials
+credentials*
+*.credentials.json
+private/
+tmp/
+.tmp/
+*.secret.*
+*.secret
+secrets/
+*.pem
+*.key
+!*.public.key
+
+# Live (unsanitised) workflow exports pulled straight from an n8n instance.
+# These may contain credential IDs and instance identifiers.
+workflows/**/workflow.live.json
+workflows/**/*.live.json
+.n8n-live/
+
+# Build and tooling
+node_modules/
+.build/
+__pycache__/
+*.pyc
+.venv/
+venv/
+dist/
+coverage/
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
