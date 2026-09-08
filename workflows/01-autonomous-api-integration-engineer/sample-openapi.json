@@ -1,0 +1,126 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Frankfurter Exchange Rates API",
+    "description": "Minimal OpenAPI description of the public, key-free Frankfurter foreign-exchange API (https://frankfurter.dev). Written for this repository so that 01 Autonomous API Integration Engineer has a small, stable, genuinely live specification to plan against and probe. It is not an official Frankfurter artifact.",
+    "version": "1.0.0",
+    "contact": { "url": "https://frankfurter.dev" }
+  },
+  "servers": [
+    { "url": "https://api.frankfurter.dev/v1", "description": "Public production endpoint. No authentication." }
+  ],
+  "paths": {
+    "/latest": {
+      "get": {
+        "operationId": "getLatestRates",
+        "summary": "Get the latest reference exchange rates.",
+        "description": "Returns the most recent rates published by the European Central Bank.",
+        "parameters": [
+          {
+            "name": "base",
+            "in": "query",
+            "required": false,
+            "description": "Three-letter base currency code. Defaults to EUR.",
+            "schema": { "type": "string", "example": "EUR" }
+          },
+          {
+            "name": "symbols",
+            "in": "query",
+            "required": false,
+            "description": "Comma-separated list of target currency codes to limit the response.",
+            "schema": { "type": "string", "example": "USD,AUD,GBP" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest rates.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RateSet" }
+              }
+            }
+          },
+          "404": { "description": "Unknown currency code." }
+        }
+      }
+    },
+    "/currencies": {
+      "get": {
+        "operationId": "listCurrencies",
+        "summary": "List the supported currencies.",
+        "description": "Returns a map of currency code to human-readable currency name.",
+        "responses": {
+          "200": {
+            "description": "Supported currencies.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": { "type": "string" },
+                  "example": { "AUD": "Australian Dollar", "USD": "United States Dollar" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{date}": {
+      "get": {
+        "operationId": "getHistoricalRates",
+        "summary": "Get reference rates for a specific date.",
+        "description": "Returns the rates published on the given date, or the most recent prior publication date if that day was not a working day.",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "path",
+            "required": true,
+            "description": "ISO date, YYYY-MM-DD.",
+            "schema": { "type": "string", "format": "date", "example": "2026-01-15" }
+          },
+          {
+            "name": "base",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "example": "EUR" }
+          },
+          {
+            "name": "symbols",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "example": "USD,AUD" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rates for the requested date.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RateSet" }
+              }
+            }
+          },
+          "404": { "description": "Date out of range or unknown currency." }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "RateSet": {
+        "type": "object",
+        "required": ["amount", "base", "date", "rates"],
+        "properties": {
+          "amount": { "type": "number", "example": 1 },
+          "base": { "type": "string", "example": "EUR" },
+          "date": { "type": "string", "format": "date", "example": "2026-01-15" },
+          "rates": {
+            "type": "object",
+            "additionalProperties": { "type": "number" },
+            "example": { "AUD": 1.6421, "USD": 1.0873 }
+          }
+        }
+      }
+    }
+  }
+}
