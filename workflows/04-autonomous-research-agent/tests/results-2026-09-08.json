@@ -1,0 +1,56 @@
+{
+  "suite": "research-demo-runs-v1",
+  "generated_at": "2026-09-08T05:33:49Z",
+  "workflow": "04 Autonomous Research Agent",
+  "how_to_reproduce": "Run the 'Demo Trigger' manual trigger. Performs live web search through Firecrawl plus two model calls through the Model Router.",
+  "note": "Live web results change over time, so the exact sources and figures will differ on a re-run. What is asserted here is structural: sources were retrieved and deduplicated, the report cited only real markers, and every claim was checked against the retrieved evidence.",
+  "runs": [
+    {
+      "n8n_execution_id": "303",
+      "queries_run": 3,
+      "raw_results": 9,
+      "duplicates_removed": 3,
+      "sources_collected": 6,
+      "markers_used": ["S2", "S4", "S5"],
+      "sources_not_cited": ["S1", "S3", "S6"],
+      "fabricated_markers": [],
+      "prompts": {
+        "planner": { "version": 3, "sha": "69981dd12589840c683a7e076bab4bd8ecd29443" },
+        "synthesiser": { "version": 3, "sha": "cf9971bf2dd56113d399de8a7a7addc7a9a00644" }
+      },
+      "models": {
+        "planner": "google/models/gemini-3-flash-preview",
+        "synthesiser": "google/models/gemini-3-flash-preview"
+      },
+      "estimated_cost_usd_total": 0.003334,
+      "latency_ms_measured": 72074,
+      "verification": { "verified": true, "score": 1, "groundedness": "not evaluated" },
+      "defect_found": "The entailment judge received 20 claims and its response did not parse, so groundedness was silently skipped while the report was still reported as verified. Two fixes followed: verified is now false whenever grounding was applicable but did not happen, and the judge-response parser accepts more envelope shapes."
+    },
+    {
+      "n8n_execution_id": "331",
+      "queries_run": 3,
+      "sources_collected": 6,
+      "duplicates_removed": 3,
+      "citation_markers_in_report": 26,
+      "fabricated_markers": [],
+      "fabricated_urls": [],
+      "verification": {
+        "verified": true,
+        "score": 0.92,
+        "groundedness_status": "judge_partial",
+        "claims_total": 30,
+        "claims_judged": 10,
+        "supported": 8,
+        "contradicted": 0,
+        "not_stated": 2,
+        "note": "The judge response was truncated and repaired. Two of the NOT_STATED verdicts were markdown headings rather than factual claims, which led to the claim splitter being tightened afterwards so document furniture is no longer sent to the judge."
+      },
+      "estimated_cost_usd_total": 0.003334
+    }
+  ],
+  "assertion": "Across both runs the report never cited a marker or a URL that was not present in the retrieved evidence. That is checked deterministically by the verification layer, not by inspection.",
+  "not_yet_measured": [
+    "Retrieval quality against a labelled ground-truth set. The runs above prove the pipeline executes and that citations are real, not that the answers are the best possible ones."
+  ]
+}

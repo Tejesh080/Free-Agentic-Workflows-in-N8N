@@ -22,14 +22,14 @@ with **no user API keys**.
 | --- | --- | --- | --- | --- |
 | 01 | Autonomous API Integration Engineer | `VM0yQx7HzjTElxgg` | **LIVE VERIFIED** | demo run green: 2/2 probes 200, grounding 1.0 |
 | 02 | Intelligent Model Router | `CICW1oBcK0DYWvUc` | **LIVE VERIFIED**, published | benchmark 9/9 calls ok, 9/9 checks pass (exec 153) |
-| 03 | Production RAG Intelligence | — | not started | — |
+| 03 | Production RAG Intelligence | `BpvCMNOhjklm0YF5` | **LIVE VERIFIED**, published | 5/5 fixtures pass (exec 377) |
 | 04 | Autonomous Research Agent | `eaFjl41WOLWVwJqR` | **LIVE VERIFIED** | demo run: 6 sources, 0 fabricated citations |
 | 05 | Agent Governance (HITL) | `G3OIbtaw2z11zIxP` | **LIVE VERIFIED**, published | 12/12 fixtures pass (exec 187) |
 | 06 | Financial Document Intelligence | `1msPTQimtesoxhmm` | **LIVE VERIFIED**, published | 11/12 then 12/12 after router token fix |
 | 07 | Conversational Analytics | `xTdqxbplj0oXmByi` | **LIVE VERIFIED** | demo run: spec compiled to parameterised SQL, 5 rows, verified 0.87 |
 | 08 | GitOps Prompt Management | `aYVpA31jgNL0shma` | **LIVE VERIFIED**, published | 7/7 fixtures pass (exec 200) |
 | 09 | AI Output Verification Layer | `vCn6THeEhjhhhxsy` | **LIVE VERIFIED**, published | 10/10 fixtures pass (exec 174) |
-| 10 | Real-Time Voice Agent | — | not started | — |
+| 10 | Real-Time Voice Agent | `5Aup44P7oBr6Zolg` | **LIVE VERIFIED** | 2 webhook runs: TTS produced; cancel_order gated, tool_executed=false |
 
 ## Architecture decisions (locked)
 
@@ -52,6 +52,9 @@ with **no user API keys**.
 7c. **`splitInBatches` with zero input items never fires its done branch**, so a
    downstream report node is simply skipped. Gate the loop with an IF and route
    the empty case straight to the terminal node.
+7e. **Not every model is on the AI Gateway.** `gemini-embedding-001` returns 404;
+   `text-embedding-3-small` (OpenAI) works. Check the gateway before assuming a
+   model id is available.
 7d. **HTTP Request body shape varies with content type.** `raw.githubusercontent`
    returns `text/plain`, so the body arrives as a string where a JSON endpoint
    gives an object. Loaders accept `body`, `data`, or an already-parsed root.

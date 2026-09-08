@@ -1,0 +1,101 @@
+{
+  "suite": "rag-fixtures-v1",
+  "generated_at": "2026-09-08T05:48:52.760Z",
+  "n8n_execution_id": "377",
+  "workflow": "03 Production RAG Intelligence Platform",
+  "how_to_reproduce": "Run 'Ingest Corpus' once, then run 'Test Suite Trigger'. No vector database credentials are required: the demo uses the in-memory Simple Vector Store with OpenAI embeddings through the n8n AI Gateway.",
+  "note": "R03 and R04 ask the SAME question with different audiences. That pairing is what makes the access-control result meaningful: proving a document is blocked only means something if you also prove it would otherwise have been returned.",
+  "total": 5,
+  "passed": 5,
+  "failed": 0,
+  "all_passed": true,
+  "latency_ms_p50_measured": 8204,
+  "latency_ms_max_measured": 63326,
+  "estimated_cost_usd_total": 0.000994,
+  "fabricated_markers_across_all_cases": 0,
+  "cases": [
+    {
+      "case_id": "R01-answerable-policy",
+      "pass": true,
+      "status": "answered",
+      "cited_docs": ["POL-001"],
+      "filtered_docs": ["OPS-211", "OPS-210"],
+      "retrieved": 5,
+      "filtered_out": 2,
+      "below_threshold": 2,
+      "top_rerank_score": 0.94,
+      "verified": true,
+      "verification_score": 1,
+      "confidence": "high",
+      "answer": "Northwind Outdoors accepts returns within 45 days of delivery for a full refund [C1]. This is provided the item is unworn and in its original packaging [C1].",
+      "latency_ms_measured": 6109,
+      "estimated_cost_usd": 0.000213
+    },
+    {
+      "case_id": "R02-not-in-corpus",
+      "pass": true,
+      "status": "insufficient_context",
+      "cited_docs": [],
+      "retrieved": 5,
+      "below_threshold": 2,
+      "top_rerank_score": 0.7,
+      "confidence": "none",
+      "detail": "Passages were retrieved but the model reported they do not answer the question, and that was passed through rather than dressed up as an answer.",
+      "latency_ms_measured": 9508,
+      "estimated_cost_usd": 0.000216
+    },
+    {
+      "case_id": "R03-internal-doc-blocked-from-public",
+      "pass": true,
+      "status": "insufficient_context",
+      "cited_docs": [],
+      "filtered_docs": ["OPS-210", "OPS-211"],
+      "retrieved": 5,
+      "filtered_out": 2,
+      "detail": "OPS-210 contains the answer but is marked audience=internal, so it was removed before the model ever saw it.",
+      "latency_ms_measured": 63326,
+      "latency_note": "This case took 63 s. The outlier is provider-side latency on the entailment judge, not retrieval; retrieval completed in well under a second in every case.",
+      "estimated_cost_usd": 0.00021
+    },
+    {
+      "case_id": "R04-same-question-allowed-for-internal",
+      "pass": true,
+      "status": "answered",
+      "cited_docs": ["OPS-210"],
+      "filtered_docs": [],
+      "retrieved": 5,
+      "filtered_out": 0,
+      "top_rerank_score": 0.95,
+      "verified": true,
+      "verification_score": 1,
+      "confidence": "high",
+      "answer": "The Adelaide warehouse despatch cut-off is 2pm ACST Monday to Friday [C1]. During peak season from 20 November to 24 December, the cut-off is extended to 4pm ACST [C1].",
+      "latency_ms_measured": 8204,
+      "estimated_cost_usd": 0.000205
+    },
+    {
+      "case_id": "R05-category-filter",
+      "pass": true,
+      "status": "answered",
+      "cited_docs": ["ENG-101"],
+      "filtered_docs": ["POL-002", "SUP-330", "POL-001"],
+      "retrieved": 5,
+      "filtered_out": 3,
+      "top_rerank_score": 0.88,
+      "verified": true,
+      "verification_score": 1,
+      "confidence": "high",
+      "answer": "The HydroSeal membrane is rated to 20,000 mm hydrostatic head [C1].",
+      "latency_ms_measured": 5562,
+      "estimated_cost_usd": 0.00015
+    }
+  ],
+  "regression_history": [
+    {
+      "execution_id": "370",
+      "passed": 1,
+      "failed": 4,
+      "cause": "Every retrieval returned zero documents. The root cause was the embedding model, not the retrieval logic: the n8n AI Gateway returns HTTP 404 for gemini-embedding-001. Switching both embedding sub-nodes to OpenAI text-embedding-3-small fixed it."
+    }
+  ]
+}

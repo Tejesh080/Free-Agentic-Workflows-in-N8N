@@ -1,0 +1,67 @@
+{
+  "suite": "voice-webhook-runs-v1",
+  "generated_at": "2026-09-08T05:41:00Z",
+  "workflow": "10 Real-Time Voice Automation Agent",
+  "how_to_reproduce": "POST to the workflow's webhook with {\"text\": \"...\", \"session_id\": \"...\"}. Audio is optional; a text payload exercises everything downstream of transcription.",
+  "note": "latency_measured_ms is real per-stage wall clock. Transcription is near zero on these runs because they used the text-payload path; a real audio upload adds the speech-to-text call.",
+  "total": 2,
+  "passed": 2,
+  "failed": 0,
+  "all_passed": true,
+  "runs": [
+    {
+      "case_id": "V01-read-only-intent-with-speech",
+      "n8n_execution_id": "345",
+      "pass": true,
+      "transcript": "What are your opening hours on Sunday?",
+      "intent": "check_opening_hours",
+      "intent_confidence": 1,
+      "changes_data": false,
+      "governance": { "decision": "not_required", "risk_level": "LOW" },
+      "tool_executed": true,
+      "reply_text": "We are open from 11am to 4pm on Sunday.",
+      "speech": { "requested": true, "produced": true },
+      "verification": { "verified": true, "score": 1 },
+      "latency_measured_ms": {
+        "transcription_ms": 13,
+        "intent_ms": 5075,
+        "tool_ms": 11,
+        "reply_verify_speech_ms": 4736,
+        "total_ms": 9835
+      },
+      "estimated_cost_usd_total": 0.000287,
+      "assertion": "The reply states 11am to 4pm, which is exactly what the tool returned for Sunday. Real text-to-speech audio was produced and returned as binary."
+    },
+    {
+      "case_id": "V02-data-changing-intent-is-gated",
+      "n8n_execution_id": "363",
+      "pass": true,
+      "transcript": "I want to cancel my order, the reference is AB-99120.",
+      "intent": "cancel_order",
+      "intent_confidence": 0.98,
+      "slots": { "order_reference": "AB-99120" },
+      "changes_data": true,
+      "governance": {
+        "decision": "approved",
+        "risk_level": "MEDIUM",
+        "reason": "MEDIUM risk cleared all 5 deterministic policy checks."
+      },
+      "tool_executed": false,
+      "refusal": "Approved by governance, but this demo never executes data-changing actions. The approval has been recorded for a human to action.",
+      "verification": { "verified": true, "score": 1 },
+      "latency_measured_ms": {
+        "transcription_ms": 10,
+        "intent_ms": 4213,
+        "tool_ms": 238,
+        "reply_verify_speech_ms": 3589,
+        "total_ms": 8050
+      },
+      "estimated_cost_usd_total": 0.000347,
+      "assertion": "The safety property held. The intent was correctly recognised as data-changing, the slot was extracted, the request was routed to Governance, and tool_executed stayed false even after approval.",
+      "note": "Governance resolved this at the MEDIUM tier rather than escalating to a human, because the demo target 'sandbox' is on the auto-approve allow-list. Pointing it at a system that is not on that list escalates instead, which is what governance fixture G03 demonstrates."
+    }
+  ],
+  "not_yet_tested": [
+    "The audio upload path. Both runs used the text payload, so the OpenAI Whisper transcription node is STRUCTURALLY VALIDATED but not exercised end to end. The text-to-speech node IS exercised (V01 produced real audio)."
+  ]
+}
