@@ -1,0 +1,180 @@
+{
+  "_note": "Verbatim output of execution 280 on 2026-09-08, trimmed only by removing the long observed_fields arrays for readability. Nothing was edited to look better: the run really did reach readiness 6/6.",
+  "generated_at": "2026-09-08T05:20:56.650Z",
+  "n8n_execution_id": "280",
+  "goal": "Read the latest euro reference exchange rates for Australian dollars and US dollars, and list which currencies the API supports. Do not change anything.",
+  "api": {
+    "title": "Frankfurter Exchange Rates API",
+    "version": "1.0.0",
+    "openapi_version": "3.0.3",
+    "base_url": "https://api.frankfurter.dev/v1",
+    "operation_count": 3,
+    "read_operations": 3,
+    "write_operations": 0,
+    "authentication": "no security schemes declared",
+    "auth_schemes": []
+  },
+  "prompt": {
+    "id": "api-integration/spec-analyst",
+    "version": 2,
+    "sha": "78c96ff172422402c8f69ecb564bf27eddab05bb",
+    "provenance": "Tejesh080/Free-Agentic-Workflows-in-N8N@main:prompts/api-integration/spec-analyst.md blob 78c96ff17242",
+    "degraded": false
+  },
+  "model": {
+    "provider": "openai",
+    "model": "gpt-5-mini",
+    "latency_ms": 10096,
+    "estimated_cost_usd": 0.001039
+  },
+  "plan": {
+    "summary": "Call /currencies to list supported codes, then call /latest with base=EUR and symbols=AUD,USD to get the latest EUR rates for those currencies.",
+    "repaired": false,
+    "model_confidence": 0.9,
+    "steps_proposed": 2,
+    "steps_grounded": 2,
+    "grounding_rate": 1,
+    "hallucinated_operations": [],
+    "open_questions": [
+      "Should we treat absent but supported currencies from /currencies as transient errors and retry, and what retry policy to use?",
+      "Is a specific Accept header or API version required beyond the base URL?"
+    ],
+    "steps": [
+      {
+        "order": 1,
+        "operation_id": "listCurrencies",
+        "method": "GET",
+        "path": "/currencies",
+        "purpose": "Discover which currency codes the API supports so we can verify AUD and USD are available.",
+        "write_effect": "read",
+        "effect_mismatch": false,
+        "required_params": [],
+        "deprecated": false
+      },
+      {
+        "order": 2,
+        "operation_id": "getLatestRates",
+        "method": "GET",
+        "path": "/latest",
+        "purpose": "Fetch the latest euro reference exchange rates for Australian dollars and US dollars.",
+        "inputs": [
+          {
+            "name": "base",
+            "source": "caller",
+            "example": "EUR"
+          },
+          {
+            "name": "symbols",
+            "source": "caller",
+            "example": "AUD,USD"
+          }
+        ],
+        "expected_response_fields": [
+          "base",
+          "date",
+          "rates.AUD",
+          "rates.USD"
+        ],
+        "write_effect": "read",
+        "effect_mismatch": false,
+        "required_params": [],
+        "deprecated": false
+      }
+    ]
+  },
+  "verification": {
+    "verified": true,
+    "score": 1,
+    "issues": [],
+    "requires_human_review": false
+  },
+  "governance": {
+    "required": false,
+    "decision": "not_required",
+    "approved": false,
+    "risk_level": "LOW",
+    "reason": "The plan contains only read operations, so no governance approval was requested."
+  },
+  "probes": {
+    "attempted": 2,
+    "succeeded": 2,
+    "schema_matched": 1,
+    "schema_unverifiable": 1,
+    "skipped": [],
+    "note": "Only GET/HEAD operations against the base URL declared by the specification are probed. Write operations are never executed by this workflow, approved or not.",
+    "results": [
+      {
+        "operation_id": "listCurrencies",
+        "url": "https://api.frankfurter.dev/v1/currencies",
+        "status_code": 200,
+        "ok": true,
+        "response_shape": "object",
+        "expected_fields": [],
+        "unverifiable_field_specs": [
+          "{currency_code}: \"currency name\""
+        ],
+        "missing_expected_fields": [],
+        "schema_matches_plan": false,
+        "schema_unverifiable": true,
+        "error": null
+      },
+      {
+        "operation_id": "getLatestRates",
+        "url": "https://api.frankfurter.dev/v1/latest",
+        "status_code": 200,
+        "ok": true,
+        "response_shape": "object",
+        "expected_fields": [
+          "base",
+          "date",
+          "rates.AUD",
+          "rates.USD"
+        ],
+        "missing_expected_fields": [],
+        "schema_matches_plan": true,
+        "schema_unverifiable": false,
+        "error": null
+      }
+    ]
+  },
+  "issues": [],
+  "blocking_issues": [],
+  "readiness": {
+    "checks": [
+      {
+        "check": "specification_parsed",
+        "passed": true,
+        "detail": "3 operations parsed"
+      },
+      {
+        "check": "plan_grounded_in_specification",
+        "passed": true,
+        "detail": "2/2 steps matched a real operationId"
+      },
+      {
+        "check": "plan_passed_verification",
+        "passed": true,
+        "detail": "score 1"
+      },
+      {
+        "check": "read_endpoints_reachable",
+        "passed": true,
+        "detail": "2/2 probes returned a 2xx"
+      },
+      {
+        "check": "response_schema_matched_plan",
+        "passed": true,
+        "detail": "1 matched, 1 had no checkable field spec, 0 mismatched"
+      },
+      {
+        "check": "write_steps_authorised",
+        "passed": true,
+        "detail": "no write steps in the plan"
+      }
+    ],
+    "passed": 6,
+    "total": 6,
+    "verdict": "ready_to_implement"
+  },
+  "latency_ms": 11209
+}

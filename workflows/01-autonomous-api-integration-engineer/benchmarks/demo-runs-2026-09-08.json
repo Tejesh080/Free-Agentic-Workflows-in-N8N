@@ -1,0 +1,62 @@
+{
+  "benchmark": "api-integration-demo-v1",
+  "generated_at": "2026-09-08T05:20:56.650Z",
+  "workflow": "01 Autonomous API Integration Engineer",
+  "target": "Frankfurter FX API via the OpenAPI spec in this folder",
+  "how_to_reproduce": "Run the 'Demo Trigger' manual trigger. Makes one real model call and two read-only HTTP probes. No user credentials required.",
+  "note": "latency_ms values are MEASURED wall clock. estimated_cost_usd comes from the Model Router and is an ESTIMATE from configured list prices.",
+  "runs": [
+    {
+      "execution_id": "208",
+      "target": "Swagger Petstore",
+      "outcome": "needs_attention",
+      "readiness": "4/6",
+      "grounding_rate": 1,
+      "probes": "2 attempted, 0 succeeded",
+      "cause": "the public Petstore demo server returned HTTP 500 for both probes; the workflow reported the failure rather than claiming success"
+    },
+    {
+      "execution_id": "212",
+      "target": "Frankfurter",
+      "outcome": "no report produced",
+      "cause": "planner JSON was truncated mid-object and, with zero safe probes, the splitInBatches done branch never fired"
+    },
+    {
+      "execution_id": "216",
+      "target": "Frankfurter",
+      "outcome": "blocked",
+      "readiness": "1/6",
+      "cause": "spec body arrived as a text/plain string and the loader rejected it; report was produced this time thanks to the probe gate fix"
+    },
+    {
+      "execution_id": "258",
+      "target": "Frankfurter",
+      "outcome": "needs_attention",
+      "readiness": "5/6",
+      "grounding_rate": 1,
+      "probes": "2 attempted, 2 succeeded, 1 schema matched",
+      "cause": "one plan step described its expected response in prose rather than as field paths, counted as a mismatch"
+    },
+    {
+      "execution_id": "280",
+      "target": "Frankfurter",
+      "outcome": "ready_to_implement",
+      "readiness": "6/6",
+      "grounding_rate": 1,
+      "hallucinated_operations": 0,
+      "probes": "2 attempted, 2 succeeded, 1 schema matched, 1 unverifiable field spec",
+      "model": "openai/gpt-5-mini",
+      "model_latency_ms_measured": 10096,
+      "total_latency_ms_measured": 11209,
+      "estimated_cost_usd": 0.001039
+    }
+  ],
+  "summary": {
+    "final_readiness": "6/6",
+    "grounding_rate_measured": 1.0,
+    "hallucinated_operations_measured": 0,
+    "probe_success_rate_measured": 1.0,
+    "end_to_end_latency_ms_measured": 11209,
+    "estimated_cost_usd_per_run": 0.001039
+  }
+}

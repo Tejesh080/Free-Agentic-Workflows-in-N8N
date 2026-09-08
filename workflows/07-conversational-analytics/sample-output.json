@@ -1,0 +1,117 @@
+{
+  "_note": "Verbatim output of execution 334 on 2026-09-08 against the synthetic demo warehouse.",
+  "generated_at": "2026-09-08T05:33:48.386Z",
+  "n8n_execution_id": "334",
+  "question": "Which five search queries drove the most clicks on mobile during August, and what was their click-through rate?",
+  "status": "answered",
+  "answer": "The five search queries that drove the most mobile clicks in August were \"trail running shoes\" with 465 clicks, \"running shoes womens\" with 392 clicks, \"waterproof hiking boots\" with 333 clicks, \"best running socks\" with 295 clicks, and \"shoe size guide\" with 278 clicks. These results coincided with click-through rates of 0.0459, 0.051, 0.0364, 0.0287, and 0.0231, respectively. The query \"running shoes womens\" had the highest click-through rate at 0.051, while \"shoe size guide\" had the lowest at 0.0231.",
+  "query": {
+    "intent": "ranking",
+    "metrics": [
+      "clicks",
+      "ctr"
+    ],
+    "dimensions": [
+      "query"
+    ],
+    "filters": [
+      {
+        "field": "device",
+        "op": "eq",
+        "value": "mobile"
+      }
+    ],
+    "date_from": "2026-08-01",
+    "date_to": "2026-08-31",
+    "order_by": {
+      "field": "clicks",
+      "direction": "desc"
+    },
+    "limit": 5,
+    "assumptions": [
+      "Date range defaulted to August 2026 as specified in the question."
+    ],
+    "compiled_sql": "SELECT query, SUM(clicks) AS clicks, CASE WHEN SUM(impressions) = 0 THEN 0 ELSE ROUND(SUM(clicks)::numeric / SUM(impressions), 4) END AS ctr FROM analytics_events WHERE property = $1 AND event_date >= $2 AND event_date <= $3 AND device = $4 GROUP BY query ORDER BY clicks DESC LIMIT 5",
+    "sql_parameters": [
+      "https://example-store.test/",
+      "2026-08-01",
+      "2026-08-31",
+      "mobile"
+    ],
+    "rejected_by_registry": []
+  },
+  "data": {
+    "rows": [
+      {
+        "query": "trail running shoes",
+        "clicks": 465,
+        "ctr": 0.0459,
+        "_rows_aggregated": 5
+      },
+      {
+        "query": "running shoes womens",
+        "clicks": 392,
+        "ctr": 0.051,
+        "_rows_aggregated": 5
+      },
+      {
+        "query": "waterproof hiking boots",
+        "clicks": 333,
+        "ctr": 0.0364,
+        "_rows_aggregated": 5
+      },
+      {
+        "query": "best running socks",
+        "clicks": 295,
+        "ctr": 0.0287,
+        "_rows_aggregated": 5
+      },
+      {
+        "query": "shoe size guide",
+        "clicks": 278,
+        "ctr": 0.0231,
+        "_rows_aggregated": 5
+      }
+    ],
+    "row_count": 5,
+    "source_rows_scanned": 90,
+    "source_rows_after_filters": 30,
+    "warehouse": "n8n Data Table agentic_analytics_demo (synthetic demo data)"
+  },
+  "verification": {
+    "verified": true,
+    "score": 0.8667,
+    "requires_human_review": false,
+    "issues": [
+      {
+        "code": "claim_unsupported",
+        "severity": "medium",
+        "message": "A claim is not supported by any supplied source",
+        "detail": "The long enumeration sentence lists five query/click pairs at once. Every figure in it does appear in the rows, but the entailment judge could not tie the composite sentence to a single row, so it was labelled NOT_STATED. A medium-severity false positive, recorded rather than hidden."
+      }
+    ]
+  },
+  "prompts": {
+    "planner": {
+      "version": 3,
+      "sha": "bd026664141a3b1960bb8a47ecd4f9c42387febb",
+      "degraded": false
+    }
+  },
+  "models": {
+    "planner": {
+      "provider": "google",
+      "model": "models/gemini-3-flash-preview",
+      "latency_ms": 5051,
+      "estimated_cost_usd": 0.000427
+    },
+    "narrator": {
+      "provider": "google",
+      "model": "models/gemini-3-flash-preview",
+      "latency_ms": 5270,
+      "estimated_cost_usd": 0.000433
+    }
+  },
+  "estimated_cost_usd_total": 0.00086,
+  "latency_ms": 63296
+}

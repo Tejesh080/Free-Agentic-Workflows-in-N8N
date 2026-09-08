@@ -1,0 +1,8 @@
+{
+  "spec_url": "https://raw.githubusercontent.com/Tejesh080/Free-Agentic-Workflows-in-N8N/main/workflows/01-autonomous-api-integration-engineer/sample-openapi.json",
+  "spec_json": "",
+  "goal": "Read the latest euro reference exchange rates for Australian dollars and US dollars, and list which currencies the API supports. Do not change anything.",
+  "base_url_override": "",
+  "max_probes": "2",
+  "source_workflow": "manual"
+}
