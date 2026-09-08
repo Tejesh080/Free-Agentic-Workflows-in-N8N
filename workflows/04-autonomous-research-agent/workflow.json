@@ -1,0 +1,1157 @@
+{
+  "name": "04 Autonomous Research Agent",
+  "nodes": [
+    {
+      "id": "c5d3bf44-9faa-40a9-8205-b877511fa843",
+      "name": "Research Request",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1500,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "question",
+              "type": "string"
+            },
+            {
+              "name": "depth",
+              "type": "string"
+            },
+            {
+              "name": "max_queries",
+              "type": "string"
+            },
+            {
+              "name": "results_per_query",
+              "type": "string"
+            },
+            {
+              "name": "source_workflow",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "4b6de4da-7a1a-4302-b5ad-a40cadcbcb2a",
+      "name": "Normalise Research Request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1280,
+        0
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r1",
+              "name": "question",
+              "value": "={{ ($json.question || \"\").trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "r2",
+              "name": "depth",
+              "value": "={{ [\"quick\",\"standard\",\"deep\"].includes(($json.depth || \"\").toLowerCase()) ? $json.depth.toLowerCase() : \"standard\" }}",
+              "type": "string"
+            },
+            {
+              "id": "r3",
+              "name": "max_queries",
+              "value": "={{ Math.min(8, Math.max(1, Number($json.max_queries || 4))) }}",
+              "type": "number"
+            },
+            {
+              "id": "r4",
+              "name": "results_per_query",
+              "value": "={{ Math.min(5, Math.max(1, Number($json.results_per_query || 3))) }}",
+              "type": "number"
+            },
+            {
+              "id": "r5",
+              "name": "source_workflow",
+              "value": "={{ $json.source_workflow || \"unknown\" }}",
+              "type": "string"
+            },
+            {
+              "id": "r6",
+              "name": "today",
+              "value": "={{ $now.toFormat(\"yyyy-MM-dd\") }}",
+              "type": "string"
+            },
+            {
+              "id": "r7",
+              "name": "started_at_ms",
+              "value": "={{ $now.toMillis() }}",
+              "type": "number"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "6bb1a430-55a6-4689-a426-0e2e5d429158",
+      "name": "Get Planner Prompt (08)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -1060,
+        0
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 08 GitOps Prompt Management"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "prompt_id": "research/planner",
+            "variables": "={{ JSON.stringify({ question: $json.question, depth: $json.depth, today: $json.today }) }}",
+            "ref": "",
+            "owner": "",
+            "repo": "",
+            "strict": "true",
+            "source_workflow": "04-autonomous-research-agent"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "prompt_id",
+              "displayName": "prompt_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "variables",
+              "displayName": "variables",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "ref",
+              "displayName": "ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "owner",
+              "displayName": "owner",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "repo",
+              "displayName": "repo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "strict",
+              "displayName": "strict",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "1f898164-56fc-4b44-8c4f-fde6b1155862",
+      "name": "Plan Research (02 Router)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -840,
+        0
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 02 Intelligent Model Router"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "task_type": "research",
+            "objective": "quality",
+            "privacy": "standard",
+            "input": "={{ ($json.json ? $json.json.prompt : $json.prompt) || (\"Plan research for: \" + $(\"Normalise Research Request\").first().json.question) }}",
+            "system_prompt": "You output raw JSON only, no markdown fences and no prose. Keep every string under 200 characters.",
+            "force_provider": "",
+            "source_workflow": "04-autonomous-research-agent",
+            "run_label": "={{ \"plan-\" + $execution.id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "task_type",
+              "displayName": "task_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "objective",
+              "displayName": "objective",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "privacy",
+              "displayName": "privacy",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "input",
+              "displayName": "input",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "system_prompt",
+              "displayName": "system_prompt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "force_provider",
+              "displayName": "force_provider",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "run_label",
+              "displayName": "run_label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "0da299db-191e-4142-945f-0148dc6de378",
+      "name": "Parse Research Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Turns the planner's JSON into a flat, capped list of search queries.\n// Falls back to the raw question when planning fails, so a planner outage\n// degrades the research rather than ending it.\nconst req = $('Normalise Research Request').first().json;\nconst rawItem = $input.first().json;\nconst raw = (rawItem && rawItem.json) ? rawItem.json : rawItem;\n\nfunction repairJson(text) {\n  try { return JSON.parse(text); } catch (e) { /* continue */ }\n  const stack = [];\n  let inStr = false, esc = false, lastEnd = -1;\n  for (let i = 0; i < text.length; i++) {\n    const c = text[i];\n    if (inStr) { if (esc) { esc = false; } else if (c === '\\\\') { esc = true; } else if (c === '\"') { inStr = false; } continue; }\n    if (c === '\"') { inStr = true; continue; }\n    if (c === '{' || c === '[') { stack.push(c); }\n    else if (c === '}' || c === ']') { stack.pop(); if (stack.length === 0) { lastEnd = i; } }\n  }\n  if (lastEnd > 0) { try { return JSON.parse(text.slice(0, lastEnd + 1)); } catch (e) { /* continue */ } }\n  let patched = text;\n  if (inStr) { patched += '\"'; }\n  patched = patched.replace(/,\\s*\"[^\"]*\"\\s*:?\\s*[^,{}\\[\\]]*$/, '').replace(/,\\s*$/, '');\n  for (let i = stack.length - 1; i >= 0; i--) { patched += (stack[i] === '{' ? '}' : ']'); }\n  try { return JSON.parse(patched); } catch (e) { return null; }\n}\n\nlet plan = null;\nconst notes = [];\nif (raw && raw.ok && raw.output) {\n  const cleaned = String(raw.output).replace(/^\\s*```(?:json)?/i, '').replace(/```\\s*$/, '').trim();\n  plan = repairJson(cleaned);\n  if (!plan) { notes.push('planner response could not be parsed even after repair; falling back to the raw question'); }\n} else {\n  notes.push('planner call failed: ' + ((raw && raw.error) ? raw.error : 'no output') + '; falling back to the raw question');\n}\n\nconst subQuestions = (plan && Array.isArray(plan.sub_questions)) ? plan.sub_questions : [];\nconst queries = [];\nsubQuestions.forEach(function (sq) {\n  (Array.isArray(sq.queries) ? sq.queries : []).forEach(function (q) {\n    const text = String(q || '').trim();\n    if (text && queries.length < req.max_queries) {\n      queries.push({ sub_question_id: sq.id || ('SQ' + (queries.length + 1)), sub_question: sq.question || null, query: text });\n    }\n  });\n});\nif (!queries.length) {\n  queries.push({ sub_question_id: 'SQ1', sub_question: req.question, query: req.question });\n  notes.push('no usable queries were produced, so the question itself was used as the single query');\n}\n\nreturn [{\n  json: {\n    question: req.question,\n    depth: req.depth,\n    today: req.today,\n    started_at_ms: req.started_at_ms,\n    results_per_query: req.results_per_query,\n    source_workflow: req.source_workflow,\n    interpretation: plan ? (plan.interpretation || null) : null,\n    feasibility_warning: plan ? (plan.feasibility_warning || null) : null,\n    disconfirming_evidence: plan && Array.isArray(plan.disconfirming_evidence) ? plan.disconfirming_evidence : [],\n    sub_questions: subQuestions,\n    queries: queries,\n    query_count: queries.length,\n    planner_notes: notes,\n    planner_router: { provider: raw ? raw.selected_provider : null, model: raw ? raw.selected_model : null, latency_ms: raw ? raw.latency_ms : null, estimated_cost_usd: raw ? raw.estimated_cost_usd : null }\n  }\n}];"
+      }
+    },
+    {
+      "id": "04ca74f5-e8cd-4be4-a0b1-fff48e32a06f",
+      "name": "Split Queries",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        0
+      ],
+      "parameters": {
+        "fieldToSplitOut": "queries",
+        "options": {}
+      }
+    },
+    {
+      "id": "e3f5a1e7-e95d-4259-ba55-5198b1222821",
+      "name": "Deduplicate Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        60,
+        -180
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Two-stage deduplication: exact by normalised URL, then near-duplicate by\n// word shingles. Search backends routinely return the same article under\n// tracking parameters, syndicated copies and AMP variants.\nconst items = $input.all().map(function (i) { return i.json; }).filter(function (r) { return r && r.url; });\n\nfunction normUrl(u) {\n  let s = String(u).trim().toLowerCase();\n  s = s.replace(/^https?:\\/\\//, '').replace(/^www\\./, '');\n  s = s.split('#')[0];\n  const parts = s.split('?');\n  const path = parts[0].replace(/\\/+$/, '');\n  if (!parts[1]) { return path; }\n  const kept = parts[1].split('&').filter(function (kv) {\n    const k = kv.split('=')[0];\n    return ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'ref', 'source'].indexOf(k) === -1;\n  }).sort();\n  return kept.length ? (path + '?' + kept.join('&')) : path;\n}\n\nfunction shingles(text) {\n  const words = String(text || '').toLowerCase().replace(/[^a-z0-9\\s]/g, ' ').split(/\\s+/).filter(function (w) { return w.length > 2; });\n  const set = {};\n  for (let i = 0; i + 2 < words.length && i < 400; i++) { set[words[i] + ' ' + words[i + 1] + ' ' + words[i + 2]] = true; }\n  return Object.keys(set);\n}\n\nfunction jaccard(a, b) {\n  if (!a.length || !b.length) { return 0; }\n  const setB = {};\n  b.forEach(function (x) { setB[x] = true; });\n  let inter = 0;\n  a.forEach(function (x) { if (setB[x]) { inter++; } });\n  return inter / (a.length + b.length - inter);\n}\n\nconst kept = [];\nconst seenUrls = {};\nconst duplicates = [];\n\nitems.forEach(function (it) {\n  const key = normUrl(it.url);\n  if (seenUrls[key]) { duplicates.push({ url: it.url, reason: 'same normalised url as ' + seenUrls[key] }); return; }\n  const sh = shingles(it.content || it.snippet);\n  let nearDup = null;\n  for (let i = 0; i < kept.length; i++) {\n    if (jaccard(sh, kept[i]._shingles) > 0.8) { nearDup = kept[i].url; break; }\n  }\n  if (nearDup) { duplicates.push({ url: it.url, reason: 'content is a near duplicate of ' + nearDup }); return; }\n  seenUrls[key] = it.url;\n  kept.push(Object.assign({}, it, { _shingles: sh }));\n});\n\nconst evidence = kept.map(function (k, i) {\n  return {\n    id: 'S' + (i + 1),\n    url: k.url,\n    title: k.title,\n    snippet: k.snippet,\n    text: (k.content && k.content.length > 40) ? k.content : (k.snippet || ''),\n    sub_question_id: k.sub_question_id,\n    query: k.query\n  };\n});\n\nconst emptyQueries = $input.all().map(function (i) { return i.json; })\n  .filter(function (r) { return r && r.empty; })\n  .map(function (r) { return r.query; });\n\nreturn [{\n  json: {\n    evidence: evidence,\n    evidence_count: evidence.length,\n    duplicates_removed: duplicates.length,\n    duplicates: duplicates,\n    queries_with_no_results: emptyQueries,\n    evidence_block: evidence.map(function (e) {\n      return '[' + e.id + '] ' + (e.title || 'untitled') + ' (' + e.url + ')\\n' + String(e.text || '').slice(0, 2500);\n    }).join('\\n\\n'),\n    sources_json: JSON.stringify(evidence.map(function (e) { return { id: e.id, url: e.url, text: String(e.text || '').slice(0, 4000) }; }))\n  }\n}];"
+      }
+    },
+    {
+      "id": "a4697835-4da9-4582-9b29-abca423ffe90",
+      "name": "Search the Web",
+      "type": "@mendable/n8n-nodes-firecrawl.firecrawl",
+      "typeVersion": 1,
+      "position": [
+        60,
+        180
+      ],
+      "parameters": {
+        "resource": "MapSearch",
+        "operation": "search",
+        "query": "={{ $json.query }}",
+        "sources": [
+          "web"
+        ],
+        "limit": "={{ $(\"Parse Research Plan\").first().json.results_per_query }}",
+        "timeout": 60000
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "firecrawlApi": {
+          "name": "Firecrawl API"
+        }
+      }
+    },
+    {
+      "id": "455d8e62-69e1-47bb-9f4b-eb26ee7dbbc8",
+      "name": "Collect Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        180
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Normalises whatever shape the search node returns into flat evidence records,\n// and keeps them small so the loop context does not balloon.\nconst q = $('Search Loop').first().json;\n\nfunction harvest(v, out, depth) {\n  if (!v || depth > 4 || out.length > 40) { return; }\n  if (Array.isArray(v)) { v.forEach(function (x) { harvest(x, out, depth + 1); }); return; }\n  if (typeof v !== 'object') { return; }\n  if (v.url && (v.title || v.description || v.markdown || v.content)) {\n    out.push({\n      url: String(v.url),\n      title: String(v.title || '').slice(0, 300),\n      snippet: String(v.description || v.snippet || '').slice(0, 600),\n      content: String(v.markdown || v.content || v.text || '').slice(0, 4000)\n    });\n    return;\n  }\n  Object.keys(v).forEach(function (k) { harvest(v[k], out, depth + 1); });\n}\n\nconst found = [];\n$input.all().forEach(function (item) { harvest(item.json, found, 0); });\n\nconst errored = $input.all().some(function (i) { return i.json && i.json.error; });\n\nreturn found.map(function (f) {\n  return { json: Object.assign({}, f, { sub_question_id: q.sub_question_id, query: q.query }) };\n}).concat(found.length === 0 ? [{ json: { sub_question_id: q.sub_question_id, query: q.query, url: null, title: null, snippet: null, content: null, empty: true, search_errored: errored } }] : []);"
+      }
+    },
+    {
+      "id": "b0470574-e374-4431-8de4-416f316e8403",
+      "name": "Search Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -180,
+        0
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "e75885d8-710b-44db-8c05-77981cae179f",
+      "name": "Any Evidence Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        300,
+        -180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ev1",
+              "leftValue": "={{ $json.evidence_count }}",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              },
+              "rightValue": 0
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "72718913-6006-4938-a7e1-eaa96834cf63",
+      "name": "Get Synthesiser Prompt (08)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        540,
+        -300
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 08 GitOps Prompt Management"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "prompt_id": "research/synthesiser",
+            "variables": "={{ JSON.stringify({ question: $(\"Parse Research Plan\").first().json.question, evidence_block: $json.evidence_block, today: $(\"Parse Research Plan\").first().json.today }) }}",
+            "ref": "",
+            "owner": "",
+            "repo": "",
+            "strict": "true",
+            "source_workflow": "04-autonomous-research-agent"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "prompt_id",
+              "displayName": "prompt_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "variables",
+              "displayName": "variables",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "ref",
+              "displayName": "ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "owner",
+              "displayName": "owner",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "repo",
+              "displayName": "repo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "strict",
+              "displayName": "strict",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "f63c1e08-04b4-4a32-aec5-b627614c9450",
+      "name": "Synthesise Report (02 Router)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        780,
+        -300
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 02 Intelligent Model Router"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "task_type": "research",
+            "objective": "quality",
+            "privacy": "standard",
+            "input": "={{ ($json.json ? $json.json.prompt : $json.prompt) || \"\" }}",
+            "system_prompt": "Cite a source marker after every factual sentence. Never invent a marker or a URL that is not in the supplied evidence.",
+            "force_provider": "",
+            "source_workflow": "04-autonomous-research-agent",
+            "run_label": "={{ \"synth-\" + $execution.id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "task_type",
+              "displayName": "task_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "objective",
+              "displayName": "objective",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "privacy",
+              "displayName": "privacy",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "input",
+              "displayName": "input",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "system_prompt",
+              "displayName": "system_prompt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "force_provider",
+              "displayName": "force_provider",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "run_label",
+              "displayName": "run_label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "0a43dace-9fe2-4873-9b26-7d8338ee965c",
+      "name": "Verify Report (09)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1020,
+        -300
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 09 AI Output Verification Layer"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ai_output": "={{ ($json.json ? $json.json.output : $json.output) || \"\" }}",
+            "sources": "={{ $(\"Deduplicate Evidence\").first().json.sources_json }}",
+            "json_schema": "",
+            "required_fields": "",
+            "business_rules": "[]",
+            "mode": "full",
+            "confidence_threshold": "0.7",
+            "source_workflow": "04-autonomous-research-agent"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ai_output",
+              "displayName": "ai_output",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sources",
+              "displayName": "sources",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "json_schema",
+              "displayName": "json_schema",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "required_fields",
+              "displayName": "required_fields",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "business_rules",
+              "displayName": "business_rules",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "mode",
+              "displayName": "mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "confidence_threshold",
+              "displayName": "confidence_threshold",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "e7a8bc09-ee26-44ac-995b-4296d8a646b0",
+      "name": "Build Research Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1260,
+        -180
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const plan = $('Parse Research Plan').first().json;\nconst dedup = $('Deduplicate Evidence').first().json;\n\nfunction unwrap(n) {\n  try { const v = $(n).first().json; return (v && v.json) ? v.json : v; } catch (e) { return null; }\n}\nconst synth = unwrap('Synthesise Report (02 Router)');\nconst verification = unwrap('Verify Report (09)');\nconst synthPromptMeta = unwrap('Get Synthesiser Prompt (08)');\nconst plannerPromptMeta = unwrap('Get Planner Prompt (08)');\n\nconst noEvidence = $input.all().some(function (i) { return i.json && i.json.no_evidence; });\nconst reportText = (!noEvidence && synth && synth.ok) ? String(synth.output || '') : null;\n\n// Provenance map: which source markers the report actually used, and which\n// collected sources it ignored. A marker that is not in the evidence set is a\n// fabrication and is listed separately.\nconst evidence = dedup.evidence || [];\nconst knownIds = evidence.map(function (e) { return e.id; });\nconst usedIds = [];\nconst unknownIds = [];\nif (reportText) {\n  const markers = reportText.match(/\\[S\\d+\\]/g) || [];\n  markers.forEach(function (m) {\n    const id = m.slice(1, -1);\n    if (knownIds.indexOf(id) !== -1) { if (usedIds.indexOf(id) === -1) { usedIds.push(id); } }\n    else if (unknownIds.indexOf(id) === -1) { unknownIds.push(id); }\n  });\n}\nconst unusedIds = knownIds.filter(function (id) { return usedIds.indexOf(id) === -1; });\n\nconst costs = [];\nif (plan.planner_router && plan.planner_router.estimated_cost_usd) { costs.push(Number(plan.planner_router.estimated_cost_usd)); }\nif (synth && synth.estimated_cost_usd) { costs.push(Number(synth.estimated_cost_usd)); }\nconst totalCost = costs.reduce(function (a, b) { return a + b; }, 0);\n\nlet confidence = 'insufficient_evidence';\nif (reportText && verification) {\n  if (verification.verified && verification.score >= 0.85) { confidence = 'high'; }\n  else if (verification.score >= 0.7) { confidence = 'medium'; }\n  else { confidence = 'low'; }\n}\n\nreturn [{\n  json: {\n    generated_at: new Date().toISOString(),\n    n8n_execution_id: $execution.id,\n    question: plan.question,\n    depth: plan.depth,\n    interpretation: plan.interpretation,\n    feasibility_warning: plan.feasibility_warning,\n    status: noEvidence ? 'no_evidence' : (reportText ? 'complete' : 'synthesis_failed'),\n    report: reportText,\n    confidence: confidence,\n    research: {\n      sub_questions: plan.sub_questions,\n      queries_run: plan.query_count,\n      queries_with_no_results: dedup.queries_with_no_results || [],\n      sources_collected: evidence.length,\n      duplicates_removed: dedup.duplicates_removed || 0,\n      planner_notes: plan.planner_notes || []\n    },\n    provenance: {\n      sources: evidence.map(function (e) { return { id: e.id, url: e.url, title: e.title, sub_question_id: e.sub_question_id, query: e.query, cited: usedIds.indexOf(e.id) !== -1 }; }),\n      markers_used: usedIds,\n      sources_not_cited: unusedIds,\n      fabricated_markers: unknownIds\n    },\n    verification: verification ? {\n      verified: verification.verified, score: verification.score,\n      claims_total: verification.groundedness ? verification.groundedness.claims_total : null,\n      supported: verification.groundedness ? verification.groundedness.supported : null,\n      contradicted: verification.groundedness ? verification.groundedness.contradicted : null,\n      not_stated: verification.groundedness ? verification.groundedness.not_stated : null,\n      issues: verification.issues, requires_human_review: verification.requires_human_review\n    } : null,\n    prompts: {\n      planner: plannerPromptMeta ? { version: plannerPromptMeta.version, sha: plannerPromptMeta.sha, degraded: plannerPromptMeta.degraded } : null,\n      synthesiser: synthPromptMeta ? { version: synthPromptMeta.version, sha: synthPromptMeta.sha, degraded: synthPromptMeta.degraded } : null\n    },\n    models: {\n      planner: plan.planner_router,\n      synthesiser: synth ? { provider: synth.selected_provider, model: synth.selected_model, latency_ms: synth.latency_ms, estimated_cost_usd: synth.estimated_cost_usd } : null\n    },\n    estimated_cost_usd_total: Math.round(totalCost * 1000000) / 1000000,\n    latency_ms: plan.started_at_ms ? (Date.now() - Number(plan.started_at_ms)) : null\n  }\n}];"
+      }
+    },
+    {
+      "id": "d9c8d6a9-58f4-4786-bf5d-46fccdd40e2e",
+      "name": "No Evidence Found",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        540,
+        -40
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ne1",
+              "name": "no_evidence",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "ne2",
+              "name": "reason",
+              "value": "Every search returned no usable results, so no report was written. Returning an explicit gap is correct here; writing an unsourced answer would not be.",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f8bf1eff-6727-41aa-9480-d0517d2a1644",
+      "name": "Sticky Note 4bed0fa6",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {
+        "content": "## 04 Autonomous Research Agent\n\nquestion -> plan -> parallel web search -> deduplicate -> synthesise -> verify -> provenance map.\n\nBoth prompts come from the GitOps registry and both model calls go through the Model Router, so the provider, prompt version and cost of every run are recorded in the report.",
+        "color": 4,
+        "width": 440,
+        "height": 240
+      }
+    },
+    {
+      "id": "dc6fc9ea-0361-4e1a-9290-619c16394c2b",
+      "name": "Sticky Note e7cbe5d5",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        640
+      ],
+      "parameters": {
+        "content": "## Evidence hygiene\n\nDeduplication runs in two stages: exact match on a normalised URL (tracking parameters, `www.`, trailing slashes and fragments stripped) and then near-duplicate detection using 3-word shingles with a Jaccard threshold of 0.8, which catches syndicated copies of the same article.\n\nIf every search comes back empty the agent stops and reports a gap. It never writes an unsourced answer.",
+        "color": 6,
+        "width": 460,
+        "height": 260
+      }
+    },
+    {
+      "id": "7041820e-d78d-4907-b00b-342ef2cc5c9a",
+      "name": "Sticky Note c104d779",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        992
+      ],
+      "parameters": {
+        "content": "## Citations are checked, not trusted\n\nThe report is passed to the Verification Layer with the collected sources attached, so every claim is labelled SUPPORTED, CONTRADICTED or NOT_STATED against the evidence that was actually retrieved.\n\nThe provenance map records which sources were cited, which were collected but unused, and any `[S#]` marker the model invented that does not correspond to a real source.",
+        "color": 3,
+        "width": 460,
+        "height": 260
+      }
+    },
+    {
+      "id": "80bf405b-6ae2-4d77-859d-4f5443a5ac6f",
+      "name": "Demo Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1500,
+        280
+      ],
+      "parameters": {},
+      "notes": "Runs a real research task: live web search plus two model calls."
+    },
+    {
+      "id": "5e7d09b8-77c9-4177-9883-3e220bd2a2ad",
+      "name": "Demo Question",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1280,
+        280
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "q1",
+              "name": "question",
+              "value": "What are the main phased compliance deadlines in the EU AI Act, and which obligations apply first?",
+              "type": "string"
+            },
+            {
+              "id": "q2",
+              "name": "depth",
+              "value": "standard",
+              "type": "string"
+            },
+            {
+              "id": "q3",
+              "name": "max_queries",
+              "value": "3",
+              "type": "string"
+            },
+            {
+              "id": "q4",
+              "name": "results_per_query",
+              "value": "3",
+              "type": "string"
+            },
+            {
+              "id": "q5",
+              "name": "source_workflow",
+              "value": "04-demo-trigger",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Research Request": {
+      "main": [
+        [
+          {
+            "node": "Normalise Research Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise Research Request": {
+      "main": [
+        [
+          {
+            "node": "Get Planner Prompt (08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Planner Prompt (08)": {
+      "main": [
+        [
+          {
+            "node": "Plan Research (02 Router)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Research (02 Router)": {
+      "main": [
+        [
+          {
+            "node": "Parse Research Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Research Plan": {
+      "main": [
+        [
+          {
+            "node": "Split Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Queries": {
+      "main": [
+        [
+          {
+            "node": "Search Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deduplicate Evidence": {
+      "main": [
+        [
+          {
+            "node": "Any Evidence Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search the Web": {
+      "main": [
+        [
+          {
+            "node": "Collect Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Evidence": {
+      "main": [
+        [
+          {
+            "node": "Search Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Loop": {
+      "main": [
+        [
+          {
+            "node": "Deduplicate Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search the Web",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Evidence Found?": {
+      "main": [
+        [
+          {
+            "node": "Get Synthesiser Prompt (08)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Evidence Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Synthesiser Prompt (08)": {
+      "main": [
+        [
+          {
+            "node": "Synthesise Report (02 Router)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Synthesise Report (02 Router)": {
+      "main": [
+        [
+          {
+            "node": "Verify Report (09)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Report (09)": {
+      "main": [
+        [
+          {
+            "node": "Build Research Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Evidence Found": {
+      "main": [
+        [
+          {
+            "node": "Build Research Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Trigger": {
+      "main": [
+        [
+          {
+            "node": "Demo Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Question": {
+      "main": [
+        [
+          {
+            "node": "Normalise Research Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "description": "Plans a research question into sub-questions, searches the live web, deduplicates evidence, synthesises a cited report through the Model Router, and verifies every claim against the collected sources. Returns explicit uncertainty rather than inventing cit",
+  "versionCounter": 2,
+  "sourceWorkflowId": null,
+  "nodeGroups": [],
+  "activeVersion": null
+}

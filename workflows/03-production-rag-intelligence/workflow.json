@@ -1,0 +1,2364 @@
+{
+  "name": "03 Production RAG Intelligence Platform",
+  "nodes": [
+    {
+      "id": "27b44ab8-b466-43dc-b455-d3a2b93f8a7f",
+      "name": "Ingest Corpus",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1500,
+        -420
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "438224b8-5f48-4af6-abe8-989b9826a1e2",
+      "name": "Load Demo Corpus",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1280,
+        -420
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// A small, entirely invented knowledge base for a fictional company. It is\n// deliberately written so that some questions ARE answerable and some are NOT,\n// which is what makes the no-answer path testable rather than decorative.\nconst DOCS = [\n  {\n    doc_id: 'POL-001', title: 'Returns and refunds policy', category: 'policy',\n    audience: 'public', effective_from: '2026-01-01',\n    text: 'Northwind Outdoors accepts returns within 45 days of delivery for a full refund, provided the item is unworn and in its original packaging. Sale items marked \"final sale\" cannot be returned. Refunds are issued to the original payment method within 10 business days of the returned item being received at the Adelaide warehouse. Return shipping is paid by the customer unless the item arrived faulty or was sent in error, in which case Northwind Outdoors covers it and sends a prepaid label.'\n  },\n  {\n    doc_id: 'POL-002', title: 'Warranty terms', category: 'policy',\n    audience: 'public', effective_from: '2026-01-01',\n    text: 'All Northwind Outdoors footwear carries a 24 month warranty against manufacturing defects, measured from the date of purchase. The warranty covers delamination, stitching failure and sole separation. It does not cover normal wear of outsoles, damage from improper care, or products bought from unauthorised resellers. Warranty claims require proof of purchase and photographs of the defect.'\n  },\n  {\n    doc_id: 'POL-003', title: 'Delivery timeframes', category: 'policy',\n    audience: 'public', effective_from: '2026-03-15',\n    text: 'Standard delivery within metropolitan Australia takes 3 to 5 business days. Regional and remote deliveries take 5 to 10 business days. Express delivery, where available, is next business day for orders placed before 1pm ACST on a weekday. Northwind Outdoors does not currently ship outside Australia and New Zealand.'\n  },\n  {\n    doc_id: 'ENG-101', title: 'Waterproofing membrane technology', category: 'product',\n    audience: 'public', effective_from: '2025-11-01',\n    text: 'The HydroSeal membrane used in Northwind hiking boots is a microporous laminate rated to 20,000 mm hydrostatic head with a moisture vapour transmission rate of 15,000 g per square metre per 24 hours. The membrane is bonded to the boot lining rather than the outer, which keeps the seam count low. HydroSeal performance degrades if the boot is machine washed or dried above 40 degrees Celsius.'\n  },\n  {\n    doc_id: 'ENG-102', title: 'Outsole compound selection', category: 'product',\n    audience: 'public', effective_from: '2025-11-01',\n    text: 'Trail models use a 62 Shore A rubber compound optimised for wet rock grip, while approach models use a firmer 70 Shore A compound that lasts longer on abrasive surfaces but is less sticky when wet. Lug depth is 5 mm on trail models and 3.5 mm on approach models.'\n  },\n  {\n    doc_id: 'OPS-210', title: 'Warehouse cut-off times', category: 'operations',\n    audience: 'internal', effective_from: '2026-02-01',\n    text: 'The Adelaide warehouse despatch cut-off is 2pm ACST Monday to Friday. Orders received after cut-off are picked the following business day. The warehouse does not operate on South Australian public holidays. Peak season from 20 November to 24 December extends the cut-off to 4pm ACST with additional casual staff.'\n  },\n  {\n    doc_id: 'OPS-211', title: 'Stock replenishment rules', category: 'operations',\n    audience: 'internal', effective_from: '2026-02-01',\n    text: 'Replenishment orders are raised automatically when available stock for a size and colour combination falls below 12 units. Lead time from the primary supplier is 45 days by sea and 9 days by air. Air freight is only authorised when projected stock-out is within 14 days and the affected line has sold more than 200 units in the preceding quarter.'\n  },\n  {\n    doc_id: 'SUP-330', title: 'Sizing guidance', category: 'support',\n    audience: 'public', effective_from: '2026-01-10',\n    text: 'Northwind footwear is generally true to size in EU sizing. Customers between sizes should size up for trail models, which are cut narrower through the midfoot. Approach models run approximately half a size large. A printable measuring guide is available and should be used on a hard floor at the end of the day, when feet are at their largest.'\n  }\n];\n\nreturn DOCS.map(function (d) { return { json: d }; });"
+      }
+    },
+    {
+      "id": "8a3c1ecf-cd9d-4a46-a0e6-3c06ae1b9c5e",
+      "name": "Store Chunks",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreInMemory",
+      "typeVersion": 1.3,
+      "position": [
+        -1060,
+        -420
+      ],
+      "parameters": {
+        "mode": "insert",
+        "memoryKey": {
+          "__rl": true,
+          "mode": "list",
+          "value": "agentic_rag_demo",
+          "cachedResultName": "agentic_rag_demo"
+        },
+        "embeddingBatchSize": 50,
+        "clearStore": true
+      }
+    },
+    {
+      "id": "0a2f98d6-35c4-4732-897d-008ece8cdf63",
+      "name": "Chunk with Metadata",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        -1040,
+        -180
+      ],
+      "parameters": {
+        "dataType": "json",
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.text }}",
+        "textSplittingMode": "custom",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "doc_id",
+                "value": "={{ $json.doc_id }}"
+              },
+              {
+                "name": "title",
+                "value": "={{ $json.title }}"
+              },
+              {
+                "name": "category",
+                "value": "={{ $json.category }}"
+              },
+              {
+                "name": "audience",
+                "value": "={{ $json.audience }}"
+              },
+              {
+                "name": "effective_from",
+                "value": "={{ $json.effective_from }}"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "1ffb2e5e-92cc-4ecf-8d55-4a4a16c486dc",
+      "name": "Recursive Chunker",
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        -820,
+        -180
+      ],
+      "parameters": {
+        "chunkSize": 700,
+        "chunkOverlap": 120,
+        "options": {}
+      }
+    },
+    {
+      "id": "62965ca1-5c2c-43d7-a145-3af8b8325cfa",
+      "name": "Ingestion Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -820,
+        -420
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const docs = $('Load Demo Corpus').all().map(function (i) { return i.json; });\nconst chars = docs.reduce(function (a, d) { return a + String(d.text || '').length; }, 0);\nreturn [{ json: {\n  status: 'ingested',\n  collection: 'agentic_rag_demo',\n  documents: docs.length,\n  total_characters: chars,\n  chunk_size: 700,\n  chunk_overlap: 120,\n  metadata_fields: ['doc_id', 'title', 'category', 'audience', 'effective_from'],\n  categories: docs.map(function (d) { return d.category; }).filter(function (v, i, a) { return a.indexOf(v) === i; }),\n  note: 'The demo uses the in-memory Simple Vector Store so it runs with no vector database credentials. Swap Store Chunks and Retrieve Chunks for the Qdrant nodes to use a persistent store; see the README.',\n  ingested_at: new Date().toISOString()\n} }];"
+      }
+    },
+    {
+      "id": "1df62fc2-d5f5-4dc2-8fc0-c0fbe1df1c2b",
+      "name": "RAG Query",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1500,
+        120
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "question",
+              "type": "string"
+            },
+            {
+              "name": "top_k",
+              "type": "string"
+            },
+            {
+              "name": "category_filter",
+              "type": "string"
+            },
+            {
+              "name": "audience",
+              "type": "string"
+            },
+            {
+              "name": "min_score",
+              "type": "string"
+            },
+            {
+              "name": "source_workflow",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "373e178f-6e44-46c9-84cd-326e209edc01",
+      "name": "Normalise Query",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1280,
+        120
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "q1",
+              "name": "question",
+              "value": "={{ ($json.question || \"\").trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "q2",
+              "name": "top_k",
+              "value": "={{ Math.min(20, Math.max(1, Number($json.top_k || 6))) }}",
+              "type": "number"
+            },
+            {
+              "id": "q3",
+              "name": "category_filter",
+              "value": "={{ ($json.category_filter || \"\").trim().toLowerCase() }}",
+              "type": "string"
+            },
+            {
+              "id": "q4",
+              "name": "audience",
+              "value": "={{ ($json.audience || \"public\").trim().toLowerCase() }}",
+              "type": "string"
+            },
+            {
+              "id": "q5",
+              "name": "min_score",
+              "value": "={{ Math.min(1, Math.max(0, Number($json.min_score || 0.55))) }}",
+              "type": "number"
+            },
+            {
+              "id": "q6",
+              "name": "source_workflow",
+              "value": "={{ $json.source_workflow || \"unknown\" }}",
+              "type": "string"
+            },
+            {
+              "id": "q7",
+              "name": "started_at_ms",
+              "value": "={{ $now.toMillis() }}",
+              "type": "number"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d870e70d-5ad9-456e-b2dd-a15609332cee",
+      "name": "Retrieve Chunks",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreInMemory",
+      "typeVersion": 1.3,
+      "position": [
+        -1060,
+        120
+      ],
+      "parameters": {
+        "mode": "load",
+        "memoryKey": {
+          "__rl": true,
+          "mode": "list",
+          "value": "agentic_rag_demo",
+          "cachedResultName": "agentic_rag_demo"
+        },
+        "prompt": "={{ $json.question }}",
+        "topK": "={{ $json.top_k }}",
+        "includeDocumentMetadata": true
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "c83658bc-6083-46c1-94eb-cddaa91ef2f9",
+      "name": "Filter, Rerank and Diagnose",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -820,
+        120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Metadata filtering, a deterministic hybrid rerank, and retrieval diagnostics.\n// The rerank blends the vector score with lexical overlap, which reliably rescues\n// exact-term matches (part numbers, policy names) that pure embeddings rank low,\n// and it costs nothing and adds no latency because no model is involved.\nconst q = $('Normalise Query').first().json;\nconst raw = $input.all().map(function (i) { return i.json; });\n\nfunction unpack(r, idx) {\n  const doc = r.document || r;\n  const meta = doc.metadata || r.metadata || {};\n  return {\n    rank: idx,\n    text: String(doc.pageContent || doc.text || r.text || ''),\n    score: typeof r.score === 'number' ? r.score : (typeof doc.score === 'number' ? doc.score : null),\n    doc_id: meta.doc_id || null,\n    title: meta.title || null,\n    category: meta.category || null,\n    audience: meta.audience || null,\n    effective_from: meta.effective_from || null\n  };\n}\n\nconst all = raw.map(unpack).filter(function (c) { return c.text.length > 0; });\n\n// ---- Metadata filtering -------------------------------------------------\n// Audience is genuine access control here: an internal document must not be\n// quoted back to a public caller even when it is the best semantic match.\nconst filteredOut = [];\nconst visible = all.filter(function (c) {\n  if (q.audience === 'public' && c.audience && c.audience !== 'public') {\n    filteredOut.push({ doc_id: c.doc_id, reason: 'audience \"' + c.audience + '\" is not visible to a public caller' });\n    return false;\n  }\n  if (q.category_filter && c.category && c.category !== q.category_filter) {\n    filteredOut.push({ doc_id: c.doc_id, reason: 'category \"' + c.category + '\" excluded by filter \"' + q.category_filter + '\"' });\n    return false;\n  }\n  return true;\n});\n\n// ---- Lexical overlap ----------------------------------------------------\nconst STOP = { the: 1, a: 1, an: 1, of: 1, to: 1, in: 1, on: 1, for: 1, and: 1, or: 1, is: 1, are: 1, do: 1, does: 1, i: 1, my: 1, how: 1, what: 1, when: 1, can: 1, long: 1, have: 1, you: 1, your: 1, it: 1, be: 1, there: 1, that: 1, this: 1 };\nconst qTerms = String(q.question).toLowerCase().replace(/[^a-z0-9\\s]/g, ' ').split(/\\s+/)\n  .filter(function (w) { return w.length > 2 && !STOP[w]; });\n\nfunction lexical(text) {\n  if (!qTerms.length) { return 0; }\n  const lower = text.toLowerCase();\n  let hits = 0;\n  qTerms.forEach(function (t) { if (lower.indexOf(t) !== -1) { hits++; } });\n  return hits / qTerms.length;\n}\n\n// Not every vector store returns a numeric similarity score. When none is\n// available, fall back to RANK POSITION, which the store has already sorted by\n// similarity. Without this the relevance gate would silently become\n// lexical-only and would drop good semantic matches that share no exact terms.\nconst scores = visible.map(function (c) { return c.score; }).filter(function (s) { return typeof s === 'number'; });\nconst haveScores = scores.length > 0;\nconst maxScore = haveScores ? Math.max.apply(null, scores) : 1;\nconst minScore = haveScores ? Math.min.apply(null, scores) : 0;\nconst rankBasis = Math.max(1, all.length);\n\nfunction normScore(c) {\n  if (!haveScores || typeof c.score !== 'number') {\n    return Math.max(0.2, 1 - (c.rank / rankBasis));\n  }\n  if (maxScore - minScore < 1e-9) { return 1; }\n  return (c.score - minScore) / (maxScore - minScore);\n}\n\nconst W_VEC = 0.7;\nconst W_LEX = 0.3;\nconst ranked = visible.map(function (c) {\n  const lex = lexical(c.text);\n  return Object.assign({}, c, {\n    lexical_overlap: Math.round(lex * 1000) / 1000,\n    vector_score: c.score,\n    score_basis: haveScores ? 'vector_similarity' : 'rank_position_fallback',\n    rerank_score: Math.round((W_VEC * normScore(c) + W_LEX * lex) * 1000) / 1000\n  });\n}).sort(function (a, b) { return b.rerank_score - a.rerank_score; });\n\n// ---- Relevance gate -----------------------------------------------------\n// A chunk that is merely the closest thing in the store is not evidence.\nconst kept = ranked.filter(function (c) { return c.rerank_score >= q.min_score; });\nconst context = kept.slice(0, q.top_k).map(function (c, i) { return Object.assign({}, c, { marker: 'C' + (i + 1) }); });\n\nconst contextBlock = context.map(function (c) {\n  return '[' + c.marker + '] ' + (c.title || c.doc_id || 'untitled') + ' (' + c.doc_id + ')\\n' + c.text;\n}).join('\\n\\n');\n\nconst sourcesJson = JSON.stringify(context.map(function (c) {\n  return { id: c.marker, text: c.text, url: null };\n}));\n\nreturn [{\n  json: {\n    question: q.question,\n    started_at_ms: q.started_at_ms,\n    source_workflow: q.source_workflow,\n    audience: q.audience,\n    has_context: context.length > 0,\n    context: context,\n    context_block: contextBlock,\n    sources_json: sourcesJson,\n    diagnostics: {\n      retrieved: all.length,\n      filtered_out_by_metadata: filteredOut.length,\n      filtered_out_detail: filteredOut,\n      below_relevance_threshold: ranked.length - kept.length,\n      min_score_required: q.min_score,\n      score_basis: haveScores ? 'vector_similarity' : 'rank_position_fallback',\n      top_rerank_score: ranked.length ? ranked[0].rerank_score : null,\n      top_vector_score: ranked.length ? ranked[0].vector_score : null,\n      rerank_formula: 'rerank_score = 0.7 * normalised_vector_score + 0.3 * lexical_term_overlap',\n      documents_represented: context.map(function (c) { return c.doc_id; }).filter(function (v, i, a) { return a.indexOf(v) === i; })\n    }\n  }\n}];"
+      }
+    },
+    {
+      "id": "4ccdef60-0ff4-4dc8-a17b-9cfd156e2824",
+      "name": "Relevant Context Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -580,
+        120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "hc1",
+              "leftValue": "={{ $json.has_context }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "6511ea59-47b6-4f1a-beba-74800acaa4cf",
+      "name": "Get RAG Prompt (08)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -340,
+        -20
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 08 GitOps Prompt Management"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "prompt_id": "rag/answerer",
+            "variables": "={{ JSON.stringify({ question: $json.question, context_block: $json.context_block, min_citations: \"1\" }) }}",
+            "ref": "",
+            "owner": "",
+            "repo": "",
+            "strict": "true",
+            "source_workflow": "03-production-rag-intelligence"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "prompt_id",
+              "displayName": "prompt_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "variables",
+              "displayName": "variables",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "ref",
+              "displayName": "ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "owner",
+              "displayName": "owner",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "repo",
+              "displayName": "repo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "strict",
+              "displayName": "strict",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "0c29c52b-d4b7-421c-9203-6a27cee98027",
+      "name": "Generate Answer (02 Router)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -100,
+        -20
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 02 Intelligent Model Router"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "task_type": "summarization",
+            "objective": "balanced",
+            "privacy": "standard",
+            "input": "={{ ($json.json ? $json.json.prompt : $json.prompt) || \"\" }}",
+            "system_prompt": "Answer only from the supplied context. Cite the [C#] marker after every sentence that uses a passage. If the context does not answer the question, reply exactly INSUFFICIENT_CONTEXT and say what is missing.",
+            "force_provider": "",
+            "source_workflow": "03-production-rag-intelligence",
+            "run_label": "={{ \"rag-\" + $execution.id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "task_type",
+              "displayName": "task_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "objective",
+              "displayName": "objective",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "privacy",
+              "displayName": "privacy",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "input",
+              "displayName": "input",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "system_prompt",
+              "displayName": "system_prompt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "force_provider",
+              "displayName": "force_provider",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "run_label",
+              "displayName": "run_label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "62e57a54-53cc-4d76-8364-7e64961f4efb",
+      "name": "Verify Answer (09)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        140,
+        -20
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 09 AI Output Verification Layer"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ai_output": "={{ ($json.json ? $json.json.output : $json.output) || \"\" }}",
+            "sources": "={{ $(\"Filter, Rerank and Diagnose\").first().json.sources_json }}",
+            "json_schema": "",
+            "required_fields": "",
+            "business_rules": "[]",
+            "mode": "full",
+            "confidence_threshold": "0.7",
+            "source_workflow": "03-production-rag-intelligence"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ai_output",
+              "displayName": "ai_output",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sources",
+              "displayName": "sources",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "json_schema",
+              "displayName": "json_schema",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "required_fields",
+              "displayName": "required_fields",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "business_rules",
+              "displayName": "business_rules",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "mode",
+              "displayName": "mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "confidence_threshold",
+              "displayName": "confidence_threshold",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "a5cd2067-3286-4527-bbbd-d52a0cb5674c",
+      "name": "Build RAG Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        380,
+        120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const r = $('Filter, Rerank and Diagnose').first().json;\n\nfunction unwrap(n) {\n  try { const v = $(n).first().json; return (v && v.json) ? v.json : v; } catch (e) { return null; }\n}\nconst gen = unwrap('Generate Answer (02 Router)');\nconst verification = unwrap('Verify Answer (09)');\nconst promptMeta = unwrap('Get RAG Prompt (08)');\n\nconst noContext = $input.all().some(function (i) { return i.json && i.json.no_context; });\nlet answer = (!noContext && gen && gen.ok) ? String(gen.output || '') : null;\n\n// The prompt instructs the model to say INSUFFICIENT_CONTEXT when the passages\n// do not answer the question. Honour that literally rather than presenting it\n// as an answer.\nconst declaredInsufficient = !!answer && answer.indexOf('INSUFFICIENT_CONTEXT') !== -1;\n\n// Which retrieved chunks were actually cited, and did the model invent a marker?\nconst knownMarkers = (r.context || []).map(function (c) { return c.marker; });\nconst used = [];\nconst fabricated = [];\nif (answer) {\n  (answer.match(/\\[C\\d+\\]/g) || []).forEach(function (m) {\n    const id = m.slice(1, -1);\n    if (knownMarkers.indexOf(id) !== -1) { if (used.indexOf(id) === -1) { used.push(id); } }\n    else if (fabricated.indexOf(id) === -1) { fabricated.push(id); }\n  });\n}\n\nlet status = 'answered';\nif (noContext) { status = 'no_relevant_context'; }\nelse if (declaredInsufficient) { status = 'insufficient_context'; }\nelse if (!answer) { status = 'generation_failed'; }\n\nlet confidence = 'none';\nif (status === 'answered' && verification) {\n  if (verification.verified && verification.score >= 0.85) { confidence = 'high'; }\n  else if (verification.score >= 0.7) { confidence = 'medium'; }\n  else { confidence = 'low'; }\n}\n\nconst escalate = status === 'answered' && (!!fabricated.length || (verification && verification.requires_human_review));\n\nreturn [{\n  json: {\n    generated_at: new Date().toISOString(),\n    n8n_execution_id: $execution.id,\n    question: r.question,\n    status: status,\n    answer: (status === 'answered') ? answer : null,\n    confidence: confidence,\n    requires_human_review: escalate,\n    citations: (r.context || [])\n      .filter(function (c) { return used.indexOf(c.marker) !== -1; })\n      .map(function (c) { return { marker: c.marker, doc_id: c.doc_id, title: c.title, category: c.category, rerank_score: c.rerank_score, vector_score: c.vector_score, excerpt: String(c.text).slice(0, 220) }; }),\n    retrieved_but_uncited: (r.context || [])\n      .filter(function (c) { return used.indexOf(c.marker) === -1; })\n      .map(function (c) { return { marker: c.marker, doc_id: c.doc_id, rerank_score: c.rerank_score }; }),\n    fabricated_markers: fabricated,\n    retrieval_diagnostics: r.diagnostics,\n    verification: verification ? {\n      verified: verification.verified, score: verification.score,\n      groundedness: verification.groundedness ? {\n        status: verification.groundedness.status,\n        claims_judged: verification.groundedness.claims_judged,\n        supported: verification.groundedness.supported,\n        contradicted: verification.groundedness.contradicted,\n        not_stated: verification.groundedness.not_stated\n      } : null,\n      issues: verification.issues, requires_human_review: verification.requires_human_review\n    } : null,\n    prompt: promptMeta ? { id: 'rag/answerer', version: promptMeta.version, sha: promptMeta.sha, degraded: promptMeta.degraded } : null,\n    model: gen ? { provider: gen.selected_provider, model: gen.selected_model, latency_ms: gen.latency_ms, estimated_cost_usd: gen.estimated_cost_usd } : null,\n    estimated_cost_usd: gen ? gen.estimated_cost_usd : 0,\n    latency_ms: r.started_at_ms ? (Date.now() - Number(r.started_at_ms)) : null\n  }\n}];"
+      }
+    },
+    {
+      "id": "11e72269-3de6-41b4-ab29-951a64662c37",
+      "name": "No Relevant Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -340,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "na1",
+              "name": "no_context",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "35860295-f063-4847-8aa7-963b6385e635",
+      "name": "Sticky Note 31a7edc2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {
+        "content": "## Ingestion\n\nDocuments are chunked at 700 characters with 120 of overlap and carry `doc_id`, `title`, `category`, `audience` and `effective_from` as metadata. That metadata is not decoration: `audience` is enforced at retrieval time.\n\nThe demo uses the in-memory Simple Vector Store, so the whole platform runs with **no vector database credentials**. Swapping both store nodes for the Qdrant equivalents is the documented production path.",
+        "color": 4,
+        "width": 460,
+        "height": 240
+      }
+    },
+    {
+      "id": "e5d418e7-d29d-458e-a37e-1619e8ccf951",
+      "name": "Sticky Note bdeb5303",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        640
+      ],
+      "parameters": {
+        "content": "## Retrieval is filtered, reranked and diagnosed\n\n1. **Metadata filter.** An `internal` document is never returned to a `public` caller, even when it is the best semantic match. That is access control, not relevance tuning.\n2. **Hybrid rerank.** `0.7 x normalised vector score + 0.3 x lexical term overlap`. Costs nothing, adds no latency, and rescues exact-term matches that pure embeddings rank low.\n3. **Relevance gate.** Chunks below `min_score` are dropped. Being the closest thing in the store does not make a chunk evidence.\n\nEvery one of those decisions is reported in `retrieval_diagnostics`.",
+        "color": 6,
+        "width": 500,
+        "height": 320
+      }
+    },
+    {
+      "id": "cef8b7dc-88ff-468c-acb4-86d7771651e9",
+      "name": "Sticky Note 70bca7aa",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        1056
+      ],
+      "parameters": {
+        "content": "## Not answering is a first-class outcome\n\n`no_relevant_context` — nothing survived the filter and the relevance gate, so no model was called.\n`insufficient_context` — passages were retrieved but the model reported they do not answer the question, and that is passed through rather than dressed up.\n\nWhen an answer is produced it is verified against the retrieved chunks, and any `[C#]` marker the model invented is listed in `fabricated_markers` and forces human review.",
+        "color": 3,
+        "width": 480,
+        "height": 260
+      }
+    },
+    {
+      "id": "525707aa-0382-4460-bc45-aa13d80ff57f",
+      "name": "Test Suite Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1500,
+        640
+      ],
+      "parameters": {},
+      "notes": "Run 'Ingest Corpus' first. Each fixture makes one embedding call and, where context is found, one generation plus one verification call."
+    },
+    {
+      "id": "1bf2de73-c066-4bc7-9909-89b613b48f2e",
+      "name": "Build RAG Fixtures",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1280,
+        640
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Fixtures chosen so that some questions ARE answerable from the corpus and some\n// are NOT, and so that metadata access control is tested in BOTH directions.\n// Proving a document is blocked is only meaningful if you also prove it would\n// otherwise have been returned.\nconst F = [\n  { case_id: 'R01-answerable-policy', question: 'How many days do I have to return an item for a refund?',\n    audience: 'public', category_filter: '', top_k: '5', min_score: '0.4',\n    expect_status: 'answered', expect_doc: 'POL-001' },\n  { case_id: 'R02-not-in-corpus', question: 'What is the chief executive home address and personal phone number?',\n    audience: 'public', category_filter: '', top_k: '5', min_score: '0.4',\n    expect_status_in: ['no_relevant_context', 'insufficient_context'], expect_doc: null },\n  { case_id: 'R03-internal-doc-blocked-from-public', question: 'What time is the Adelaide warehouse despatch cut-off?',\n    audience: 'public', category_filter: '', top_k: '5', min_score: '0.4',\n    expect_status_in: ['no_relevant_context', 'insufficient_context'], expect_doc: null,\n    expect_filtered_doc: 'OPS-210' },\n  { case_id: 'R04-same-question-allowed-for-internal', question: 'What time is the Adelaide warehouse despatch cut-off?',\n    audience: 'internal', category_filter: '', top_k: '5', min_score: '0.4',\n    expect_status: 'answered', expect_doc: 'OPS-210' },\n  { case_id: 'R05-category-filter', question: 'What is the hydrostatic head rating of the waterproof membrane?',\n    audience: 'public', category_filter: 'product', top_k: '5', min_score: '0.4',\n    expect_status: 'answered', expect_doc: 'ENG-101' }\n];\nreturn F.map(function (f) { return { json: Object.assign({}, f, { source_workflow: '03-test-suite::' + f.case_id }) }; });"
+      }
+    },
+    {
+      "id": "1c3419cb-e7c8-4284-951d-52420d5f7648",
+      "name": "RAG Fixture Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1060,
+        640
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "e7bde8e3-9d79-4f0f-ae7c-be178d6885be",
+      "name": "Run RAG Fixture",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -820,
+        780
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "03 Production RAG Intelligence Platform"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "question": "={{ $json.question }}",
+            "top_k": "={{ $json.top_k }}",
+            "category_filter": "={{ $json.category_filter }}",
+            "audience": "={{ $json.audience }}",
+            "min_score": "={{ $json.min_score }}",
+            "source_workflow": "={{ $json.source_workflow }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "question",
+              "displayName": "question",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "top_k",
+              "displayName": "top_k",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "category_filter",
+              "displayName": "category_filter",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "audience",
+              "displayName": "audience",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "min_score",
+              "displayName": "min_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "07309f0e-9137-42e9-ade8-e6e70418a3eb",
+      "name": "Slim RAG Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -580,
+        780
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const r = ($json && $json.json) ? $json.json : $json;\nconst d = r.retrieval_diagnostics || {};\nreturn { json: {\n  status: r.status,\n  confidence: r.confidence,\n  answer: r.answer ? String(r.answer).slice(0, 400) : null,\n  cited_docs: (r.citations || []).map(function (c) { return c.doc_id; }),\n  fabricated_markers: r.fabricated_markers || [],\n  filtered_docs: (d.filtered_out_detail || []).map(function (f) { return f.doc_id; }),\n  retrieved: d.retrieved, filtered_out: d.filtered_out_by_metadata,\n  below_threshold: d.below_relevance_threshold, score_basis: d.score_basis,\n  top_rerank_score: d.top_rerank_score,\n  verified: r.verification ? r.verification.verified : null,\n  verification_score: r.verification ? r.verification.score : null,\n  latency_ms: r.latency_ms, estimated_cost_usd: r.estimated_cost_usd\n} };"
+      }
+    },
+    {
+      "id": "d90d5375-1e01-4ff5-a3d0-49aa4662fab3",
+      "name": "Assert RAG Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -820,
+        500
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const fixtures = $('Build RAG Fixtures').all().map(function (i) { return i.json; });\nconst results = $input.all().map(function (i) { return i.json; });\n\nconst rows = results.map(function (r, idx) {\n  const fx = fixtures[idx] || {};\n  const fails = [];\n  const allowed = fx.expect_status_in || (fx.expect_status ? [fx.expect_status] : null);\n  if (allowed && allowed.indexOf(r.status) === -1) {\n    fails.push('expected status one of [' + allowed.join(', ') + '] but got ' + r.status);\n  }\n  if (fx.expect_doc && (r.cited_docs || []).indexOf(fx.expect_doc) === -1) {\n    fails.push('expected the answer to cite ' + fx.expect_doc + ' but it cited [' + (r.cited_docs || []).join(', ') + ']');\n  }\n  if (fx.expect_filtered_doc && (r.filtered_docs || []).indexOf(fx.expect_filtered_doc) === -1) {\n    fails.push('expected ' + fx.expect_filtered_doc + ' to be filtered out by metadata but it was not');\n  }\n  if ((r.fabricated_markers || []).length) {\n    fails.push('answer invented citation markers: ' + r.fabricated_markers.join(', '));\n  }\n  return {\n    case_id: fx.case_id, pass: fails.length === 0,\n    expected_status: allowed ? allowed.join('|') : null, actual_status: r.status,\n    expected_doc: fx.expect_doc, cited_docs: r.cited_docs,\n    filtered_docs: r.filtered_docs,\n    confidence: r.confidence, verified: r.verified, verification_score: r.verification_score,\n    retrieved: r.retrieved, filtered_out: r.filtered_out, below_threshold: r.below_threshold,\n    score_basis: r.score_basis, top_rerank_score: r.top_rerank_score,\n    answer_excerpt: r.answer,\n    fail_reasons: fails, latency_ms_measured: r.latency_ms, estimated_cost_usd: r.estimated_cost_usd\n  };\n});\n\nconst passed = rows.filter(function (r) { return r.pass; }).length;\nconst lats = rows.map(function (r) { return r.latency_ms_measured; }).filter(function (v) { return typeof v === 'number'; }).sort(function (a, b) { return a - b; });\nconst cost = rows.reduce(function (a, r) { return a + Number(r.estimated_cost_usd || 0); }, 0);\n\nreturn [{ json: {\n  suite: 'rag-fixtures-v1', generated_at: new Date().toISOString(), n8n_execution_id: $execution.id,\n  note: 'Run Ingest Corpus first. R03 and R04 ask the SAME question with different audiences, which is what makes the access-control result meaningful rather than an accident of retrieval.',\n  total: rows.length, passed: passed, failed: rows.length - passed, all_passed: passed === rows.length,\n  latency_ms_p50_measured: lats.length ? lats[Math.max(0, Math.ceil(0.5 * lats.length) - 1)] : null,\n  latency_ms_max_measured: lats.length ? lats[lats.length - 1] : null,\n  estimated_cost_usd_total: Math.round(cost * 1000000) / 1000000,\n  cases: rows\n} }];"
+      }
+    },
+    {
+      "id": "e655192f-3ee4-4d34-87e4-ccf71dc413b3",
+      "name": "Embeddings (ingest)",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -1280,
+        -180
+      ],
+      "parameters": {
+        "model": "text-embedding-3-small",
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": {
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "id": "5e119791-40c3-45a4-97fb-e1c4520983ce",
+      "name": "Embeddings (query)",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -1060,
+        340
+      ],
+      "parameters": {
+        "model": "text-embedding-3-small",
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": {
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Ingest Corpus": {
+      "main": [
+        [
+          {
+            "node": "Load Demo Corpus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Demo Corpus": {
+      "main": [
+        [
+          {
+            "node": "Store Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Chunks": {
+      "main": [
+        [
+          {
+            "node": "Ingestion Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chunk with Metadata": {
+      "ai_document": [
+        [
+          {
+            "node": "Store Chunks",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recursive Chunker": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Chunk with Metadata",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG Query": {
+      "main": [
+        [
+          {
+            "node": "Normalise Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise Query": {
+      "main": [
+        [
+          {
+            "node": "Retrieve Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrieve Chunks": {
+      "main": [
+        [
+          {
+            "node": "Filter, Rerank and Diagnose",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter, Rerank and Diagnose": {
+      "main": [
+        [
+          {
+            "node": "Relevant Context Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Relevant Context Found?": {
+      "main": [
+        [
+          {
+            "node": "Get RAG Prompt (08)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Relevant Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get RAG Prompt (08)": {
+      "main": [
+        [
+          {
+            "node": "Generate Answer (02 Router)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Answer (02 Router)": {
+      "main": [
+        [
+          {
+            "node": "Verify Answer (09)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Answer (09)": {
+      "main": [
+        [
+          {
+            "node": "Build RAG Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Relevant Context": {
+      "main": [
+        [
+          {
+            "node": "Build RAG Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Suite Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build RAG Fixtures",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build RAG Fixtures": {
+      "main": [
+        [
+          {
+            "node": "RAG Fixture Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG Fixture Loop": {
+      "main": [
+        [
+          {
+            "node": "Assert RAG Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run RAG Fixture",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run RAG Fixture": {
+      "main": [
+        [
+          {
+            "node": "Slim RAG Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slim RAG Result": {
+      "main": [
+        [
+          {
+            "node": "RAG Fixture Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings (ingest)": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Store Chunks",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings (query)": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Retrieve Chunks",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "description": "Ingestion to grounded answer: chunking with metadata, embeddings, vector storage, retrieval with metadata filtering, deterministic reranking, citation-bound generation, verification against the retrieved chunks, and an explicit no-answer path.",
+  "versionCounter": 3,
+  "sourceWorkflowId": null,
+  "nodeGroups": [],
+  "activeVersion": {
+    "versionId": "ded28a20-78c0-4e2c-a65d-203a12c7dc29",
+    "workflowId": "BpvCMNOhjklm0YF5",
+    "nodes": [
+      {
+        "id": "27b44ab8-b466-43dc-b455-d3a2b93f8a7f",
+        "name": "Ingest Corpus",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          -1500,
+          -420
+        ],
+        "parameters": {}
+      },
+      {
+        "id": "438224b8-5f48-4af6-abe8-989b9826a1e2",
+        "name": "Load Demo Corpus",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -1280,
+          -420
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "javaScript",
+          "jsCode": "// A small, entirely invented knowledge base for a fictional company. It is\n// deliberately written so that some questions ARE answerable and some are NOT,\n// which is what makes the no-answer path testable rather than decorative.\nconst DOCS = [\n  {\n    doc_id: 'POL-001', title: 'Returns and refunds policy', category: 'policy',\n    audience: 'public', effective_from: '2026-01-01',\n    text: 'Northwind Outdoors accepts returns within 45 days of delivery for a full refund, provided the item is unworn and in its original packaging. Sale items marked \"final sale\" cannot be returned. Refunds are issued to the original payment method within 10 business days of the returned item being received at the Adelaide warehouse. Return shipping is paid by the customer unless the item arrived faulty or was sent in error, in which case Northwind Outdoors covers it and sends a prepaid label.'\n  },\n  {\n    doc_id: 'POL-002', title: 'Warranty terms', category: 'policy',\n    audience: 'public', effective_from: '2026-01-01',\n    text: 'All Northwind Outdoors footwear carries a 24 month warranty against manufacturing defects, measured from the date of purchase. The warranty covers delamination, stitching failure and sole separation. It does not cover normal wear of outsoles, damage from improper care, or products bought from unauthorised resellers. Warranty claims require proof of purchase and photographs of the defect.'\n  },\n  {\n    doc_id: 'POL-003', title: 'Delivery timeframes', category: 'policy',\n    audience: 'public', effective_from: '2026-03-15',\n    text: 'Standard delivery within metropolitan Australia takes 3 to 5 business days. Regional and remote deliveries take 5 to 10 business days. Express delivery, where available, is next business day for orders placed before 1pm ACST on a weekday. Northwind Outdoors does not currently ship outside Australia and New Zealand.'\n  },\n  {\n    doc_id: 'ENG-101', title: 'Waterproofing membrane technology', category: 'product',\n    audience: 'public', effective_from: '2025-11-01',\n    text: 'The HydroSeal membrane used in Northwind hiking boots is a microporous laminate rated to 20,000 mm hydrostatic head with a moisture vapour transmission rate of 15,000 g per square metre per 24 hours. The membrane is bonded to the boot lining rather than the outer, which keeps the seam count low. HydroSeal performance degrades if the boot is machine washed or dried above 40 degrees Celsius.'\n  },\n  {\n    doc_id: 'ENG-102', title: 'Outsole compound selection', category: 'product',\n    audience: 'public', effective_from: '2025-11-01',\n    text: 'Trail models use a 62 Shore A rubber compound optimised for wet rock grip, while approach models use a firmer 70 Shore A compound that lasts longer on abrasive surfaces but is less sticky when wet. Lug depth is 5 mm on trail models and 3.5 mm on approach models.'\n  },\n  {\n    doc_id: 'OPS-210', title: 'Warehouse cut-off times', category: 'operations',\n    audience: 'internal', effective_from: '2026-02-01',\n    text: 'The Adelaide warehouse despatch cut-off is 2pm ACST Monday to Friday. Orders received after cut-off are picked the following business day. The warehouse does not operate on South Australian public holidays. Peak season from 20 November to 24 December extends the cut-off to 4pm ACST with additional casual staff.'\n  },\n  {\n    doc_id: 'OPS-211', title: 'Stock replenishment rules', category: 'operations',\n    audience: 'internal', effective_from: '2026-02-01',\n    text: 'Replenishment orders are raised automatically when available stock for a size and colour combination falls below 12 units. Lead time from the primary supplier is 45 days by sea and 9 days by air. Air freight is only authorised when projected stock-out is within 14 days and the affected line has sold more than 200 units in the preceding quarter.'\n  },\n  {\n    doc_id: 'SUP-330', title: 'Sizing guidance', category: 'support',\n    audience: 'public', effective_from: '2026-01-10',\n    text: 'Northwind footwear is generally true to size in EU sizing. Customers between sizes should size up for trail models, which are cut narrower through the midfoot. Approach models run approximately half a size large. A printable measuring guide is available and should be used on a hard floor at the end of the day, when feet are at their largest.'\n  }\n];\n\nreturn DOCS.map(function (d) { return { json: d }; });"
+        }
+      },
+      {
+        "id": "8a3c1ecf-cd9d-4a46-a0e6-3c06ae1b9c5e",
+        "name": "Store Chunks",
+        "type": "@n8n/n8n-nodes-langchain.vectorStoreInMemory",
+        "typeVersion": 1.3,
+        "position": [
+          -1060,
+          -420
+        ],
+        "parameters": {
+          "mode": "insert",
+          "memoryKey": {
+            "__rl": true,
+            "mode": "list",
+            "value": "agentic_rag_demo",
+            "cachedResultName": "agentic_rag_demo"
+          },
+          "embeddingBatchSize": 50,
+          "clearStore": true
+        }
+      },
+      {
+        "id": "0a2f98d6-35c4-4732-897d-008ece8cdf63",
+        "name": "Chunk with Metadata",
+        "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+        "typeVersion": 1.1,
+        "position": [
+          -1040,
+          -180
+        ],
+        "parameters": {
+          "dataType": "json",
+          "jsonMode": "expressionData",
+          "jsonData": "={{ $json.text }}",
+          "textSplittingMode": "custom",
+          "options": {
+            "metadata": {
+              "metadataValues": [
+                {
+                  "name": "doc_id",
+                  "value": "={{ $json.doc_id }}"
+                },
+                {
+                  "name": "title",
+                  "value": "={{ $json.title }}"
+                },
+                {
+                  "name": "category",
+                  "value": "={{ $json.category }}"
+                },
+                {
+                  "name": "audience",
+                  "value": "={{ $json.audience }}"
+                },
+                {
+                  "name": "effective_from",
+                  "value": "={{ $json.effective_from }}"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "1ffb2e5e-92cc-4ecf-8d55-4a4a16c486dc",
+        "name": "Recursive Chunker",
+        "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+        "typeVersion": 1,
+        "position": [
+          -820,
+          -180
+        ],
+        "parameters": {
+          "chunkSize": 700,
+          "chunkOverlap": 120,
+          "options": {}
+        }
+      },
+      {
+        "id": "62965ca1-5c2c-43d7-a145-3af8b8325cfa",
+        "name": "Ingestion Report",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -820,
+          -420
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "javaScript",
+          "jsCode": "const docs = $('Load Demo Corpus').all().map(function (i) { return i.json; });\nconst chars = docs.reduce(function (a, d) { return a + String(d.text || '').length; }, 0);\nreturn [{ json: {\n  status: 'ingested',\n  collection: 'agentic_rag_demo',\n  documents: docs.length,\n  total_characters: chars,\n  chunk_size: 700,\n  chunk_overlap: 120,\n  metadata_fields: ['doc_id', 'title', 'category', 'audience', 'effective_from'],\n  categories: docs.map(function (d) { return d.category; }).filter(function (v, i, a) { return a.indexOf(v) === i; }),\n  note: 'The demo uses the in-memory Simple Vector Store so it runs with no vector database credentials. Swap Store Chunks and Retrieve Chunks for the Qdrant nodes to use a persistent store; see the README.',\n  ingested_at: new Date().toISOString()\n} }];"
+        }
+      },
+      {
+        "id": "1df62fc2-d5f5-4dc2-8fc0-c0fbe1df1c2b",
+        "name": "RAG Query",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -1500,
+          120
+        ],
+        "parameters": {
+          "inputSource": "workflowInputs",
+          "workflowInputs": {
+            "values": [
+              {
+                "name": "question",
+                "type": "string"
+              },
+              {
+                "name": "top_k",
+                "type": "string"
+              },
+              {
+                "name": "category_filter",
+                "type": "string"
+              },
+              {
+                "name": "audience",
+                "type": "string"
+              },
+              {
+                "name": "min_score",
+                "type": "string"
+              },
+              {
+                "name": "source_workflow",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "373e178f-6e44-46c9-84cd-326e209edc01",
+        "name": "Normalise Query",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          -1280,
+          120
+        ],
+        "parameters": {
+          "mode": "manual",
+          "includeOtherFields": false,
+          "assignments": {
+            "assignments": [
+              {
+                "id": "q1",
+                "name": "question",
+                "value": "={{ ($json.question || \"\").trim() }}",
+                "type": "string"
+              },
+              {
+                "id": "q2",
+                "name": "top_k",
+                "value": "={{ Math.min(20, Math.max(1, Number($json.top_k || 6))) }}",
+                "type": "number"
+              },
+              {
+                "id": "q3",
+                "name": "category_filter",
+                "value": "={{ ($json.category_filter || \"\").trim().toLowerCase() }}",
+                "type": "string"
+              },
+              {
+                "id": "q4",
+                "name": "audience",
+                "value": "={{ ($json.audience || \"public\").trim().toLowerCase() }}",
+                "type": "string"
+              },
+              {
+                "id": "q5",
+                "name": "min_score",
+                "value": "={{ Math.min(1, Math.max(0, Number($json.min_score || 0.55))) }}",
+                "type": "number"
+              },
+              {
+                "id": "q6",
+                "name": "source_workflow",
+                "value": "={{ $json.source_workflow || \"unknown\" }}",
+                "type": "string"
+              },
+              {
+                "id": "q7",
+                "name": "started_at_ms",
+                "value": "={{ $now.toMillis() }}",
+                "type": "number"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "d870e70d-5ad9-456e-b2dd-a15609332cee",
+        "name": "Retrieve Chunks",
+        "type": "@n8n/n8n-nodes-langchain.vectorStoreInMemory",
+        "typeVersion": 1.3,
+        "position": [
+          -1060,
+          120
+        ],
+        "parameters": {
+          "mode": "load",
+          "memoryKey": {
+            "__rl": true,
+            "mode": "list",
+            "value": "agentic_rag_demo",
+            "cachedResultName": "agentic_rag_demo"
+          },
+          "prompt": "={{ $json.question }}",
+          "topK": "={{ $json.top_k }}",
+          "includeDocumentMetadata": true
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "c83658bc-6083-46c1-94eb-cddaa91ef2f9",
+        "name": "Filter, Rerank and Diagnose",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -820,
+          120
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "javaScript",
+          "jsCode": "// Metadata filtering, a deterministic hybrid rerank, and retrieval diagnostics.\n// The rerank blends the vector score with lexical overlap, which reliably rescues\n// exact-term matches (part numbers, policy names) that pure embeddings rank low,\n// and it costs nothing and adds no latency because no model is involved.\nconst q = $('Normalise Query').first().json;\nconst raw = $input.all().map(function (i) { return i.json; });\n\nfunction unpack(r, idx) {\n  const doc = r.document || r;\n  const meta = doc.metadata || r.metadata || {};\n  return {\n    rank: idx,\n    text: String(doc.pageContent || doc.text || r.text || ''),\n    score: typeof r.score === 'number' ? r.score : (typeof doc.score === 'number' ? doc.score : null),\n    doc_id: meta.doc_id || null,\n    title: meta.title || null,\n    category: meta.category || null,\n    audience: meta.audience || null,\n    effective_from: meta.effective_from || null\n  };\n}\n\nconst all = raw.map(unpack).filter(function (c) { return c.text.length > 0; });\n\n// ---- Metadata filtering -------------------------------------------------\n// Audience is genuine access control here: an internal document must not be\n// quoted back to a public caller even when it is the best semantic match.\nconst filteredOut = [];\nconst visible = all.filter(function (c) {\n  if (q.audience === 'public' && c.audience && c.audience !== 'public') {\n    filteredOut.push({ doc_id: c.doc_id, reason: 'audience \"' + c.audience + '\" is not visible to a public caller' });\n    return false;\n  }\n  if (q.category_filter && c.category && c.category !== q.category_filter) {\n    filteredOut.push({ doc_id: c.doc_id, reason: 'category \"' + c.category + '\" excluded by filter \"' + q.category_filter + '\"' });\n    return false;\n  }\n  return true;\n});\n\n// ---- Lexical overlap ----------------------------------------------------\nconst STOP = { the: 1, a: 1, an: 1, of: 1, to: 1, in: 1, on: 1, for: 1, and: 1, or: 1, is: 1, are: 1, do: 1, does: 1, i: 1, my: 1, how: 1, what: 1, when: 1, can: 1, long: 1, have: 1, you: 1, your: 1, it: 1, be: 1, there: 1, that: 1, this: 1 };\nconst qTerms = String(q.question).toLowerCase().replace(/[^a-z0-9\\s]/g, ' ').split(/\\s+/)\n  .filter(function (w) { return w.length > 2 && !STOP[w]; });\n\nfunction lexical(text) {\n  if (!qTerms.length) { return 0; }\n  const lower = text.toLowerCase();\n  let hits = 0;\n  qTerms.forEach(function (t) { if (lower.indexOf(t) !== -1) { hits++; } });\n  return hits / qTerms.length;\n}\n\n// Not every vector store returns a numeric similarity score. When none is\n// available, fall back to RANK POSITION, which the store has already sorted by\n// similarity. Without this the relevance gate would silently become\n// lexical-only and would drop good semantic matches that share no exact terms.\nconst scores = visible.map(function (c) { return c.score; }).filter(function (s) { return typeof s === 'number'; });\nconst haveScores = scores.length > 0;\nconst maxScore = haveScores ? Math.max.apply(null, scores) : 1;\nconst minScore = haveScores ? Math.min.apply(null, scores) : 0;\nconst rankBasis = Math.max(1, all.length);\n\nfunction normScore(c) {\n  if (!haveScores || typeof c.score !== 'number') {\n    return Math.max(0.2, 1 - (c.rank / rankBasis));\n  }\n  if (maxScore - minScore < 1e-9) { return 1; }\n  return (c.score - minScore) / (maxScore - minScore);\n}\n\nconst W_VEC = 0.7;\nconst W_LEX = 0.3;\nconst ranked = visible.map(function (c) {\n  const lex = lexical(c.text);\n  return Object.assign({}, c, {\n    lexical_overlap: Math.round(lex * 1000) / 1000,\n    vector_score: c.score,\n    score_basis: haveScores ? 'vector_similarity' : 'rank_position_fallback',\n    rerank_score: Math.round((W_VEC * normScore(c) + W_LEX * lex) * 1000) / 1000\n  });\n}).sort(function (a, b) { return b.rerank_score - a.rerank_score; });\n\n// ---- Relevance gate -----------------------------------------------------\n// A chunk that is merely the closest thing in the store is not evidence.\nconst kept = ranked.filter(function (c) { return c.rerank_score >= q.min_score; });\nconst context = kept.slice(0, q.top_k).map(function (c, i) { return Object.assign({}, c, { marker: 'C' + (i + 1) }); });\n\nconst contextBlock = context.map(function (c) {\n  return '[' + c.marker + '] ' + (c.title || c.doc_id || 'untitled') + ' (' + c.doc_id + ')\\n' + c.text;\n}).join('\\n\\n');\n\nconst sourcesJson = JSON.stringify(context.map(function (c) {\n  return { id: c.marker, text: c.text, url: null };\n}));\n\nreturn [{\n  json: {\n    question: q.question,\n    started_at_ms: q.started_at_ms,\n    source_workflow: q.source_workflow,\n    audience: q.audience,\n    has_context: context.length > 0,\n    context: context,\n    context_block: contextBlock,\n    sources_json: sourcesJson,\n    diagnostics: {\n      retrieved: all.length,\n      filtered_out_by_metadata: filteredOut.length,\n      filtered_out_detail: filteredOut,\n      below_relevance_threshold: ranked.length - kept.length,\n      min_score_required: q.min_score,\n      score_basis: haveScores ? 'vector_similarity' : 'rank_position_fallback',\n      top_rerank_score: ranked.length ? ranked[0].rerank_score : null,\n      top_vector_score: ranked.length ? ranked[0].vector_score : null,\n      rerank_formula: 'rerank_score = 0.7 * normalised_vector_score + 0.3 * lexical_term_overlap',\n      documents_represented: context.map(function (c) { return c.doc_id; }).filter(function (v, i, a) { return a.indexOf(v) === i; })\n    }\n  }\n}];"
+        }
+      },
+      {
+        "id": "4ccdef60-0ff4-4dc8-a17b-9cfd156e2824",
+        "name": "Relevant Context Found?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          -580,
+          120
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "hc1",
+                "leftValue": "={{ $json.has_context }}",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        }
+      },
+      {
+        "id": "6511ea59-47b6-4f1a-beba-74800acaa4cf",
+        "name": "Get RAG Prompt (08)",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          -340,
+          -20
+        ],
+        "parameters": {
+          "mode": "once",
+          "source": "database",
+          "workflowId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "aYVpA31jgNL0shma",
+            "cachedResultName": "[Platform] 08 GitOps Prompt Management"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "prompt_id": "rag/answerer",
+              "variables": "={{ JSON.stringify({ question: $json.question, context_block: $json.context_block, min_citations: \"1\" }) }}",
+              "ref": "",
+              "owner": "",
+              "repo": "",
+              "strict": "true",
+              "source_workflow": "03-production-rag-intelligence"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "prompt_id",
+                "displayName": "prompt_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "variables",
+                "displayName": "variables",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "ref",
+                "displayName": "ref",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "owner",
+                "displayName": "owner",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "repo",
+                "displayName": "repo",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "strict",
+                "displayName": "strict",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "source_workflow",
+                "displayName": "source_workflow",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "0c29c52b-d4b7-421c-9203-6a27cee98027",
+        "name": "Generate Answer (02 Router)",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          -100,
+          -20
+        ],
+        "parameters": {
+          "mode": "once",
+          "source": "database",
+          "workflowId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "CICW1oBcK0DYWvUc",
+            "cachedResultName": "[Platform] 02 Intelligent Model Router"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "task_type": "summarization",
+              "objective": "balanced",
+              "privacy": "standard",
+              "input": "={{ ($json.json ? $json.json.prompt : $json.prompt) || \"\" }}",
+              "system_prompt": "Answer only from the supplied context. Cite the [C#] marker after every sentence that uses a passage. If the context does not answer the question, reply exactly INSUFFICIENT_CONTEXT and say what is missing.",
+              "force_provider": "",
+              "source_workflow": "03-production-rag-intelligence",
+              "run_label": "={{ \"rag-\" + $execution.id }}"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "task_type",
+                "displayName": "task_type",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "objective",
+                "displayName": "objective",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "privacy",
+                "displayName": "privacy",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "input",
+                "displayName": "input",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "system_prompt",
+                "displayName": "system_prompt",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "force_provider",
+                "displayName": "force_provider",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "source_workflow",
+                "displayName": "source_workflow",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "run_label",
+                "displayName": "run_label",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 2000,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "62e57a54-53cc-4d76-8364-7e64961f4efb",
+        "name": "Verify Answer (09)",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          140,
+          -20
+        ],
+        "parameters": {
+          "mode": "once",
+          "source": "database",
+          "workflowId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "vCn6THeEhjhhhxsy",
+            "cachedResultName": "[Platform] 09 AI Output Verification Layer"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "ai_output": "={{ ($json.json ? $json.json.output : $json.output) || \"\" }}",
+              "sources": "={{ $(\"Filter, Rerank and Diagnose\").first().json.sources_json }}",
+              "json_schema": "",
+              "required_fields": "",
+              "business_rules": "[]",
+              "mode": "full",
+              "confidence_threshold": "0.7",
+              "source_workflow": "03-production-rag-intelligence"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "ai_output",
+                "displayName": "ai_output",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "sources",
+                "displayName": "sources",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "json_schema",
+                "displayName": "json_schema",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "required_fields",
+                "displayName": "required_fields",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "business_rules",
+                "displayName": "business_rules",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "mode",
+                "displayName": "mode",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "confidence_threshold",
+                "displayName": "confidence_threshold",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "source_workflow",
+                "displayName": "source_workflow",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "a5cd2067-3286-4527-bbbd-d52a0cb5674c",
+        "name": "Build RAG Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          380,
+          120
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "javaScript",
+          "jsCode": "const r = $('Filter, Rerank and Diagnose').first().json;\n\nfunction unwrap(n) {\n  try { const v = $(n).first().json; return (v && v.json) ? v.json : v; } catch (e) { return null; }\n}\nconst gen = unwrap('Generate Answer (02 Router)');\nconst verification = unwrap('Verify Answer (09)');\nconst promptMeta = unwrap('Get RAG Prompt (08)');\n\nconst noContext = $input.all().some(function (i) { return i.json && i.json.no_context; });\nlet answer = (!noContext && gen && gen.ok) ? String(gen.output || '') : null;\n\n// The prompt instructs the model to say INSUFFICIENT_CONTEXT when the passages\n// do not answer the question. Honour that literally rather than presenting it\n// as an answer.\nconst declaredInsufficient = !!answer && answer.indexOf('INSUFFICIENT_CONTEXT') !== -1;\n\n// Which retrieved chunks were actually cited, and did the model invent a marker?\nconst knownMarkers = (r.context || []).map(function (c) { return c.marker; });\nconst used = [];\nconst fabricated = [];\nif (answer) {\n  (answer.match(/\\[C\\d+\\]/g) || []).forEach(function (m) {\n    const id = m.slice(1, -1);\n    if (knownMarkers.indexOf(id) !== -1) { if (used.indexOf(id) === -1) { used.push(id); } }\n    else if (fabricated.indexOf(id) === -1) { fabricated.push(id); }\n  });\n}\n\nlet status = 'answered';\nif (noContext) { status = 'no_relevant_context'; }\nelse if (declaredInsufficient) { status = 'insufficient_context'; }\nelse if (!answer) { status = 'generation_failed'; }\n\nlet confidence = 'none';\nif (status === 'answered' && verification) {\n  if (verification.verified && verification.score >= 0.85) { confidence = 'high'; }\n  else if (verification.score >= 0.7) { confidence = 'medium'; }\n  else { confidence = 'low'; }\n}\n\nconst escalate = status === 'answered' && (!!fabricated.length || (verification && verification.requires_human_review));\n\nreturn [{\n  json: {\n    generated_at: new Date().toISOString(),\n    n8n_execution_id: $execution.id,\n    question: r.question,\n    status: status,\n    answer: (status === 'answered') ? answer : null,\n    confidence: confidence,\n    requires_human_review: escalate,\n    citations: (r.context || [])\n      .filter(function (c) { return used.indexOf(c.marker) !== -1; })\n      .map(function (c) { return { marker: c.marker, doc_id: c.doc_id, title: c.title, category: c.category, rerank_score: c.rerank_score, vector_score: c.vector_score, excerpt: String(c.text).slice(0, 220) }; }),\n    retrieved_but_uncited: (r.context || [])\n      .filter(function (c) { return used.indexOf(c.marker) === -1; })\n      .map(function (c) { return { marker: c.marker, doc_id: c.doc_id, rerank_score: c.rerank_score }; }),\n    fabricated_markers: fabricated,\n    retrieval_diagnostics: r.diagnostics,\n    verification: verification ? {\n      verified: verification.verified, score: verification.score,\n      groundedness: verification.groundedness ? {\n        status: verification.groundedness.status,\n        claims_judged: verification.groundedness.claims_judged,\n        supported: verification.groundedness.supported,\n        contradicted: verification.groundedness.contradicted,\n        not_stated: verification.groundedness.not_stated\n      } : null,\n      issues: verification.issues, requires_human_review: verification.requires_human_review\n    } : null,\n    prompt: promptMeta ? { id: 'rag/answerer', version: promptMeta.version, sha: promptMeta.sha, degraded: promptMeta.degraded } : null,\n    model: gen ? { provider: gen.selected_provider, model: gen.selected_model, latency_ms: gen.latency_ms, estimated_cost_usd: gen.estimated_cost_usd } : null,\n    estimated_cost_usd: gen ? gen.estimated_cost_usd : 0,\n    latency_ms: r.started_at_ms ? (Date.now() - Number(r.started_at_ms)) : null\n  }\n}];"
+        }
+      },
+      {
+        "id": "11e72269-3de6-41b4-ab29-951a64662c37",
+        "name": "No Relevant Context",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          -340,
+          300
+        ],
+        "parameters": {
+          "mode": "manual",
+          "includeOtherFields": false,
+          "assignments": {
+            "assignments": [
+              {
+                "id": "na1",
+                "name": "no_context",
+                "value": true,
+                "type": "boolean"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "35860295-f063-4847-8aa7-963b6385e635",
+        "name": "Sticky Note 31a7edc2",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          100,
+          300
+        ],
+        "parameters": {
+          "content": "## Ingestion\n\nDocuments are chunked at 700 characters with 120 of overlap and carry `doc_id`, `title`, `category`, `audience` and `effective_from` as metadata. That metadata is not decoration: `audience` is enforced at retrieval time.\n\nThe demo uses the in-memory Simple Vector Store, so the whole platform runs with **no vector database credentials**. Swapping both store nodes for the Qdrant equivalents is the documented production path.",
+          "color": 4,
+          "width": 460,
+          "height": 240
+        }
+      },
+      {
+        "id": "e5d418e7-d29d-458e-a37e-1619e8ccf951",
+        "name": "Sticky Note bdeb5303",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          100,
+          640
+        ],
+        "parameters": {
+          "content": "## Retrieval is filtered, reranked and diagnosed\n\n1. **Metadata filter.** An `internal` document is never returned to a `public` caller, even when it is the best semantic match. That is access control, not relevance tuning.\n2. **Hybrid rerank.** `0.7 x normalised vector score + 0.3 x lexical term overlap`. Costs nothing, adds no latency, and rescues exact-term matches that pure embeddings rank low.\n3. **Relevance gate.** Chunks below `min_score` are dropped. Being the closest thing in the store does not make a chunk evidence.\n\nEvery one of those decisions is reported in `retrieval_diagnostics`.",
+          "color": 6,
+          "width": 500,
+          "height": 320
+        }
+      },
+      {
+        "id": "cef8b7dc-88ff-468c-acb4-86d7771651e9",
+        "name": "Sticky Note 70bca7aa",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          100,
+          1056
+        ],
+        "parameters": {
+          "content": "## Not answering is a first-class outcome\n\n`no_relevant_context` — nothing survived the filter and the relevance gate, so no model was called.\n`insufficient_context` — passages were retrieved but the model reported they do not answer the question, and that is passed through rather than dressed up.\n\nWhen an answer is produced it is verified against the retrieved chunks, and any `[C#]` marker the model invented is listed in `fabricated_markers` and forces human review.",
+          "color": 3,
+          "width": 480,
+          "height": 260
+        }
+      },
+      {
+        "id": "525707aa-0382-4460-bc45-aa13d80ff57f",
+        "name": "Test Suite Trigger",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          -1500,
+          640
+        ],
+        "parameters": {},
+        "notes": "Run 'Ingest Corpus' first. Each fixture makes one embedding call and, where context is found, one generation plus one verification call."
+      },
+      {
+        "id": "1bf2de73-c066-4bc7-9909-89b613b48f2e",
+        "name": "Build RAG Fixtures",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -1280,
+          640
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "javaScript",
+          "jsCode": "// Fixtures chosen so that some questions ARE answerable from the corpus and some\n// are NOT, and so that metadata access control is tested in BOTH directions.\n// Proving a document is blocked is only meaningful if you also prove it would\n// otherwise have been returned.\nconst F = [\n  { case_id: 'R01-answerable-policy', question: 'How many days do I have to return an item for a refund?',\n    audience: 'public', category_filter: '', top_k: '5', min_score: '0.4',\n    expect_status: 'answered', expect_doc: 'POL-001' },\n  { case_id: 'R02-not-in-corpus', question: 'What is the chief executive home address and personal phone number?',\n    audience: 'public', category_filter: '', top_k: '5', min_score: '0.4',\n    expect_status_in: ['no_relevant_context', 'insufficient_context'], expect_doc: null },\n  { case_id: 'R03-internal-doc-blocked-from-public', question: 'What time is the Adelaide warehouse despatch cut-off?',\n    audience: 'public', category_filter: '', top_k: '5', min_score: '0.4',\n    expect_status_in: ['no_relevant_context', 'insufficient_context'], expect_doc: null,\n    expect_filtered_doc: 'OPS-210' },\n  { case_id: 'R04-same-question-allowed-for-internal', question: 'What time is the Adelaide warehouse despatch cut-off?',\n    audience: 'internal', category_filter: '', top_k: '5', min_score: '0.4',\n    expect_status: 'answered', expect_doc: 'OPS-210' },\n  { case_id: 'R05-category-filter', question: 'What is the hydrostatic head rating of the waterproof membrane?',\n    audience: 'public', category_filter: 'product', top_k: '5', min_score: '0.4',\n    expect_status: 'answered', expect_doc: 'ENG-101' }\n];\nreturn F.map(function (f) { return { json: Object.assign({}, f, { source_workflow: '03-test-suite::' + f.case_id }) }; });"
+        }
+      },
+      {
+        "id": "1c3419cb-e7c8-4284-951d-52420d5f7648",
+        "name": "RAG Fixture Loop",
+        "type": "n8n-nodes-base.splitInBatches",
+        "typeVersion": 3,
+        "position": [
+          -1060,
+          640
+        ],
+        "parameters": {
+          "batchSize": 1,
+          "options": {}
+        }
+      },
+      {
+        "id": "e7bde8e3-9d79-4f0f-ae7c-be178d6885be",
+        "name": "Run RAG Fixture",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          -820,
+          780
+        ],
+        "parameters": {
+          "mode": "once",
+          "source": "database",
+          "workflowId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "BpvCMNOhjklm0YF5",
+            "cachedResultName": "03 Production RAG Intelligence Platform"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "question": "={{ $json.question }}",
+              "top_k": "={{ $json.top_k }}",
+              "category_filter": "={{ $json.category_filter }}",
+              "audience": "={{ $json.audience }}",
+              "min_score": "={{ $json.min_score }}",
+              "source_workflow": "={{ $json.source_workflow }}"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "question",
+                "displayName": "question",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "top_k",
+                "displayName": "top_k",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "category_filter",
+                "displayName": "category_filter",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "audience",
+                "displayName": "audience",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "min_score",
+                "displayName": "min_score",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "source_workflow",
+                "displayName": "source_workflow",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        }
+      },
+      {
+        "id": "07309f0e-9137-42e9-ade8-e6e70418a3eb",
+        "name": "Slim RAG Result",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -580,
+          780
+        ],
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "language": "javaScript",
+          "jsCode": "const r = ($json && $json.json) ? $json.json : $json;\nconst d = r.retrieval_diagnostics || {};\nreturn { json: {\n  status: r.status,\n  confidence: r.confidence,\n  answer: r.answer ? String(r.answer).slice(0, 400) : null,\n  cited_docs: (r.citations || []).map(function (c) { return c.doc_id; }),\n  fabricated_markers: r.fabricated_markers || [],\n  filtered_docs: (d.filtered_out_detail || []).map(function (f) { return f.doc_id; }),\n  retrieved: d.retrieved, filtered_out: d.filtered_out_by_metadata,\n  below_threshold: d.below_relevance_threshold, score_basis: d.score_basis,\n  top_rerank_score: d.top_rerank_score,\n  verified: r.verification ? r.verification.verified : null,\n  verification_score: r.verification ? r.verification.score : null,\n  latency_ms: r.latency_ms, estimated_cost_usd: r.estimated_cost_usd\n} };"
+        }
+      },
+      {
+        "id": "d90d5375-1e01-4ff5-a3d0-49aa4662fab3",
+        "name": "Assert RAG Results",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -820,
+          500
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "javaScript",
+          "jsCode": "const fixtures = $('Build RAG Fixtures').all().map(function (i) { return i.json; });\nconst results = $input.all().map(function (i) { return i.json; });\n\nconst rows = results.map(function (r, idx) {\n  const fx = fixtures[idx] || {};\n  const fails = [];\n  const allowed = fx.expect_status_in || (fx.expect_status ? [fx.expect_status] : null);\n  if (allowed && allowed.indexOf(r.status) === -1) {\n    fails.push('expected status one of [' + allowed.join(', ') + '] but got ' + r.status);\n  }\n  if (fx.expect_doc && (r.cited_docs || []).indexOf(fx.expect_doc) === -1) {\n    fails.push('expected the answer to cite ' + fx.expect_doc + ' but it cited [' + (r.cited_docs || []).join(', ') + ']');\n  }\n  if (fx.expect_filtered_doc && (r.filtered_docs || []).indexOf(fx.expect_filtered_doc) === -1) {\n    fails.push('expected ' + fx.expect_filtered_doc + ' to be filtered out by metadata but it was not');\n  }\n  if ((r.fabricated_markers || []).length) {\n    fails.push('answer invented citation markers: ' + r.fabricated_markers.join(', '));\n  }\n  return {\n    case_id: fx.case_id, pass: fails.length === 0,\n    expected_status: allowed ? allowed.join('|') : null, actual_status: r.status,\n    expected_doc: fx.expect_doc, cited_docs: r.cited_docs,\n    filtered_docs: r.filtered_docs,\n    confidence: r.confidence, verified: r.verified, verification_score: r.verification_score,\n    retrieved: r.retrieved, filtered_out: r.filtered_out, below_threshold: r.below_threshold,\n    score_basis: r.score_basis, top_rerank_score: r.top_rerank_score,\n    answer_excerpt: r.answer,\n    fail_reasons: fails, latency_ms_measured: r.latency_ms, estimated_cost_usd: r.estimated_cost_usd\n  };\n});\n\nconst passed = rows.filter(function (r) { return r.pass; }).length;\nconst lats = rows.map(function (r) { return r.latency_ms_measured; }).filter(function (v) { return typeof v === 'number'; }).sort(function (a, b) { return a - b; });\nconst cost = rows.reduce(function (a, r) { return a + Number(r.estimated_cost_usd || 0); }, 0);\n\nreturn [{ json: {\n  suite: 'rag-fixtures-v1', generated_at: new Date().toISOString(), n8n_execution_id: $execution.id,\n  note: 'Run Ingest Corpus first. R03 and R04 ask the SAME question with different audiences, which is what makes the access-control result meaningful rather than an accident of retrieval.',\n  total: rows.length, passed: passed, failed: rows.length - passed, all_passed: passed === rows.length,\n  latency_ms_p50_measured: lats.length ? lats[Math.max(0, Math.ceil(0.5 * lats.length) - 1)] : null,\n  latency_ms_max_measured: lats.length ? lats[lats.length - 1] : null,\n  estimated_cost_usd_total: Math.round(cost * 1000000) / 1000000,\n  cases: rows\n} }];"
+        }
+      },
+      {
+        "id": "e655192f-3ee4-4d34-87e4-ccf71dc413b3",
+        "name": "Embeddings (ingest)",
+        "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+        "typeVersion": 1.2,
+        "position": [
+          -1280,
+          -180
+        ],
+        "parameters": {
+          "model": "text-embedding-3-small",
+          "options": {}
+        },
+        "credentials": {
+          "openAiApi": {
+            "id": null,
+            "name": "Gateway credits",
+            "__aiGatewayManaged": true
+          }
+        }
+      },
+      {
+        "id": "5e119791-40c3-45a4-97fb-e1c4520983ce",
+        "name": "Embeddings (query)",
+        "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+        "typeVersion": 1.2,
+        "position": [
+          -1060,
+          340
+        ],
+        "parameters": {
+          "model": "text-embedding-3-small",
+          "options": {}
+        },
+        "credentials": {
+          "openAiApi": {
+            "id": null,
+            "name": "Gateway credits",
+            "__aiGatewayManaged": true
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Ingest Corpus": {
+        "main": [
+          [
+            {
+              "node": "Load Demo Corpus",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Load Demo Corpus": {
+        "main": [
+          [
+            {
+              "node": "Store Chunks",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Store Chunks": {
+        "main": [
+          [
+            {
+              "node": "Ingestion Report",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Chunk with Metadata": {
+        "ai_document": [
+          [
+            {
+              "node": "Store Chunks",
+              "type": "ai_document",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Recursive Chunker": {
+        "ai_textSplitter": [
+          [
+            {
+              "node": "Chunk with Metadata",
+              "type": "ai_textSplitter",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "RAG Query": {
+        "main": [
+          [
+            {
+              "node": "Normalise Query",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalise Query": {
+        "main": [
+          [
+            {
+              "node": "Retrieve Chunks",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Retrieve Chunks": {
+        "main": [
+          [
+            {
+              "node": "Filter, Rerank and Diagnose",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Filter, Rerank and Diagnose": {
+        "main": [
+          [
+            {
+              "node": "Relevant Context Found?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Relevant Context Found?": {
+        "main": [
+          [
+            {
+              "node": "Get RAG Prompt (08)",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "No Relevant Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get RAG Prompt (08)": {
+        "main": [
+          [
+            {
+              "node": "Generate Answer (02 Router)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Generate Answer (02 Router)": {
+        "main": [
+          [
+            {
+              "node": "Verify Answer (09)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Verify Answer (09)": {
+        "main": [
+          [
+            {
+              "node": "Build RAG Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "No Relevant Context": {
+        "main": [
+          [
+            {
+              "node": "Build RAG Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Test Suite Trigger": {
+        "main": [
+          [
+            {
+              "node": "Build RAG Fixtures",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build RAG Fixtures": {
+        "main": [
+          [
+            {
+              "node": "RAG Fixture Loop",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "RAG Fixture Loop": {
+        "main": [
+          [
+            {
+              "node": "Assert RAG Results",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Run RAG Fixture",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run RAG Fixture": {
+        "main": [
+          [
+            {
+              "node": "Slim RAG Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Slim RAG Result": {
+        "main": [
+          [
+            {
+              "node": "RAG Fixture Loop",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Embeddings (ingest)": {
+        "ai_embedding": [
+          [
+            {
+              "node": "Store Chunks",
+              "type": "ai_embedding",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Embeddings (query)": {
+        "ai_embedding": [
+          [
+            {
+              "node": "Retrieve Chunks",
+              "type": "ai_embedding",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Tejesh Nenavath (via MCP)",
+    "name": "Switch embeddings to a model the gateway actually serves",
+    "description": "Retrieval returned nothing on every fixture. The cause was the embedding model, not the retrieval logic: the AI Gateway returns 404 for gemini-embedding-001. Replaced both embedding sub-nodes with OpenAI text-embedding-3-small, which the gateway does serve.",
+    "autosaved": false,
+    "createdAt": "2026-09-08T05:46:55.388Z",
+    "updatedAt": "2026-09-08T05:46:55.388Z",
+    "workflowPublishHistory": [
+      {
+        "id": 86,
+        "workflowId": "BpvCMNOhjklm0YF5",
+        "versionId": "ded28a20-78c0-4e2c-a65d-203a12c7dc29",
+        "event": "activated",
+        "userId": "304a85db-b680-4711-837a-69e38e9a3ef6",
+        "createdAt": "2026-09-08T05:47:01.069Z"
+      }
+    ]
+  }
+}

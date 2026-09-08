@@ -90,11 +90,32 @@ def tracked_files() -> list[Path]:
 
 
 def walk_files() -> list[Path]:
+    """Whole working tree, minus anything git ignores.
+
+    --all exists to catch files that are not staged yet. It must still skip
+    git-ignored paths: .env legitimately holds real secrets and is never
+    published, so flagging it would train the reader to ignore the scanner.
+    """
+    ignored: set[Path] = set()
+    try:
+        out = subprocess.run(
+            ["git", "ls-files", "--others", "--ignored", "--exclude-standard", "--directory"],
+            cwd=ROOT, capture_output=True, text=True, check=True,
+        ).stdout
+        ignored = {ROOT / line.rstrip("/") for line in out.splitlines() if line.strip()}
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+
+    def is_ignored(path: Path) -> bool:
+        return any(path == i or i in path.parents for i in ignored)
+
     files = []
     for p in ROOT.rglob("*"):
         if not p.is_file():
             continue
         if any(part in SKIP_DIRS for part in p.relative_to(ROOT).parts):
+            continue
+        if is_ignored(p):
             continue
         files.append(p)
     return files

@@ -1,0 +1,1012 @@
+{
+  "name": "[Platform] 08 GitOps Prompt Management",
+  "nodes": [
+    {
+      "id": "a321031f-cfd8-4cf9-8076-373045b0c1c0",
+      "name": "Prompt Request",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1000,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "prompt_id",
+              "type": "string"
+            },
+            {
+              "name": "variables",
+              "type": "string"
+            },
+            {
+              "name": "ref",
+              "type": "string"
+            },
+            {
+              "name": "owner",
+              "type": "string"
+            },
+            {
+              "name": "repo",
+              "type": "string"
+            },
+            {
+              "name": "strict",
+              "type": "string"
+            },
+            {
+              "name": "source_workflow",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "337d6473-eb6a-4c5b-8177-81e9ce3e24cd",
+      "name": "Normalise Prompt Request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -760,
+        0
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "n1",
+              "name": "prompt_id",
+              "value": "={{ ($json.prompt_id || \"\").trim().replace(/^\\/+|\\/+$/g, \"\") }}",
+              "type": "string"
+            },
+            {
+              "id": "n2",
+              "name": "variables",
+              "value": "={{ $json.variables || \"{}\" }}",
+              "type": "string"
+            },
+            {
+              "id": "n3",
+              "name": "ref",
+              "value": "={{ ($json.ref || $vars.PROMPT_REPO_REF || \"main\").trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "n4",
+              "name": "owner",
+              "value": "={{ ($json.owner || $vars.PROMPT_REPO_OWNER || \"Tejesh080\").trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "n5",
+              "name": "repo",
+              "value": "={{ ($json.repo || $vars.PROMPT_REPO_NAME || \"Free-Agentic-Workflows-in-N8N\").trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "n6",
+              "name": "strict",
+              "value": "={{ String($json.strict || \"true\").toLowerCase() !== \"false\" }}",
+              "type": "boolean"
+            },
+            {
+              "id": "n7",
+              "name": "source_workflow",
+              "value": "={{ $json.source_workflow || \"unknown\" }}",
+              "type": "string"
+            },
+            {
+              "id": "n8",
+              "name": "path",
+              "value": "=prompts/{{ ($json.prompt_id || \"\").trim().replace(/^\\/+|\\/+$/g, \"\") }}.md",
+              "type": "string"
+            },
+            {
+              "id": "n9",
+              "name": "started_at_ms",
+              "value": "={{ $now.toMillis() }}",
+              "type": "number"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ae9fb1c3-c5e5-42a1-b0b2-6881758f5814",
+      "name": "Fetch Prompt from GitHub",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -520,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.github.com/repos/{{ $json.owner }}/{{ $json.repo }}/contents/{{ $json.path }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "ref",
+              "value": "={{ $json.ref }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agentic-prompt-registry"
+            },
+            {
+              "name": "X-GitHub-Api-Version",
+              "value": "2022-11-28"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1500,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "43d93913-efdc-4bbc-a7cc-402803425532",
+      "name": "Render and Validate Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -280,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// Parses front matter, validates the caller's variables against the prompt's\n// declared contract, interpolates, and returns the blob SHA so a later audit can\n// prove exactly which prompt text produced a given model call.\nconst req = $('Normalise Prompt Request').first().json;\nconst res = $json || {};\n\nconst status = Number(res.statusCode || (res.error ? 0 : 200));\nconst bodyObj = res.body || res;\n\nlet vars = {};\nlet varsParseError = null;\ntry { vars = JSON.parse(req.variables || '{}'); }\ncatch (e) { varsParseError = 'variables is not valid JSON: ' + String(e.message || e); vars = {}; }\n\n// ---- Bundled fallbacks ---------------------------------------------------\n// A GitHub outage or rate limit must not take the whole platform down. These\n// minimal copies keep the hot paths alive, clearly marked as degraded so a\n// caller (and the audit log) can tell that the Git-tracked version was not used.\nconst FALLBACKS = {\n  'verification/entailment-judge':\n    'You are a strict entailment checker. Use ONLY the sources.\\n\\nSOURCES\\n{{sources_block}}\\n\\nCLAIMS\\n{{claims_block}}\\n\\n' +\n    'Label each claim SUPPORTED, CONTRADICTED or NOT_STATED. A claim that is plausible but absent from the sources is NOT_STATED, never SUPPORTED.\\n' +\n    'Respond with raw JSON only: {\"results\":[{\"n\":1,\"verdict\":\"SUPPORTED\",\"source_id\":\"S1\",\"evidence\":\"quote\"}]}',\n  'rag/answerer':\n    'Answer the question using ONLY the context passages.\\n\\nQUESTION\\n{{question}}\\n\\nCONTEXT\\n{{context_block}}\\n\\n' +\n    'Cite the passage marker such as [C2] after every sentence, at least {{min_citations}} distinct citations. ' +\n    'If the context does not contain the answer reply exactly INSUFFICIENT_CONTEXT and name what is missing.'\n};\n\nfunction interpolate(body, values) {\n  const used = [];\n  const missing = [];\n  const out = body.replace(/\\{\\{\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\}\\}/g, function (m, name) {\n    if (Object.prototype.hasOwnProperty.call(values, name) && values[name] !== null && values[name] !== undefined) {\n      used.push(name);\n      const v = values[name];\n      return typeof v === 'string' ? v : JSON.stringify(v);\n    }\n    missing.push(name);\n    return m;\n  });\n  return { text: out, used: used, missing: missing };\n}\n\nfunction parseFrontMatter(text) {\n  if (!text.startsWith('---')) { return { meta: null, body: text, error: 'no front matter block' }; }\n  const idx = text.indexOf('\\n---', 3);\n  if (idx === -1) { return { meta: null, body: text, error: 'front matter not closed' }; }\n  const head = text.slice(3, idx).trim();\n  const body = text.slice(idx + 4).replace(/^\\n+/, '');\n  const meta = {};\n  head.split('\\n').forEach(function (line) {\n    const c = line.indexOf(':');\n    if (c === -1) { return; }\n    const k = line.slice(0, c).trim();\n    const raw = line.slice(c + 1).trim();\n    if (raw.startsWith('[') && raw.endsWith(']')) {\n      const inner = raw.slice(1, -1).trim();\n      meta[k] = inner ? inner.split(',').map(function (s) { return s.trim().replace(/^['\"]|['\"]$/g, ''); }) : [];\n    } else if (/^-?\\d+$/.test(raw)) {\n      meta[k] = parseInt(raw, 10);\n    } else {\n      meta[k] = raw.replace(/^['\"]|['\"]$/g, '');\n    }\n  });\n  return { meta: meta, body: body, error: null };\n}\n\nconst issues = [];\nif (varsParseError) { issues.push(varsParseError); }\n\nlet source = 'github';\nlet rawText = null;\nlet sha = null;\nlet degraded = false;\n\nif (status === 200 && bodyObj && bodyObj.content) {\n  rawText = Buffer.from(String(bodyObj.content).replace(/\\n/g, ''), 'base64').toString('utf8');\n  sha = bodyObj.sha || null;\n} else {\n  degraded = true;\n  source = 'bundled_fallback';\n  const httpMsg = status === 404\n    ? 'prompt not found at ' + req.path + ' on ref ' + req.ref\n    : (status === 403 ? 'GitHub rate limit or access denied (HTTP 403)' : 'GitHub fetch failed with HTTP ' + status);\n  issues.push(httpMsg);\n  if (FALLBACKS[req.prompt_id]) {\n    rawText = '---\\nid: ' + req.prompt_id + '\\nversion: 0\\ndescription: bundled fallback\\nvariables: []\\nowner: platform\\nupdated: 1970-01-01\\n---\\n' + FALLBACKS[req.prompt_id];\n    issues.push('served the bundled fallback copy of ' + req.prompt_id + '; this is NOT the Git-tracked version');\n  } else {\n    rawText = null;\n    source = 'none';\n  }\n}\n\nconst latencyMs = req.started_at_ms ? (Date.now() - Number(req.started_at_ms)) : null;\n\nif (rawText === null) {\n  return {\n    json: {\n      ok: false, degraded: true, prompt_id: req.prompt_id, source: 'none',\n      prompt: null, sha: null, version: null, ref: req.ref, path: req.path,\n      missing_variables: [], unused_variables: [], issues: issues,\n      source_workflow: req.source_workflow, latency_ms: latencyMs,\n      provenance: req.owner + '/' + req.repo + '@' + req.ref + ':' + req.path + ' (unavailable)'\n    }\n  };\n}\n\nconst fm = parseFrontMatter(rawText);\nif (fm.error) { issues.push('front matter: ' + fm.error); }\nconst meta = fm.meta || {};\nconst declared = Array.isArray(meta.variables) ? meta.variables : [];\n\nconst rendered = interpolate(fm.body, vars);\n\n// A variable the prompt declares but the caller did not supply is a contract\n// breach. In strict mode it fails rather than shipping a prompt with a literal\n// {{placeholder}} left in it, which models handle unpredictably.\nconst missingDeclared = declared.filter(function (d) { return !Object.prototype.hasOwnProperty.call(vars, d); });\nconst unusedSupplied = Object.keys(vars).filter(function (k) { return declared.indexOf(k) === -1; });\nconst missingAll = rendered.missing.filter(function (m, i, a) { return a.indexOf(m) === i; });\n\nif (missingAll.length) { issues.push('unfilled placeholders: ' + missingAll.join(', ')); }\nif (unusedSupplied.length) { issues.push('caller supplied variables the prompt does not declare: ' + unusedSupplied.join(', ')); }\n\nconst strictFail = req.strict === true && missingAll.length > 0;\nconst ok = !strictFail && !degraded ? true : (!strictFail && degraded ? true : false);\n\nreturn {\n  json: {\n    ok: ok,\n    degraded: degraded,\n    prompt_id: req.prompt_id,\n    source: source,\n    prompt: strictFail ? null : rendered.text,\n    sha: sha,\n    version: typeof meta.version === 'number' ? meta.version : null,\n    description: meta.description || null,\n    owner_of_prompt: meta.owner || null,\n    updated: meta.updated || null,\n    ref: req.ref,\n    path: req.path,\n    declared_variables: declared,\n    supplied_variables: Object.keys(vars),\n    missing_variables: missingAll,\n    unused_variables: unusedSupplied,\n    strict: req.strict === true,\n    issues: issues,\n    source_workflow: req.source_workflow,\n    latency_ms: latencyMs,\n    provenance: req.owner + '/' + req.repo + '@' + req.ref + ':' + req.path + (sha ? ' blob ' + String(sha).slice(0, 12) : '')\n  }\n};"
+      }
+    },
+    {
+      "id": "83df7a5c-7c45-4158-9cbb-b07ac748cca8",
+      "name": "Sticky Note a495f8da",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {
+        "content": "## Reusable platform service: GitOps Prompt Registry\n\n**Input** `prompt_id` (e.g. `research/planner`), `variables` (JSON string), `ref` (branch, tag or commit SHA — defaults to `main`), `owner`, `repo`, `strict`, `source_workflow`.\n\n**Output** `{ ok, degraded, prompt, sha, version, ref, declared_variables[], missing_variables[], issues[], provenance }`\n\nChanging a prompt is a commit. No workflow JSON is edited and no n8n node is touched. Rolling back is passing an older `ref`.",
+        "color": 4,
+        "width": 460,
+        "height": 300
+      }
+    },
+    {
+      "id": "55d03716-cf13-4871-8298-08657ce77e15",
+      "name": "Sticky Note ed906f7f",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        704
+      ],
+      "parameters": {
+        "content": "## Reliability and traceability\n\nThe fetch retries 3x with a 1.5s backoff and uses `neverError` so a 404 or a 403 rate limit is handled as data, not as a crash.\n\nOn failure the service serves a **bundled fallback** copy for the hot-path prompts and sets `degraded: true` plus an explicit issue, so a caller can never silently run on stale text believing it came from Git.\n\nEvery successful render returns the GitHub **blob SHA**, so an execution log can be tied back to the exact prompt bytes that produced it.",
+        "color": 3,
+        "width": 460,
+        "height": 280
+      }
+    },
+    {
+      "id": "6fa683ff-56c2-4592-96c5-52126d1a3b1c",
+      "name": "Test Suite Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1000,
+        620
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "f0896034-5d0f-4ecc-9461-b60b8501f5e3",
+      "name": "Build Prompt Fixtures",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -760,
+        620
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Exercises the registry contract against the real GitHub repository.\nconst PLANNER_VARS = JSON.stringify({ question: 'What changed in EU battery regulation?', depth: 'standard', today: '2026-09-08' });\nconst F = [\n  { case_id: 'P01-valid-render', prompt_id: 'research/planner', variables: PLANNER_VARS, ref: 'main', strict: 'true',\n    expect_ok: true, expect_degraded: false, expect_source: 'github', expect_sha: true, expect_missing: [], expect_unused: [] },\n  { case_id: 'P02-missing-variable-strict-fails', prompt_id: 'research/planner', variables: JSON.stringify({ question: 'x', today: '2026-09-08' }), ref: 'main', strict: 'true',\n    expect_ok: false, expect_degraded: false, expect_source: 'github', expect_sha: true, expect_missing: ['depth'], expect_unused: [] },\n  { case_id: 'P03-missing-variable-lenient-renders', prompt_id: 'research/planner', variables: JSON.stringify({ question: 'x', today: '2026-09-08' }), ref: 'main', strict: 'false',\n    expect_ok: true, expect_degraded: false, expect_source: 'github', expect_sha: true, expect_missing: ['depth'], expect_unused: [] },\n  { case_id: 'P04-unknown-prompt-id', prompt_id: 'research/does-not-exist', variables: '{}', ref: 'main', strict: 'true',\n    expect_ok: false, expect_degraded: true, expect_source: 'none', expect_sha: false, expect_missing: [], expect_unused: [] },\n  { case_id: 'P05-bad-ref-uses-bundled-fallback', prompt_id: 'verification/entailment-judge', variables: JSON.stringify({ sources_block: 'S1: text', claims_block: '1. claim' }), ref: 'no-such-ref-zzz', strict: 'true',\n    expect_ok: true, expect_degraded: true, expect_source: 'bundled_fallback', expect_sha: false, expect_missing: [], expect_unused: [] },\n  { case_id: 'P06-undeclared-variable-flagged', prompt_id: 'rag/answerer', variables: JSON.stringify({ question: 'q', context_block: 'c', min_citations: '2', nonsense: 'z' }), ref: 'main', strict: 'true',\n    expect_ok: true, expect_degraded: false, expect_source: 'github', expect_sha: true, expect_missing: [], expect_unused: ['nonsense'] },\n  { case_id: 'P07-malformed-variables-json', prompt_id: 'rag/answerer', variables: '{not json', ref: 'main', strict: 'false',\n    expect_ok: true, expect_degraded: false, expect_source: 'github', expect_sha: true, expect_missing: ['question', 'context_block', 'min_citations'], expect_unused: [] }\n];\nreturn F.map(function (f) { return { json: f }; });"
+      }
+    },
+    {
+      "id": "f2b23291-591d-422f-8691-2b0bf6589fc5",
+      "name": "Prompt Fixture Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -520,
+        620
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "f42d6b55-2527-413c-9e9b-542d36236150",
+      "name": "Run Prompt Fixture",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -280,
+        760
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 08 GitOps Prompt Management"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "prompt_id": "={{ $json.prompt_id }}",
+            "variables": "={{ $json.variables }}",
+            "ref": "={{ $json.ref }}",
+            "owner": "",
+            "repo": "",
+            "strict": "={{ $json.strict }}",
+            "source_workflow": "={{ '08-test-suite::' + $json.case_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "prompt_id",
+              "displayName": "prompt_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "variables",
+              "displayName": "variables",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "ref",
+              "displayName": "ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "owner",
+              "displayName": "owner",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "repo",
+              "displayName": "repo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "strict",
+              "displayName": "strict",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "12c94c93-f6ae-451f-b94c-c087934a3cc5",
+      "name": "Slim Prompt Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -40,
+        760
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const r = ($json && $json.json) ? $json.json : $json;\nreturn { json: {\n  source_workflow: r.source_workflow, ok: r.ok, degraded: r.degraded, source: r.source,\n  has_sha: !!r.sha, version: r.version, prompt_chars: r.prompt ? String(r.prompt).length : 0,\n  missing_variables: r.missing_variables || [], unused_variables: r.unused_variables || [],\n  issues: r.issues || [], latency_ms: r.latency_ms, provenance: r.provenance\n} };"
+      },
+      "notes": "Drops the rendered prompt body before looping back. Keeps the loop context small so execution payloads stay readable."
+    },
+    {
+      "id": "95838d1b-5922-4435-bfa3-ae16a7342bb0",
+      "name": "Assert Prompt Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -280,
+        480
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const fixtures = $('Build Prompt Fixtures').all().map(function (i) { return i.json; });\nconst results = $input.all().map(function (i) { return i.json; });\n\nfunction hasAll(actual, expected) {\n  return expected.every(function (e) { return (actual || []).indexOf(e) !== -1; });\n}\n\nconst rows = results.map(function (r, idx) {\n  const fx = fixtures[idx] || {};\n  const fails = [];\n  if (r.ok !== fx.expect_ok) { fails.push('expected ok=' + fx.expect_ok + ' got ' + r.ok); }\n  if (r.degraded !== fx.expect_degraded) { fails.push('expected degraded=' + fx.expect_degraded + ' got ' + r.degraded); }\n  if (r.source !== fx.expect_source) { fails.push('expected source=' + fx.expect_source + ' got ' + r.source); }\n  if (r.has_sha !== fx.expect_sha) { fails.push('expected sha present=' + fx.expect_sha + ' got ' + r.has_sha); }\n  if (!hasAll(r.missing_variables, fx.expect_missing || [])) { fails.push('missing_variables did not contain ' + (fx.expect_missing || []).join(',')); }\n  if (!hasAll(r.unused_variables, fx.expect_unused || [])) { fails.push('unused_variables did not contain ' + (fx.expect_unused || []).join(',')); }\n  return {\n    case_id: fx.case_id, pass: fails.length === 0,\n    ok: r.ok, degraded: r.degraded, source: r.source, has_sha: r.has_sha,\n    prompt_version: r.version, prompt_chars: r.prompt_chars,\n    missing_variables: r.missing_variables, unused_variables: r.unused_variables,\n    issues: r.issues, fail_reasons: fails, latency_ms_measured: r.latency_ms, provenance: r.provenance\n  };\n});\nconst passed = rows.filter(function (r) { return r.pass; }).length;\nconst lats = rows.map(function (r) { return r.latency_ms_measured; }).filter(function (v) { return typeof v === 'number'; }).sort(function (a, b) { return a - b; });\nreturn [{ json: {\n  suite: 'prompt-registry-fixtures-v1', generated_at: new Date().toISOString(), n8n_execution_id: $execution.id,\n  note: 'Fetches the real prompts/ directory from GitHub over the anonymous Contents API. latency_ms_measured includes the GitHub round trip.',\n  total: rows.length, passed: passed, failed: rows.length - passed, all_passed: passed === rows.length,\n  latency_ms_p50_measured: lats.length ? lats[Math.max(0, Math.ceil(0.5 * lats.length) - 1)] : null,\n  latency_ms_max_measured: lats.length ? lats[lats.length - 1] : null,\n  cases: rows\n} }];"
+      }
+    }
+  ],
+  "connections": {
+    "Prompt Request": {
+      "main": [
+        [
+          {
+            "node": "Normalise Prompt Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise Prompt Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Prompt from GitHub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Prompt from GitHub": {
+      "main": [
+        [
+          {
+            "node": "Render and Validate Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Suite Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build Prompt Fixtures",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt Fixtures": {
+      "main": [
+        [
+          {
+            "node": "Prompt Fixture Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prompt Fixture Loop": {
+      "main": [
+        [
+          {
+            "node": "Assert Prompt Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run Prompt Fixture",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Prompt Fixture": {
+      "main": [
+        [
+          {
+            "node": "Slim Prompt Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slim Prompt Result": {
+      "main": [
+        [
+          {
+            "node": "Prompt Fixture Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "description": "Reusable prompt registry. Fetches versioned prompts from GitHub at run time, validates declared variables, interpolates, and returns the blob SHA so every model call is traceable to an exact prompt version.",
+  "versionCounter": 2,
+  "sourceWorkflowId": null,
+  "nodeGroups": [],
+  "activeVersion": {
+    "versionId": "07f4ee93-19a8-4adf-9fdc-8e094ba18e75",
+    "workflowId": "aYVpA31jgNL0shma",
+    "nodes": [
+      {
+        "id": "a321031f-cfd8-4cf9-8076-373045b0c1c0",
+        "name": "Prompt Request",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -1000,
+          0
+        ],
+        "parameters": {
+          "inputSource": "workflowInputs",
+          "workflowInputs": {
+            "values": [
+              {
+                "name": "prompt_id",
+                "type": "string"
+              },
+              {
+                "name": "variables",
+                "type": "string"
+              },
+              {
+                "name": "ref",
+                "type": "string"
+              },
+              {
+                "name": "owner",
+                "type": "string"
+              },
+              {
+                "name": "repo",
+                "type": "string"
+              },
+              {
+                "name": "strict",
+                "type": "string"
+              },
+              {
+                "name": "source_workflow",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "337d6473-eb6a-4c5b-8177-81e9ce3e24cd",
+        "name": "Normalise Prompt Request",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          -760,
+          0
+        ],
+        "parameters": {
+          "mode": "manual",
+          "includeOtherFields": false,
+          "assignments": {
+            "assignments": [
+              {
+                "id": "n1",
+                "name": "prompt_id",
+                "value": "={{ ($json.prompt_id || \"\").trim().replace(/^\\/+|\\/+$/g, \"\") }}",
+                "type": "string"
+              },
+              {
+                "id": "n2",
+                "name": "variables",
+                "value": "={{ $json.variables || \"{}\" }}",
+                "type": "string"
+              },
+              {
+                "id": "n3",
+                "name": "ref",
+                "value": "={{ ($json.ref || $vars.PROMPT_REPO_REF || \"main\").trim() }}",
+                "type": "string"
+              },
+              {
+                "id": "n4",
+                "name": "owner",
+                "value": "={{ ($json.owner || $vars.PROMPT_REPO_OWNER || \"Tejesh080\").trim() }}",
+                "type": "string"
+              },
+              {
+                "id": "n5",
+                "name": "repo",
+                "value": "={{ ($json.repo || $vars.PROMPT_REPO_NAME || \"Free-Agentic-Workflows-in-N8N\").trim() }}",
+                "type": "string"
+              },
+              {
+                "id": "n6",
+                "name": "strict",
+                "value": "={{ String($json.strict || \"true\").toLowerCase() !== \"false\" }}",
+                "type": "boolean"
+              },
+              {
+                "id": "n7",
+                "name": "source_workflow",
+                "value": "={{ $json.source_workflow || \"unknown\" }}",
+                "type": "string"
+              },
+              {
+                "id": "n8",
+                "name": "path",
+                "value": "=prompts/{{ ($json.prompt_id || \"\").trim().replace(/^\\/+|\\/+$/g, \"\") }}.md",
+                "type": "string"
+              },
+              {
+                "id": "n9",
+                "name": "started_at_ms",
+                "value": "={{ $now.toMillis() }}",
+                "type": "number"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "ae9fb1c3-c5e5-42a1-b0b2-6881758f5814",
+        "name": "Fetch Prompt from GitHub",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -520,
+          0
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "=https://api.github.com/repos/{{ $json.owner }}/{{ $json.repo }}/contents/{{ $json.path }}",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "ref",
+                "value": "={{ $json.ref }}"
+              }
+            ]
+          },
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Accept",
+                "value": "application/vnd.github+json"
+              },
+              {
+                "name": "User-Agent",
+                "value": "n8n-agentic-prompt-registry"
+              },
+              {
+                "name": "X-GitHub-Api-Version",
+                "value": "2022-11-28"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 15000,
+            "response": {
+              "response": {
+                "neverError": true,
+                "fullResponse": true
+              }
+            }
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1500,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "43d93913-efdc-4bbc-a7cc-402803425532",
+        "name": "Render and Validate Prompt",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -280,
+          0
+        ],
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "language": "javaScript",
+          "jsCode": "// Parses front matter, validates the caller's variables against the prompt's\n// declared contract, interpolates, and returns the blob SHA so a later audit can\n// prove exactly which prompt text produced a given model call.\nconst req = $('Normalise Prompt Request').first().json;\nconst res = $json || {};\n\nconst status = Number(res.statusCode || (res.error ? 0 : 200));\nconst bodyObj = res.body || res;\n\nlet vars = {};\nlet varsParseError = null;\ntry { vars = JSON.parse(req.variables || '{}'); }\ncatch (e) { varsParseError = 'variables is not valid JSON: ' + String(e.message || e); vars = {}; }\n\n// ---- Bundled fallbacks ---------------------------------------------------\n// A GitHub outage or rate limit must not take the whole platform down. These\n// minimal copies keep the hot paths alive, clearly marked as degraded so a\n// caller (and the audit log) can tell that the Git-tracked version was not used.\nconst FALLBACKS = {\n  'verification/entailment-judge':\n    'You are a strict entailment checker. Use ONLY the sources.\\n\\nSOURCES\\n{{sources_block}}\\n\\nCLAIMS\\n{{claims_block}}\\n\\n' +\n    'Label each claim SUPPORTED, CONTRADICTED or NOT_STATED. A claim that is plausible but absent from the sources is NOT_STATED, never SUPPORTED.\\n' +\n    'Respond with raw JSON only: {\"results\":[{\"n\":1,\"verdict\":\"SUPPORTED\",\"source_id\":\"S1\",\"evidence\":\"quote\"}]}',\n  'rag/answerer':\n    'Answer the question using ONLY the context passages.\\n\\nQUESTION\\n{{question}}\\n\\nCONTEXT\\n{{context_block}}\\n\\n' +\n    'Cite the passage marker such as [C2] after every sentence, at least {{min_citations}} distinct citations. ' +\n    'If the context does not contain the answer reply exactly INSUFFICIENT_CONTEXT and name what is missing.'\n};\n\nfunction interpolate(body, values) {\n  const used = [];\n  const missing = [];\n  const out = body.replace(/\\{\\{\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\}\\}/g, function (m, name) {\n    if (Object.prototype.hasOwnProperty.call(values, name) && values[name] !== null && values[name] !== undefined) {\n      used.push(name);\n      const v = values[name];\n      return typeof v === 'string' ? v : JSON.stringify(v);\n    }\n    missing.push(name);\n    return m;\n  });\n  return { text: out, used: used, missing: missing };\n}\n\nfunction parseFrontMatter(text) {\n  if (!text.startsWith('---')) { return { meta: null, body: text, error: 'no front matter block' }; }\n  const idx = text.indexOf('\\n---', 3);\n  if (idx === -1) { return { meta: null, body: text, error: 'front matter not closed' }; }\n  const head = text.slice(3, idx).trim();\n  const body = text.slice(idx + 4).replace(/^\\n+/, '');\n  const meta = {};\n  head.split('\\n').forEach(function (line) {\n    const c = line.indexOf(':');\n    if (c === -1) { return; }\n    const k = line.slice(0, c).trim();\n    const raw = line.slice(c + 1).trim();\n    if (raw.startsWith('[') && raw.endsWith(']')) {\n      const inner = raw.slice(1, -1).trim();\n      meta[k] = inner ? inner.split(',').map(function (s) { return s.trim().replace(/^['\"]|['\"]$/g, ''); }) : [];\n    } else if (/^-?\\d+$/.test(raw)) {\n      meta[k] = parseInt(raw, 10);\n    } else {\n      meta[k] = raw.replace(/^['\"]|['\"]$/g, '');\n    }\n  });\n  return { meta: meta, body: body, error: null };\n}\n\nconst issues = [];\nif (varsParseError) { issues.push(varsParseError); }\n\nlet source = 'github';\nlet rawText = null;\nlet sha = null;\nlet degraded = false;\n\nif (status === 200 && bodyObj && bodyObj.content) {\n  rawText = Buffer.from(String(bodyObj.content).replace(/\\n/g, ''), 'base64').toString('utf8');\n  sha = bodyObj.sha || null;\n} else {\n  degraded = true;\n  source = 'bundled_fallback';\n  const httpMsg = status === 404\n    ? 'prompt not found at ' + req.path + ' on ref ' + req.ref\n    : (status === 403 ? 'GitHub rate limit or access denied (HTTP 403)' : 'GitHub fetch failed with HTTP ' + status);\n  issues.push(httpMsg);\n  if (FALLBACKS[req.prompt_id]) {\n    rawText = '---\\nid: ' + req.prompt_id + '\\nversion: 0\\ndescription: bundled fallback\\nvariables: []\\nowner: platform\\nupdated: 1970-01-01\\n---\\n' + FALLBACKS[req.prompt_id];\n    issues.push('served the bundled fallback copy of ' + req.prompt_id + '; this is NOT the Git-tracked version');\n  } else {\n    rawText = null;\n    source = 'none';\n  }\n}\n\nconst latencyMs = req.started_at_ms ? (Date.now() - Number(req.started_at_ms)) : null;\n\nif (rawText === null) {\n  return {\n    json: {\n      ok: false, degraded: true, prompt_id: req.prompt_id, source: 'none',\n      prompt: null, sha: null, version: null, ref: req.ref, path: req.path,\n      missing_variables: [], unused_variables: [], issues: issues,\n      source_workflow: req.source_workflow, latency_ms: latencyMs,\n      provenance: req.owner + '/' + req.repo + '@' + req.ref + ':' + req.path + ' (unavailable)'\n    }\n  };\n}\n\nconst fm = parseFrontMatter(rawText);\nif (fm.error) { issues.push('front matter: ' + fm.error); }\nconst meta = fm.meta || {};\nconst declared = Array.isArray(meta.variables) ? meta.variables : [];\n\nconst rendered = interpolate(fm.body, vars);\n\n// A variable the prompt declares but the caller did not supply is a contract\n// breach. In strict mode it fails rather than shipping a prompt with a literal\n// {{placeholder}} left in it, which models handle unpredictably.\nconst missingDeclared = declared.filter(function (d) { return !Object.prototype.hasOwnProperty.call(vars, d); });\nconst unusedSupplied = Object.keys(vars).filter(function (k) { return declared.indexOf(k) === -1; });\nconst missingAll = rendered.missing.filter(function (m, i, a) { return a.indexOf(m) === i; });\n\nif (missingAll.length) { issues.push('unfilled placeholders: ' + missingAll.join(', ')); }\nif (unusedSupplied.length) { issues.push('caller supplied variables the prompt does not declare: ' + unusedSupplied.join(', ')); }\n\nconst strictFail = req.strict === true && missingAll.length > 0;\nconst ok = !strictFail && !degraded ? true : (!strictFail && degraded ? true : false);\n\nreturn {\n  json: {\n    ok: ok,\n    degraded: degraded,\n    prompt_id: req.prompt_id,\n    source: source,\n    prompt: strictFail ? null : rendered.text,\n    sha: sha,\n    version: typeof meta.version === 'number' ? meta.version : null,\n    description: meta.description || null,\n    owner_of_prompt: meta.owner || null,\n    updated: meta.updated || null,\n    ref: req.ref,\n    path: req.path,\n    declared_variables: declared,\n    supplied_variables: Object.keys(vars),\n    missing_variables: missingAll,\n    unused_variables: unusedSupplied,\n    strict: req.strict === true,\n    issues: issues,\n    source_workflow: req.source_workflow,\n    latency_ms: latencyMs,\n    provenance: req.owner + '/' + req.repo + '@' + req.ref + ':' + req.path + (sha ? ' blob ' + String(sha).slice(0, 12) : '')\n  }\n};"
+        }
+      },
+      {
+        "id": "83df7a5c-7c45-4158-9cbb-b07ac748cca8",
+        "name": "Sticky Note a495f8da",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          100,
+          300
+        ],
+        "parameters": {
+          "content": "## Reusable platform service: GitOps Prompt Registry\n\n**Input** `prompt_id` (e.g. `research/planner`), `variables` (JSON string), `ref` (branch, tag or commit SHA — defaults to `main`), `owner`, `repo`, `strict`, `source_workflow`.\n\n**Output** `{ ok, degraded, prompt, sha, version, ref, declared_variables[], missing_variables[], issues[], provenance }`\n\nChanging a prompt is a commit. No workflow JSON is edited and no n8n node is touched. Rolling back is passing an older `ref`.",
+          "color": 4,
+          "width": 460,
+          "height": 300
+        }
+      },
+      {
+        "id": "55d03716-cf13-4871-8298-08657ce77e15",
+        "name": "Sticky Note ed906f7f",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          100,
+          704
+        ],
+        "parameters": {
+          "content": "## Reliability and traceability\n\nThe fetch retries 3x with a 1.5s backoff and uses `neverError` so a 404 or a 403 rate limit is handled as data, not as a crash.\n\nOn failure the service serves a **bundled fallback** copy for the hot-path prompts and sets `degraded: true` plus an explicit issue, so a caller can never silently run on stale text believing it came from Git.\n\nEvery successful render returns the GitHub **blob SHA**, so an execution log can be tied back to the exact prompt bytes that produced it.",
+          "color": 3,
+          "width": 460,
+          "height": 280
+        }
+      },
+      {
+        "id": "6fa683ff-56c2-4592-96c5-52126d1a3b1c",
+        "name": "Test Suite Trigger",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          -1000,
+          620
+        ],
+        "parameters": {}
+      },
+      {
+        "id": "f0896034-5d0f-4ecc-9461-b60b8501f5e3",
+        "name": "Build Prompt Fixtures",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -760,
+          620
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "javaScript",
+          "jsCode": "// Exercises the registry contract against the real GitHub repository.\nconst PLANNER_VARS = JSON.stringify({ question: 'What changed in EU battery regulation?', depth: 'standard', today: '2026-09-08' });\nconst F = [\n  { case_id: 'P01-valid-render', prompt_id: 'research/planner', variables: PLANNER_VARS, ref: 'main', strict: 'true',\n    expect_ok: true, expect_degraded: false, expect_source: 'github', expect_sha: true, expect_missing: [], expect_unused: [] },\n  { case_id: 'P02-missing-variable-strict-fails', prompt_id: 'research/planner', variables: JSON.stringify({ question: 'x', today: '2026-09-08' }), ref: 'main', strict: 'true',\n    expect_ok: false, expect_degraded: false, expect_source: 'github', expect_sha: true, expect_missing: ['depth'], expect_unused: [] },\n  { case_id: 'P03-missing-variable-lenient-renders', prompt_id: 'research/planner', variables: JSON.stringify({ question: 'x', today: '2026-09-08' }), ref: 'main', strict: 'false',\n    expect_ok: true, expect_degraded: false, expect_source: 'github', expect_sha: true, expect_missing: ['depth'], expect_unused: [] },\n  { case_id: 'P04-unknown-prompt-id', prompt_id: 'research/does-not-exist', variables: '{}', ref: 'main', strict: 'true',\n    expect_ok: false, expect_degraded: true, expect_source: 'none', expect_sha: false, expect_missing: [], expect_unused: [] },\n  { case_id: 'P05-bad-ref-uses-bundled-fallback', prompt_id: 'verification/entailment-judge', variables: JSON.stringify({ sources_block: 'S1: text', claims_block: '1. claim' }), ref: 'no-such-ref-zzz', strict: 'true',\n    expect_ok: true, expect_degraded: true, expect_source: 'bundled_fallback', expect_sha: false, expect_missing: [], expect_unused: [] },\n  { case_id: 'P06-undeclared-variable-flagged', prompt_id: 'rag/answerer', variables: JSON.stringify({ question: 'q', context_block: 'c', min_citations: '2', nonsense: 'z' }), ref: 'main', strict: 'true',\n    expect_ok: true, expect_degraded: false, expect_source: 'github', expect_sha: true, expect_missing: [], expect_unused: ['nonsense'] },\n  { case_id: 'P07-malformed-variables-json', prompt_id: 'rag/answerer', variables: '{not json', ref: 'main', strict: 'false',\n    expect_ok: true, expect_degraded: false, expect_source: 'github', expect_sha: true, expect_missing: ['question', 'context_block', 'min_citations'], expect_unused: [] }\n];\nreturn F.map(function (f) { return { json: f }; });"
+        }
+      },
+      {
+        "id": "f2b23291-591d-422f-8691-2b0bf6589fc5",
+        "name": "Prompt Fixture Loop",
+        "type": "n8n-nodes-base.splitInBatches",
+        "typeVersion": 3,
+        "position": [
+          -520,
+          620
+        ],
+        "parameters": {
+          "batchSize": 1,
+          "options": {}
+        }
+      },
+      {
+        "id": "f42d6b55-2527-413c-9e9b-542d36236150",
+        "name": "Run Prompt Fixture",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          -280,
+          760
+        ],
+        "parameters": {
+          "mode": "once",
+          "source": "database",
+          "workflowId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "aYVpA31jgNL0shma",
+            "cachedResultName": "[Platform] 08 GitOps Prompt Management"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "prompt_id": "={{ $json.prompt_id }}",
+              "variables": "={{ $json.variables }}",
+              "ref": "={{ $json.ref }}",
+              "owner": "",
+              "repo": "",
+              "strict": "={{ $json.strict }}",
+              "source_workflow": "={{ '08-test-suite::' + $json.case_id }}"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "prompt_id",
+                "displayName": "prompt_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "variables",
+                "displayName": "variables",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "ref",
+                "displayName": "ref",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "owner",
+                "displayName": "owner",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "repo",
+                "displayName": "repo",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "strict",
+                "displayName": "strict",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "source_workflow",
+                "displayName": "source_workflow",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        }
+      },
+      {
+        "id": "12c94c93-f6ae-451f-b94c-c087934a3cc5",
+        "name": "Slim Prompt Result",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -40,
+          760
+        ],
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "language": "javaScript",
+          "jsCode": "const r = ($json && $json.json) ? $json.json : $json;\nreturn { json: {\n  source_workflow: r.source_workflow, ok: r.ok, degraded: r.degraded, source: r.source,\n  has_sha: !!r.sha, version: r.version, prompt_chars: r.prompt ? String(r.prompt).length : 0,\n  missing_variables: r.missing_variables || [], unused_variables: r.unused_variables || [],\n  issues: r.issues || [], latency_ms: r.latency_ms, provenance: r.provenance\n} };"
+        },
+        "notes": "Drops the rendered prompt body before looping back. Keeps the loop context small so execution payloads stay readable."
+      },
+      {
+        "id": "95838d1b-5922-4435-bfa3-ae16a7342bb0",
+        "name": "Assert Prompt Results",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -280,
+          480
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "javaScript",
+          "jsCode": "const fixtures = $('Build Prompt Fixtures').all().map(function (i) { return i.json; });\nconst results = $input.all().map(function (i) { return i.json; });\n\nfunction hasAll(actual, expected) {\n  return expected.every(function (e) { return (actual || []).indexOf(e) !== -1; });\n}\n\nconst rows = results.map(function (r, idx) {\n  const fx = fixtures[idx] || {};\n  const fails = [];\n  if (r.ok !== fx.expect_ok) { fails.push('expected ok=' + fx.expect_ok + ' got ' + r.ok); }\n  if (r.degraded !== fx.expect_degraded) { fails.push('expected degraded=' + fx.expect_degraded + ' got ' + r.degraded); }\n  if (r.source !== fx.expect_source) { fails.push('expected source=' + fx.expect_source + ' got ' + r.source); }\n  if (r.has_sha !== fx.expect_sha) { fails.push('expected sha present=' + fx.expect_sha + ' got ' + r.has_sha); }\n  if (!hasAll(r.missing_variables, fx.expect_missing || [])) { fails.push('missing_variables did not contain ' + (fx.expect_missing || []).join(',')); }\n  if (!hasAll(r.unused_variables, fx.expect_unused || [])) { fails.push('unused_variables did not contain ' + (fx.expect_unused || []).join(',')); }\n  return {\n    case_id: fx.case_id, pass: fails.length === 0,\n    ok: r.ok, degraded: r.degraded, source: r.source, has_sha: r.has_sha,\n    prompt_version: r.version, prompt_chars: r.prompt_chars,\n    missing_variables: r.missing_variables, unused_variables: r.unused_variables,\n    issues: r.issues, fail_reasons: fails, latency_ms_measured: r.latency_ms, provenance: r.provenance\n  };\n});\nconst passed = rows.filter(function (r) { return r.pass; }).length;\nconst lats = rows.map(function (r) { return r.latency_ms_measured; }).filter(function (v) { return typeof v === 'number'; }).sort(function (a, b) { return a - b; });\nreturn [{ json: {\n  suite: 'prompt-registry-fixtures-v1', generated_at: new Date().toISOString(), n8n_execution_id: $execution.id,\n  note: 'Fetches the real prompts/ directory from GitHub over the anonymous Contents API. latency_ms_measured includes the GitHub round trip.',\n  total: rows.length, passed: passed, failed: rows.length - passed, all_passed: passed === rows.length,\n  latency_ms_p50_measured: lats.length ? lats[Math.max(0, Math.ceil(0.5 * lats.length) - 1)] : null,\n  latency_ms_max_measured: lats.length ? lats[lats.length - 1] : null,\n  cases: rows\n} }];"
+        }
+      }
+    ],
+    "connections": {
+      "Prompt Request": {
+        "main": [
+          [
+            {
+              "node": "Normalise Prompt Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalise Prompt Request": {
+        "main": [
+          [
+            {
+              "node": "Fetch Prompt from GitHub",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Prompt from GitHub": {
+        "main": [
+          [
+            {
+              "node": "Render and Validate Prompt",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Test Suite Trigger": {
+        "main": [
+          [
+            {
+              "node": "Build Prompt Fixtures",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Prompt Fixtures": {
+        "main": [
+          [
+            {
+              "node": "Prompt Fixture Loop",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prompt Fixture Loop": {
+        "main": [
+          [
+            {
+              "node": "Assert Prompt Results",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Run Prompt Fixture",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run Prompt Fixture": {
+        "main": [
+          [
+            {
+              "node": "Slim Prompt Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Slim Prompt Result": {
+        "main": [
+          [
+            {
+              "node": "Prompt Fixture Loop",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Tejesh Nenavath (via MCP)",
+    "name": "Add prompt registry test suite",
+    "description": "Added nodes: Test Suite Trigger, Build Prompt Fixtures, Prompt Fixture Loop, Run Prompt Fixture, Slim Prompt Result and 1 more\nConnections: 6 added, 0 removed",
+    "autosaved": false,
+    "createdAt": "2026-09-08T05:05:03.604Z",
+    "updatedAt": "2026-09-08T05:05:03.604Z",
+    "workflowPublishHistory": [
+      {
+        "id": 72,
+        "workflowId": "aYVpA31jgNL0shma",
+        "versionId": "07f4ee93-19a8-4adf-9fdc-8e094ba18e75",
+        "event": "activated",
+        "userId": "304a85db-b680-4711-837a-69e38e9a3ef6",
+        "createdAt": "2026-09-08T05:05:10.666Z"
+      }
+    ]
+  }
+}

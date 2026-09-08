@@ -1,0 +1,1138 @@
+{
+  "name": "07 Conversational Analytics Agent",
+  "nodes": [
+    {
+      "id": "f3b5c3c3-b45b-4391-aaa8-d8eb54b3f535",
+      "name": "Analytics Question",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1500,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "question",
+              "type": "string"
+            },
+            {
+              "name": "property",
+              "type": "string"
+            },
+            {
+              "name": "source_workflow",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5ad38925-abd0-4463-8193-71b3bb017bab",
+      "name": "Load Metric Registry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1280,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// The registry is the security boundary. The model may only ever choose names\n// that appear here; anything else is rejected before a query is built, so a\n// prompt injection cannot widen what is queryable.\nconst METRICS = {\n  clicks:      { column: 'clicks',      agg: 'sum', label: 'Clicks',      description: 'Number of clicks.' },\n  impressions: { column: 'impressions', agg: 'sum', label: 'Impressions', description: 'Times a result was shown.' },\n  position:    { column: 'position',    agg: 'avg', label: 'Average position', description: 'Mean ranking position, lower is better.' },\n  ctr:         { column: null,          agg: 'derived', label: 'Click-through rate', description: 'clicks divided by impressions, computed after aggregation.' }\n};\n\nconst DIMENSIONS = {\n  query:      { column: 'query',      label: 'Search query' },\n  page:       { column: 'page',       label: 'Landing page' },\n  country:    { column: 'country',    label: 'Country, ISO-3 lower case.' },\n  device:     { column: 'device',     label: 'Device: mobile, desktop or tablet.' },\n  event_date: { column: 'event_date', label: 'Date, YYYY-MM-DD.' }\n};\n\nconst req = $json;\nconst metricLines = Object.keys(METRICS).map(function (k) { return '- ' + k + ': ' + METRICS[k].description; }).join('\\n');\nconst dimensionLines = Object.keys(DIMENSIONS).map(function (k) { return '- ' + k + ': ' + DIMENSIONS[k].label; }).join('\\n');\n\nreturn {\n  json: {\n    question: String(req.question || '').trim(),\n    property: String(req.property || 'https://example-store.test/'),\n    source_workflow: req.source_workflow || 'unknown',\n    today: new Date().toISOString().slice(0, 10),\n    date_range_default: 'the whole of August 2026, which is the range the demo dataset covers',\n    metric_registry: metricLines,\n    dimension_registry: dimensionLines,\n    metrics_available: Object.keys(METRICS),\n    dimensions_available: Object.keys(DIMENSIONS),\n    registry: { metrics: METRICS, dimensions: DIMENSIONS },\n    started_at_ms: Date.now()\n  }\n};"
+      }
+    },
+    {
+      "id": "62a62225-4b1c-460b-bccd-be2bf14d83cc",
+      "name": "Get Query Planner Prompt (08)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -1060,
+        0
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 08 GitOps Prompt Management"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "prompt_id": "analytics/query-planner",
+            "variables": "={{ JSON.stringify({ question: $json.question, metric_registry: $json.metric_registry, dimension_registry: $json.dimension_registry, date_range_default: $json.date_range_default, today: $json.today }) }}",
+            "ref": "",
+            "owner": "",
+            "repo": "",
+            "strict": "true",
+            "source_workflow": "07-conversational-analytics"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "prompt_id",
+              "displayName": "prompt_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "variables",
+              "displayName": "variables",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "ref",
+              "displayName": "ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "owner",
+              "displayName": "owner",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "repo",
+              "displayName": "repo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "strict",
+              "displayName": "strict",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "914c9b45-711f-4c40-8829-8c53b60ed1e8",
+      "name": "Plan Query (02 Router)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -840,
+        0
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 02 Intelligent Model Router"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "task_type": "extraction",
+            "objective": "balanced",
+            "privacy": "standard",
+            "input": "={{ ($json.json ? $json.json.prompt : $json.prompt) || \"\" }}",
+            "system_prompt": "You output raw JSON only. Use only metric and dimension names from the supplied registries. You never write SQL.",
+            "force_provider": "",
+            "source_workflow": "07-conversational-analytics",
+            "run_label": "={{ \"q-\" + $execution.id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "task_type",
+              "displayName": "task_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "objective",
+              "displayName": "objective",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "privacy",
+              "displayName": "privacy",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "input",
+              "displayName": "input",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "system_prompt",
+              "displayName": "system_prompt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "force_provider",
+              "displayName": "force_provider",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "run_label",
+              "displayName": "run_label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "e4c55945-8cdf-4be6-9073-274d4dba4403",
+      "name": "Validate and Compile Query Spec",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// The deterministic compiler. Nothing the model said is trusted: every metric,\n// dimension, filter field and operator must appear in the registry, and the SQL\n// is assembled here from registry values with the user's values bound as\n// parameters. The model's text never reaches a query string.\nconst ctx = $('Load Metric Registry').first().json;\nconst raw = ($json && $json.json) ? $json.json : $json;\nconst REG = ctx.registry;\n\nfunction repairJson(text) {\n  try { return JSON.parse(text); } catch (e) { /* continue */ }\n  const stack = [];\n  let inStr = false, esc = false, lastEnd = -1;\n  for (let i = 0; i < text.length; i++) {\n    const c = text[i];\n    if (inStr) { if (esc) { esc = false; } else if (c === '\\\\') { esc = true; } else if (c === '\"') { inStr = false; } continue; }\n    if (c === '\"') { inStr = true; continue; }\n    if (c === '{' || c === '[') { stack.push(c); }\n    else if (c === '}' || c === ']') { stack.pop(); if (stack.length === 0) { lastEnd = i; } }\n  }\n  if (lastEnd > 0) { try { return JSON.parse(text.slice(0, lastEnd + 1)); } catch (e) { /* continue */ } }\n  let patched = text;\n  if (inStr) { patched += '\"'; }\n  patched = patched.replace(/,\\s*\"[^\"]*\"\\s*:?\\s*[^,{}\\[\\]]*$/, '').replace(/,\\s*$/, '');\n  for (let i = stack.length - 1; i >= 0; i--) { patched += (stack[i] === '{' ? '}' : ']'); }\n  try { return JSON.parse(patched); } catch (e) { return null; }\n}\n\nconst rejections = [];\nlet spec = null;\nif (raw && raw.ok && raw.output) {\n  const cleaned = String(raw.output).replace(/^\\s*```(?:json)?/i, '').replace(/```\\s*$/, '').trim();\n  spec = repairJson(cleaned);\n  if (!spec) { rejections.push('the planner response could not be parsed as JSON'); }\n} else {\n  rejections.push('the planner call failed: ' + ((raw && raw.error) ? raw.error : 'no output'));\n}\nif (!spec) { spec = {}; }\n\n// A planner that could not answer says so explicitly. Honour that.\nif (spec.unsupported_reason) { rejections.push('planner reported the question is unsupported: ' + spec.unsupported_reason); }\n\n// ---- Whitelist enforcement ---------------------------------------------\nconst metrics = (Array.isArray(spec.metrics) ? spec.metrics : []).filter(function (m) {\n  if (REG.metrics[m]) { return true; }\n  rejections.push('metric \"' + String(m).slice(0, 40) + '\" is not in the registry');\n  return false;\n});\nconst dimensions = (Array.isArray(spec.dimensions) ? spec.dimensions : []).filter(function (d) {\n  if (REG.dimensions[d]) { return true; }\n  rejections.push('dimension \"' + String(d).slice(0, 40) + '\" is not in the registry');\n  return false;\n});\n\nconst ALLOWED_OPS = ['eq', 'neq', 'contains', 'gt', 'gte', 'lt', 'lte'];\nconst filters = (Array.isArray(spec.filters) ? spec.filters : []).filter(function (f) {\n  if (!f || !REG.dimensions[f.field]) { rejections.push('filter field \"' + String(f && f.field).slice(0, 40) + '\" is not a registered dimension'); return false; }\n  if (ALLOWED_OPS.indexOf(f.op) === -1) { rejections.push('filter operator \"' + String(f && f.op).slice(0, 20) + '\" is not allowed'); return false; }\n  if (f.value === null || f.value === undefined) { rejections.push('filter on \"' + f.field + '\" has no value'); return false; }\n  return true;\n});\n\nconst ISO = /^\\d{4}-\\d{2}-\\d{2}$/;\nconst dateFrom = ISO.test(String(spec.date_from || '')) ? spec.date_from : '2026-08-01';\nconst dateTo = ISO.test(String(spec.date_to || '')) ? spec.date_to : '2026-08-31';\nif (!ISO.test(String(spec.date_from || ''))) { rejections.push('date_from was missing or malformed, defaulted to 2026-08-01'); }\nif (!ISO.test(String(spec.date_to || ''))) { rejections.push('date_to was missing or malformed, defaulted to 2026-08-31'); }\n\nlet limit = Number(spec.limit);\nif (!isFinite(limit) || limit < 1) { limit = 10; }\nlimit = Math.min(1000, Math.floor(limit));\n\nlet orderField = null;\nlet orderDir = 'desc';\nif (spec.order_by && spec.order_by.field) {\n  if (REG.metrics[spec.order_by.field] || REG.dimensions[spec.order_by.field]) {\n    orderField = spec.order_by.field;\n    orderDir = String(spec.order_by.direction || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';\n  } else {\n    rejections.push('order_by field \"' + String(spec.order_by.field).slice(0, 40) + '\" is not registered');\n  }\n}\nif (!orderField && metrics.length) { orderField = metrics[0]; }\n\nconst fatal = metrics.length === 0;\n\n// ---- Compile the equivalent parameterised SQL ---------------------------\n// This is emitted for transparency and audit. Column names come from the\n// registry, never from the model; user values are bound parameters, never\n// interpolated. The demo executes against an n8n Data Table, but this is the\n// exact statement a Postgres adapter would prepare.\nconst selectParts = dimensions.map(function (d) { return REG.dimensions[d].column; });\nmetrics.forEach(function (m) {\n  const def = REG.metrics[m];\n  if (def.agg === 'sum') { selectParts.push('SUM(' + def.column + ') AS ' + m); }\n  else if (def.agg === 'avg') { selectParts.push('ROUND(AVG(' + def.column + ')::numeric, 2) AS ' + m); }\n  else if (m === 'ctr') { selectParts.push('CASE WHEN SUM(impressions) = 0 THEN 0 ELSE ROUND(SUM(clicks)::numeric / SUM(impressions), 4) END AS ctr'); }\n});\nconst params = [ctx.property, dateFrom, dateTo];\nconst whereParts = ['property = $1', 'event_date >= $2', 'event_date <= $3'];\nfilters.forEach(function (f) {\n  const col = REG.dimensions[f.field].column;\n  const opSql = { eq: '=', neq: '<>', gt: '>', gte: '>=', lt: '<', lte: '<=', contains: 'ILIKE' }[f.op];\n  params.push(f.op === 'contains' ? ('%' + String(f.value) + '%') : f.value);\n  whereParts.push(col + ' ' + opSql + ' $' + params.length);\n});\nconst sql = 'SELECT ' + (selectParts.join(', ') || '1') +\n  ' FROM analytics_events WHERE ' + whereParts.join(' AND ') +\n  (dimensions.length ? (' GROUP BY ' + dimensions.map(function (d) { return REG.dimensions[d].column; }).join(', ')) : '') +\n  (orderField ? (' ORDER BY ' + orderField + ' ' + orderDir.toUpperCase()) : '') +\n  ' LIMIT ' + limit;\n\nreturn {\n  json: {\n    question: ctx.question,\n    property: ctx.property,\n    today: ctx.today,\n    started_at_ms: ctx.started_at_ms,\n    source_workflow: ctx.source_workflow,\n    valid: !fatal,\n    intent: spec.intent || 'unknown',\n    metrics: metrics,\n    dimensions: dimensions,\n    filters: filters,\n    date_from: dateFrom,\n    date_to: dateTo,\n    order_by: orderField ? { field: orderField, direction: orderDir } : null,\n    limit: limit,\n    assumptions: Array.isArray(spec.assumptions) ? spec.assumptions : [],\n    rejections: rejections,\n    unsupported_reason: fatal\n      ? (spec.unsupported_reason || 'No registered metric could be resolved from the question, so no query was run.')\n      : null,\n    compiled_sql: sql,\n    sql_parameters: params,\n    spec_json: JSON.stringify({ intent: spec.intent, metrics: metrics, dimensions: dimensions, filters: filters, date_from: dateFrom, date_to: dateTo, order_by: orderField ? { field: orderField, direction: orderDir } : null, limit: limit }),\n    router: { provider: raw ? raw.selected_provider : null, model: raw ? raw.selected_model : null, latency_ms: raw ? raw.latency_ms : null, estimated_cost_usd: raw ? raw.estimated_cost_usd : null }\n  }\n};"
+      }
+    },
+    {
+      "id": "f31ea576-351d-4508-844d-a26c11209b13",
+      "name": "Query Spec Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -400,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "sv1",
+              "leftValue": "={{ $json.valid }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "3730fa75-1b3f-470b-bc0d-f0b1a8fd8401",
+      "name": "Read Analytics Rows",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -180,
+        -140
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATA_TABLE_ID",
+          "cachedResultName": "agentic_analytics_demo"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "property",
+              "condition": "eq",
+              "keyValue": "={{ $json.property }}"
+            },
+            {
+              "keyName": "event_date",
+              "condition": "gte",
+              "keyValue": "={{ $json.date_from }}"
+            },
+            {
+              "keyName": "event_date",
+              "condition": "lte",
+              "keyValue": "={{ $json.date_to }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "notes": "Read-only. The demo warehouse is an n8n Data Table; swap this node for a Postgres node bound to a read-only role and run compiled_sql with sql_parameters to point at a real warehouse.",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "284676c4-f863-43d9-969c-30a42e151af6",
+      "name": "Execute Query Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        40,
+        -140
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Applies the validated spec to the rows: filter, group, aggregate, order, limit.\n// This is the in-memory equivalent of the compiled SQL, so the demo needs no\n// database while the security property (registry-bound columns only) is identical.\nconst plan = $('Validate and Compile Query Spec').first().json;\nconst REG = $('Load Metric Registry').first().json.registry;\nconst rows = $input.all().map(function (i) { return i.json; }).filter(function (r) { return r && r.event_date; });\n\nfunction passes(row) {\n  return plan.filters.every(function (f) {\n    const col = REG.dimensions[f.field].column;\n    const v = row[col];\n    const target = f.value;\n    if (f.op === 'eq') { return String(v).toLowerCase() === String(target).toLowerCase(); }\n    if (f.op === 'neq') { return String(v).toLowerCase() !== String(target).toLowerCase(); }\n    if (f.op === 'contains') { return String(v).toLowerCase().indexOf(String(target).toLowerCase()) !== -1; }\n    const a = Number(v); const b = Number(target);\n    if (!isFinite(a) || !isFinite(b)) { return false; }\n    if (f.op === 'gt') { return a > b; }\n    if (f.op === 'gte') { return a >= b; }\n    if (f.op === 'lt') { return a < b; }\n    if (f.op === 'lte') { return a <= b; }\n    return false;\n  });\n}\n\nconst filtered = rows.filter(passes);\n\nconst groups = {};\nfiltered.forEach(function (row) {\n  const key = plan.dimensions.map(function (d) { return String(row[REG.dimensions[d].column]); }).join('\\u0001') || '__all__';\n  if (!groups[key]) {\n    groups[key] = { _clicks: 0, _impressions: 0, _positionSum: 0, _n: 0 };\n    plan.dimensions.forEach(function (d) { groups[key][d] = row[REG.dimensions[d].column]; });\n  }\n  const g = groups[key];\n  g._clicks += Number(row.clicks || 0);\n  g._impressions += Number(row.impressions || 0);\n  g._positionSum += Number(row.position || 0);\n  g._n += 1;\n});\n\nlet out = Object.keys(groups).map(function (k) {\n  const g = groups[k];\n  const rec = {};\n  plan.dimensions.forEach(function (d) { rec[d] = g[d]; });\n  plan.metrics.forEach(function (m) {\n    if (m === 'clicks') { rec.clicks = g._clicks; }\n    else if (m === 'impressions') { rec.impressions = g._impressions; }\n    else if (m === 'position') { rec.position = g._n ? Math.round((g._positionSum / g._n) * 100) / 100 : null; }\n    else if (m === 'ctr') { rec.ctr = g._impressions ? Math.round((g._clicks / g._impressions) * 10000) / 10000 : 0; }\n  });\n  rec._rows_aggregated = g._n;\n  return rec;\n});\n\nif (plan.order_by) {\n  const f = plan.order_by.field;\n  const dir = plan.order_by.direction === 'asc' ? 1 : -1;\n  out.sort(function (a, b) {\n    const av = a[f]; const bv = b[f];\n    if (typeof av === 'number' && typeof bv === 'number') { return (av - bv) * dir; }\n    return String(av).localeCompare(String(bv)) * dir;\n  });\n}\nout = out.slice(0, plan.limit);\n\nreturn [{\n  json: {\n    rows: out,\n    row_count: out.length,\n    source_rows_scanned: rows.length,\n    source_rows_after_filters: filtered.length,\n    result_rows_text: out.length\n      ? out.map(function (r, i) { return (i + 1) + '. ' + JSON.stringify(r); }).join('\\n')\n      : '(no rows matched)',\n    warehouse: 'n8n Data Table agentic_analytics_demo (synthetic demo data)'\n  }\n}];"
+      }
+    },
+    {
+      "id": "aa163608-59be-4d05-94ac-45a7244e5ee8",
+      "name": "Get Narrator Prompt (08)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        280,
+        -140
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 08 GitOps Prompt Management"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "prompt_id": "analytics/narrator",
+            "variables": "={{ JSON.stringify({ question: $(\"Validate and Compile Query Spec\").first().json.question, query_spec: $(\"Validate and Compile Query Spec\").first().json.spec_json, result_rows: $json.result_rows_text, row_count: String($json.row_count) }) }}",
+            "ref": "",
+            "owner": "",
+            "repo": "",
+            "strict": "true",
+            "source_workflow": "07-conversational-analytics"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "prompt_id",
+              "displayName": "prompt_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "variables",
+              "displayName": "variables",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "ref",
+              "displayName": "ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "owner",
+              "displayName": "owner",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "repo",
+              "displayName": "repo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "strict",
+              "displayName": "strict",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "899af802-c7bd-495f-9dc9-06013a3905c9",
+      "name": "Narrate Answer (02 Router)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        520,
+        -140
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 02 Intelligent Model Router"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "task_type": "summarization",
+            "objective": "balanced",
+            "privacy": "standard",
+            "input": "={{ ($json.json ? $json.json.prompt : $json.prompt) || \"\" }}",
+            "system_prompt": "Every number you state must appear in the supplied rows. Do not compute figures that are not there.",
+            "force_provider": "",
+            "source_workflow": "07-conversational-analytics",
+            "run_label": "={{ \"narrate-\" + $execution.id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "task_type",
+              "displayName": "task_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "objective",
+              "displayName": "objective",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "privacy",
+              "displayName": "privacy",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "input",
+              "displayName": "input",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "system_prompt",
+              "displayName": "system_prompt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "force_provider",
+              "displayName": "force_provider",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "run_label",
+              "displayName": "run_label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "fbe97067-0034-4f30-83fc-112ec4b0ee9e",
+      "name": "Verify Answer (09)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        760,
+        -140
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 09 AI Output Verification Layer"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ai_output": "={{ ($json.json ? $json.json.output : $json.output) || \"\" }}",
+            "sources": "={{ JSON.stringify([{ id: \"ROWS\", text: $(\"Execute Query Plan\").first().json.result_rows_text }]) }}",
+            "json_schema": "",
+            "required_fields": "",
+            "business_rules": "[]",
+            "mode": "full",
+            "confidence_threshold": "0.7",
+            "source_workflow": "07-conversational-analytics"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ai_output",
+              "displayName": "ai_output",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sources",
+              "displayName": "sources",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "json_schema",
+              "displayName": "json_schema",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "required_fields",
+              "displayName": "required_fields",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "business_rules",
+              "displayName": "business_rules",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "mode",
+              "displayName": "mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "confidence_threshold",
+              "displayName": "confidence_threshold",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "a245865d-6c22-47f1-afef-2f5ffe834f80",
+      "name": "Build Analytics Answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const plan = $('Validate and Compile Query Spec').first().json;\n\nfunction unwrap(n) {\n  try { const v = $(n).first().json; return (v && v.json) ? v.json : v; } catch (e) { return null; }\n}\nconst narration = unwrap('Narrate Answer (02 Router)');\nconst verification = unwrap('Verify Answer (09)');\nconst plannerMeta = unwrap('Get Query Planner Prompt (08)');\n\nlet exec = null;\ntry { exec = $('Execute Query Plan').first().json; } catch (e) { exec = null; }\n\nconst unsupported = $input.all().some(function (i) { return i.json && i.json.unsupported; });\n\nconst costs = [];\nif (plan.router && plan.router.estimated_cost_usd) { costs.push(Number(plan.router.estimated_cost_usd)); }\nif (narration && narration.estimated_cost_usd) { costs.push(Number(narration.estimated_cost_usd)); }\n\nreturn [{\n  json: {\n    generated_at: new Date().toISOString(),\n    n8n_execution_id: $execution.id,\n    question: plan.question,\n    status: unsupported ? 'unsupported' : (exec && exec.row_count === 0 ? 'no_data' : 'answered'),\n    answer: unsupported ? null : (narration && narration.ok ? String(narration.output || '') : null),\n    unsupported_reason: plan.unsupported_reason,\n    query: {\n      intent: plan.intent,\n      metrics: plan.metrics,\n      dimensions: plan.dimensions,\n      filters: plan.filters,\n      date_from: plan.date_from,\n      date_to: plan.date_to,\n      order_by: plan.order_by,\n      limit: plan.limit,\n      assumptions: plan.assumptions,\n      compiled_sql: plan.compiled_sql,\n      sql_parameters: plan.sql_parameters,\n      rejected_by_registry: plan.rejections\n    },\n    data: exec ? {\n      rows: exec.rows, row_count: exec.row_count,\n      source_rows_scanned: exec.source_rows_scanned,\n      source_rows_after_filters: exec.source_rows_after_filters,\n      warehouse: exec.warehouse\n    } : null,\n    verification: verification ? {\n      verified: verification.verified, score: verification.score,\n      issues: verification.issues, requires_human_review: verification.requires_human_review\n    } : null,\n    prompts: { planner: plannerMeta ? { version: plannerMeta.version, sha: plannerMeta.sha, degraded: plannerMeta.degraded } : null },\n    models: {\n      planner: plan.router,\n      narrator: narration ? { provider: narration.selected_provider, model: narration.selected_model, latency_ms: narration.latency_ms, estimated_cost_usd: narration.estimated_cost_usd } : null\n    },\n    estimated_cost_usd_total: Math.round(costs.reduce(function (a, b) { return a + b; }, 0) * 1000000) / 1000000,\n    latency_ms: plan.started_at_ms ? (Date.now() - Number(plan.started_at_ms)) : null\n  }\n}];"
+      }
+    },
+    {
+      "id": "bea7fdfe-0985-4b17-88e9-ccfe4025bfb1",
+      "name": "Answer Not Supported",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -180,
+        160
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ns1",
+              "name": "unsupported",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3631d15d-4050-4a5e-bc73-7bd87abffd91",
+      "name": "Sticky Note f8f197ea",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {
+        "content": "## The model never writes SQL\n\nThe planner returns a **query spec**: metric names, dimension names, filters, a date range and a limit. `Validate and Compile Query Spec` then checks every one of those against a fixed registry and throws away anything that is not in it.\n\nThe SQL is assembled here from **registry column names**, with user values bound as `$1, $2, ...` parameters. No model text ever reaches a query string, so prompt injection cannot widen what is queryable: the worst it can do is get its spec rejected.",
+        "color": 6,
+        "width": 500,
+        "height": 320
+      }
+    },
+    {
+      "id": "873a12d6-b811-4dde-a133-2f07594ab7f4",
+      "name": "Sticky Note 626e6525",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        720
+      ],
+      "parameters": {
+        "content": "## Warehouse\n\nThe demo reads an n8n Data Table holding a synthetic search-analytics dataset, so it runs with no database credentials at all.\n\nTo point it at a real warehouse, replace **Read Analytics Rows** with a Postgres node bound to a **read-only role** and execute `compiled_sql` with `sql_parameters`. The compiled statement is already in the response for exactly this reason, and it is also what makes each answer auditable.",
+        "color": 4,
+        "width": 480,
+        "height": 260
+      }
+    },
+    {
+      "id": "56c8e7c6-1083-4155-9dc5-b10e78bf4937",
+      "name": "Sticky Note 4d7bbf3a",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        1072
+      ],
+      "parameters": {
+        "content": "## No data is an answer\n\nIf the registry rejects every metric the question needed, the workflow returns `status: unsupported` with the reason, and no model is asked to improvise. If the query runs but matches nothing, it returns `status: no_data`.\n\nWhen an answer is produced, it is verified against the returned rows, so a narrated figure that is not in the data is caught.",
+        "color": 3,
+        "width": 460,
+        "height": 240
+      }
+    },
+    {
+      "id": "a865276b-b861-45fc-9c73-5446cce88640",
+      "name": "Seed Demo Warehouse",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1500,
+        620
+      ],
+      "parameters": {},
+      "notes": "Run once after import to populate the demo Data Table from the dataset in this repository. Safe to re-run only after clearing the table, otherwise rows are duplicated."
+    },
+    {
+      "id": "5c8dd520-439d-429e-aa67-aa459ea62b08",
+      "name": "Fetch Demo Dataset",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1280,
+        620
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://raw.githubusercontent.com/Tejesh080/Free-Agentic-Workflows-in-N8N/main/workflows/07-conversational-analytics/demo-dataset.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agentic-analytics-seeder"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 20000
+        }
+      }
+    },
+    {
+      "id": "ee4f7fba-2991-431a-87eb-24e63706f6de",
+      "name": "Parse Dataset",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1060,
+        620
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// raw.githubusercontent serves text/plain, so the body may arrive as a string.\nconst item = $input.first().json;\nlet doc = item;\nif (typeof item === 'string') { doc = JSON.parse(item); }\nelse if (typeof item.data === 'string') { doc = JSON.parse(item.data); }\nelse if (typeof item.body === 'string') { doc = JSON.parse(item.body); }\nelse if (item.body) { doc = item.body; }\n\nif (!doc || !Array.isArray(doc.rows)) {\n  throw new Error('dataset did not contain a rows array; observed keys: ' + Object.keys(doc || {}).join(', '));\n}\nreturn doc.rows.map(function (r) { return { json: r }; });"
+      }
+    },
+    {
+      "id": "a2c3efed-27b2-4a0f-abe3-fe15cd5602d3",
+      "name": "Insert Analytics Row",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -840,
+        620
+      ],
+      "parameters": {
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATA_TABLE_ID",
+          "cachedResultName": "agentic_analytics_demo"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "event_date": "={{ $json.event_date }}",
+            "property": "={{ $json.property }}",
+            "page": "={{ $json.page }}",
+            "query": "={{ $json.query }}",
+            "country": "={{ $json.country }}",
+            "device": "={{ $json.device }}",
+            "clicks": "={{ $json.clicks }}",
+            "impressions": "={{ $json.impressions }}",
+            "position": "={{ $json.position }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "b00db3fb-80b6-4aa4-990b-4fee76354ebd",
+      "name": "Demo Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1500,
+        300
+      ],
+      "parameters": {},
+      "notes": "Asks a real analytics question. Requires the demo warehouse to have been seeded first."
+    },
+    {
+      "id": "0d9fc42c-0432-43ee-9f1f-5beda893ac9d",
+      "name": "Demo Question",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1280,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dq1",
+              "name": "question",
+              "value": "Which five search queries drove the most clicks on mobile during August, and what was their click-through rate?",
+              "type": "string"
+            },
+            {
+              "id": "dq2",
+              "name": "property",
+              "value": "https://example-store.test/",
+              "type": "string"
+            },
+            {
+              "id": "dq3",
+              "name": "source_workflow",
+              "value": "07-demo-trigger",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Analytics Question": {
+      "main": [
+        [
+          {
+            "node": "Load Metric Registry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Metric Registry": {
+      "main": [
+        [
+          {
+            "node": "Get Query Planner Prompt (08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Query Planner Prompt (08)": {
+      "main": [
+        [
+          {
+            "node": "Plan Query (02 Router)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Query (02 Router)": {
+      "main": [
+        [
+          {
+            "node": "Validate and Compile Query Spec",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and Compile Query Spec": {
+      "main": [
+        [
+          {
+            "node": "Query Spec Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Spec Valid?": {
+      "main": [
+        [
+          {
+            "node": "Read Analytics Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Answer Not Supported",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Analytics Rows": {
+      "main": [
+        [
+          {
+            "node": "Execute Query Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Query Plan": {
+      "main": [
+        [
+          {
+            "node": "Get Narrator Prompt (08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Narrator Prompt (08)": {
+      "main": [
+        [
+          {
+            "node": "Narrate Answer (02 Router)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Narrate Answer (02 Router)": {
+      "main": [
+        [
+          {
+            "node": "Verify Answer (09)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Answer (09)": {
+      "main": [
+        [
+          {
+            "node": "Build Analytics Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer Not Supported": {
+      "main": [
+        [
+          {
+            "node": "Build Analytics Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Seed Demo Warehouse": {
+      "main": [
+        [
+          {
+            "node": "Fetch Demo Dataset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Demo Dataset": {
+      "main": [
+        [
+          {
+            "node": "Parse Dataset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Dataset": {
+      "main": [
+        [
+          {
+            "node": "Insert Analytics Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Trigger": {
+      "main": [
+        [
+          {
+            "node": "Demo Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Question": {
+      "main": [
+        [
+          {
+            "node": "Load Metric Registry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "description": "Natural-language analytics over a read-only warehouse. The model never writes SQL: it emits a query spec that is validated against a metric and dimension registry and compiled deterministically, so arbitrary queries are impossible by construction.",
+  "versionCounter": 2,
+  "sourceWorkflowId": null,
+  "nodeGroups": [],
+  "activeVersion": null
+}

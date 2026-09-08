@@ -1,0 +1,2704 @@
+{
+  "name": "06 Financial Document Intelligence Agent",
+  "nodes": [
+    {
+      "id": "547e663b-1bf3-4ff3-9ba2-40be51858de7",
+      "name": "Document Request",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1440,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "document_text",
+              "type": "string"
+            },
+            {
+              "name": "document_ref",
+              "type": "string"
+            },
+            {
+              "name": "extraction_override",
+              "type": "string"
+            },
+            {
+              "name": "confidence_floor",
+              "type": "string"
+            },
+            {
+              "name": "source_workflow",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ebe27c70-1334-4024-b00c-eaae05c3af64",
+      "name": "Normalise Document Request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1220,
+        0
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f1",
+              "name": "document_text",
+              "value": "={{ $json.document_text || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "f2",
+              "name": "document_ref",
+              "value": "={{ $json.document_ref || (\"doc-\" + $execution.id) }}",
+              "type": "string"
+            },
+            {
+              "id": "f3",
+              "name": "extraction_override",
+              "value": "={{ $json.extraction_override || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "f4",
+              "name": "confidence_floor",
+              "value": "={{ Number($json.confidence_floor || 0.7) }}",
+              "type": "number"
+            },
+            {
+              "id": "f5",
+              "name": "source_workflow",
+              "value": "={{ $json.source_workflow || \"unknown\" }}",
+              "type": "string"
+            },
+            {
+              "id": "f6",
+              "name": "has_override",
+              "value": "={{ ($json.extraction_override || \"\").trim().length > 0 }}",
+              "type": "boolean"
+            },
+            {
+              "id": "f7",
+              "name": "started_at_ms",
+              "value": "={{ $now.toMillis() }}",
+              "type": "number"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c6682388-b49b-457a-b1a2-f39809fbbdb3",
+      "name": "Extraction Supplied?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1000,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "o1",
+              "leftValue": "={{ $json.has_override }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "1e7e3c37-d4a8-4d86-9b7d-e82eb4a6dade",
+      "name": "Use Supplied Extraction",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -780,
+        -200
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "u1",
+              "name": "extraction_raw",
+              "value": "={{ $json.extraction_override }}",
+              "type": "string"
+            },
+            {
+              "id": "u2",
+              "name": "extraction_source",
+              "value": "supplied",
+              "type": "string"
+            },
+            {
+              "id": "u3",
+              "name": "model_provider",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "u4",
+              "name": "model_latency_ms",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "u5",
+              "name": "model_cost_usd",
+              "value": 0,
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "notes": "Test-harness path. Lets the reconciliation and exception logic be exercised deterministically without spending a model call or depending on model variance."
+    },
+    {
+      "id": "1e41f771-be6f-469e-8a68-86fc8c201ad0",
+      "name": "Get Extractor Prompt (08)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -780,
+        200
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 08 GitOps Prompt Management"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "prompt_id": "finance/invoice-extractor",
+            "variables": "={{ JSON.stringify({ document_text: $json.document_text, today: $now.toFormat(\"yyyy-MM-dd\") }) }}",
+            "ref": "",
+            "owner": "",
+            "repo": "",
+            "strict": "true",
+            "source_workflow": "06-financial-document-intelligence"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "prompt_id",
+              "displayName": "prompt_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "variables",
+              "displayName": "variables",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "ref",
+              "displayName": "ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "owner",
+              "displayName": "owner",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "repo",
+              "displayName": "repo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "strict",
+              "displayName": "strict",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "9ec0ea89-9301-4ffc-807b-55e8b3c13f59",
+      "name": "Extract Fields (02 Router)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -540,
+        200
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 02 Intelligent Model Router"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "task_type": "extraction",
+            "objective": "balanced",
+            "privacy": "sensitive",
+            "input": "={{ ($json.json ? $json.json.prompt : $json.prompt) || (\"Extract invoice fields as JSON from:\\n\" + $(\"Normalise Document Request\").first().json.document_text) }}",
+            "system_prompt": "You output raw JSON only. No markdown fences, no prose.",
+            "force_provider": "",
+            "source_workflow": "06-financial-document-intelligence",
+            "run_label": "={{ $(\"Normalise Document Request\").first().json.document_ref }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "task_type",
+              "displayName": "task_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "objective",
+              "displayName": "objective",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "privacy",
+              "displayName": "privacy",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "input",
+              "displayName": "input",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "system_prompt",
+              "displayName": "system_prompt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "force_provider",
+              "displayName": "force_provider",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "run_label",
+              "displayName": "run_label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "82e4ff8b-a42a-48fa-a3c1-cbed1683549a",
+      "name": "Capture Model Extraction",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -300,
+        200
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1",
+              "name": "extraction_raw",
+              "value": "={{ ($json.json ? $json.json.output : $json.output) || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "c2",
+              "name": "extraction_source",
+              "value": "model",
+              "type": "string"
+            },
+            {
+              "id": "c3",
+              "name": "model_provider",
+              "value": "={{ ($json.json ? $json.json.selected_provider : $json.selected_provider) || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "c4",
+              "name": "model_latency_ms",
+              "value": "={{ Number(($json.json ? $json.json.latency_ms : $json.latency_ms) || 0) }}",
+              "type": "number"
+            },
+            {
+              "id": "c5",
+              "name": "model_cost_usd",
+              "value": "={{ Number(($json.json ? $json.json.estimated_cost_usd : $json.estimated_cost_usd) || 0) }}",
+              "type": "number"
+            },
+            {
+              "id": "c6",
+              "name": "model_error",
+              "value": "={{ ($json.json ? $json.json.error : $json.error) || \"\" }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d5a73629-428b-4b13-ae8b-438c55f5b0fe",
+      "name": "Validate and Reconcile",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -60,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// Deterministic reconciliation. Everything below is arithmetic and format\n// checking - no model opinion is involved in deciding whether an invoice is sound.\nconst req = $('Normalise Document Request').first().json;\nconst src = $json;\n\nconst exceptions = [];\nfunction ex(code, severity, detail) { exceptions.push({ code: code, severity: severity, detail: detail }); }\n\nfunction num(v) {\n  if (v === null || v === undefined || v === '') { return null; }\n  if (typeof v === 'number') { return isFinite(v) ? v : null; }\n  const cleaned = String(v).replace(/[^0-9.,\\-]/g, '').replace(/,(?=\\d{3}\\b)/g, '').replace(',', '.');\n  const n = Number(cleaned);\n  return isFinite(n) ? n : null;\n}\n\nlet inv = null;\nlet parseError = null;\nconst raw = String(src.extraction_raw || '').replace(/^\\s*```(?:json)?/i, '').replace(/```\\s*$/, '').trim();\nif (!raw) {\n  parseError = src.model_error ? ('extraction step failed: ' + src.model_error) : 'extraction produced no output';\n} else {\n  try { inv = JSON.parse(raw); } catch (e) { parseError = 'extraction is not valid JSON: ' + String(e.message || e); }\n}\nif (parseError) { ex('extraction_failed', 'critical', parseError); }\nif (!inv || typeof inv !== 'object') { inv = {}; }\n\n// ---- Document type ------------------------------------------------------\nconst SUPPORTED = ['invoice', 'credit_note', 'receipt'];\nconst docType = String(inv.document_type || 'invoice').toLowerCase();\nif (SUPPORTED.indexOf(docType) === -1) {\n  ex('unsupported_document_type', 'critical', 'document_type \"' + docType + '\" is not one of ' + SUPPORTED.join(', '));\n}\n\n// ---- Required fields ----------------------------------------------------\nconst REQUIRED = ['invoice_number', 'vendor_name', 'invoice_date', 'currency', 'total'];\nconst missing = REQUIRED.filter(function (f) {\n  const v = inv[f];\n  return v === null || v === undefined || String(v).trim() === '';\n});\nmissing.forEach(function (f) { ex('missing_required_field', 'critical', f); });\n\n// ---- Currency -----------------------------------------------------------\nconst currency = String(inv.currency || '').toUpperCase().trim();\nif (currency && !/^[A-Z]{3}$/.test(currency)) {\n  ex('invalid_currency', 'high', 'currency \"' + inv.currency + '\" is not a three-letter ISO 4217 code');\n}\n\n// ---- Dates --------------------------------------------------------------\nconst ISO = /^\\d{4}-\\d{2}-\\d{2}$/;\nconst invDate = inv.invoice_date ? String(inv.invoice_date) : null;\nconst dueDate = inv.due_date ? String(inv.due_date) : null;\nif (invDate && !ISO.test(invDate)) {\n  ex('invalid_date', 'high', 'invoice_date \"' + invDate + '\" is not ISO YYYY-MM-DD');\n} else if (invDate) {\n  const d = new Date(invDate + 'T00:00:00Z');\n  if (isNaN(d.getTime())) { ex('invalid_date', 'high', 'invoice_date \"' + invDate + '\" is not a real date'); }\n  else if (d.getTime() > Date.now() + 86400000) { ex('future_dated', 'medium', 'invoice_date ' + invDate + ' is in the future'); }\n}\nif (dueDate && ISO.test(dueDate) && invDate && ISO.test(invDate) && dueDate < invDate) {\n  ex('due_before_invoice_date', 'high', 'due_date ' + dueDate + ' precedes invoice_date ' + invDate);\n}\n\n// ---- Arithmetic ---------------------------------------------------------\nconst TOL = 0.02;\nconst subtotal = num(inv.subtotal);\nconst tax = num(inv.tax);\nconst total = num(inv.total);\nconst items = Array.isArray(inv.line_items) ? inv.line_items : [];\n\nlet lineSum = null;\nif (items.length) {\n  let sum = 0;\n  let usable = true;\n  items.forEach(function (li, i) {\n    const amount = num(li.amount);\n    const qty = num(li.quantity);\n    const unit = num(li.unit_price);\n    if (amount !== null) {\n      sum += amount;\n      if (qty !== null && unit !== null && Math.abs(qty * unit - amount) > TOL) {\n        ex('line_item_arithmetic', 'high', 'line ' + (i + 1) + ': quantity ' + qty + ' x unit ' + unit + ' = ' + (qty * unit).toFixed(2) + ' but amount is ' + amount);\n      }\n    } else if (qty !== null && unit !== null) {\n      sum += qty * unit;\n    } else {\n      usable = false;\n    }\n    if (amount !== null && amount < 0 && docType !== 'credit_note') {\n      ex('negative_line_amount', 'high', 'line ' + (i + 1) + ' has a negative amount on a ' + docType);\n    }\n  });\n  lineSum = usable ? Math.round(sum * 100) / 100 : null;\n  if (!usable) { ex('line_items_unparseable', 'medium', 'at least one line item has neither an amount nor quantity and unit price'); }\n}\n\nif (lineSum !== null && subtotal !== null && Math.abs(lineSum - subtotal) > TOL) {\n  ex('line_items_do_not_sum', 'critical', 'line items total ' + lineSum.toFixed(2) + ' but subtotal is ' + subtotal.toFixed(2));\n}\nif (subtotal !== null && tax !== null && total !== null && Math.abs((subtotal + tax) - total) > TOL) {\n  ex('totals_mismatch', 'critical', 'subtotal ' + subtotal.toFixed(2) + ' + tax ' + tax.toFixed(2) + ' = ' + (subtotal + tax).toFixed(2) + ' but total is ' + total.toFixed(2));\n}\nif (total !== null && total < 0 && docType !== 'credit_note') {\n  ex('negative_total', 'high', 'total ' + total + ' is negative on a ' + docType);\n}\nif (tax !== null && subtotal !== null && subtotal > 0) {\n  const rate = tax / subtotal;\n  if (rate > 0.6) { ex('implausible_tax_rate', 'medium', 'implied tax rate is ' + Math.round(rate * 100) + ' percent'); }\n}\n\n// ---- Model confidence ---------------------------------------------------\nconst confidence = typeof inv.confidence === 'number' ? inv.confidence : null;\nconst floor = Number(req.confidence_floor || 0.7);\nif (confidence === null) { ex('confidence_not_reported', 'medium', 'the extractor did not report a confidence value'); }\nelse if (confidence < floor) { ex('low_confidence', 'high', 'reported confidence ' + confidence + ' is below the floor of ' + floor); }\n\n// ---- Fingerprint for duplicate detection --------------------------------\nfunction normKey(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }\nconst fingerprint = [\n  normKey(inv.vendor_name),\n  normKey(inv.invoice_number),\n  currency,\n  total === null ? 'na' : total.toFixed(2)\n].join('|');\n\nconst normalised = {\n  document_type: docType,\n  invoice_number: inv.invoice_number || null,\n  vendor_name: inv.vendor_name || null,\n  customer_name: inv.customer_name || null,\n  invoice_date: invDate,\n  due_date: dueDate,\n  currency: currency || null,\n  line_items: items,\n  line_item_count: items.length,\n  line_item_sum: lineSum,\n  subtotal: subtotal,\n  tax: tax,\n  total: total,\n  payment_terms: inv.payment_terms || null,\n  confidence: confidence,\n  notes: Array.isArray(inv.notes) ? inv.notes : []\n};\n\nreturn {\n  json: {\n    document_ref: req.document_ref,\n    source_workflow: req.source_workflow,\n    started_at_ms: req.started_at_ms,\n    confidence_floor: floor,\n    extraction_source: src.extraction_source,\n    model: { provider: src.model_provider || null, latency_ms: src.model_latency_ms || 0, estimated_cost_usd: src.model_cost_usd || 0 },\n    invoice: normalised,\n    invoice_json: JSON.stringify(normalised),\n    fingerprint: fingerprint,\n    exceptions: exceptions,\n    parse_error: parseError\n  }\n};"
+      }
+    },
+    {
+      "id": "7bea6bf1-d88b-4999-97cd-7da169004cb2",
+      "name": "Check Invoice Ledger",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        180,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATA_TABLE_ID",
+          "cachedResultName": "agentic_invoice_ledger"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "fingerprint",
+              "condition": "eq",
+              "keyValue": "={{ $json.fingerprint }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "445f157b-5d54-4f9a-bf20-90318d9b556c",
+      "name": "Assess Exceptions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Folds the duplicate-ledger lookup into the exception list and computes a\n// system confidence that is independent of what the model claimed about itself.\nconst base = $('Validate and Reconcile').first().json;\nconst rows = $input.all().map(function (i) { return i.json; }).filter(function (r) { return r && r.fingerprint; });\n\nconst exceptions = (base.exceptions || []).slice();\nconst prior = rows[0] || null;\nif (prior) {\n  exceptions.push({\n    code: 'duplicate_invoice', severity: 'critical',\n    detail: 'fingerprint already recorded on ' + (prior.first_seen_at || 'an earlier run') +\n      ' (ledger row ' + prior.id + ', execution ' + (prior.execution_id || 'unknown') + ')'\n  });\n}\n\nconst critical = exceptions.filter(function (e) { return e.severity === 'critical'; });\nconst high = exceptions.filter(function (e) { return e.severity === 'high'; });\nconst medium = exceptions.filter(function (e) { return e.severity === 'medium'; });\n\n// System confidence starts at 1 and is reduced by evidence, never raised by it.\nlet confidence = 1;\nconfidence -= critical.length * 0.5;\nconfidence -= high.length * 0.2;\nconfidence -= medium.length * 0.05;\nconst modelConf = base.invoice && typeof base.invoice.confidence === 'number' ? base.invoice.confidence : null;\nif (modelConf !== null) { confidence = Math.min(confidence, 0.5 + 0.5 * modelConf); }\nconfidence = Math.max(0, Math.round(confidence * 100) / 100);\n\nconst status = critical.length ? 'rejected' : (high.length || medium.length ? 'needs_review' : 'accepted');\n\nreturn [{\n  json: Object.assign({}, base, {\n    exceptions: exceptions,\n    exception_counts: { critical: critical.length, high: high.length, medium: medium.length, total: exceptions.length },\n    is_duplicate: !!prior,\n    duplicate_of: prior ? { ledger_row: prior.id, first_seen_at: prior.first_seen_at, execution_id: prior.execution_id } : null,\n    system_confidence: confidence,\n    status: status,\n    needs_human_review: status !== 'accepted'\n  })\n}];"
+      }
+    },
+    {
+      "id": "966d5968-4668-4326-93bb-0cc2f7ae5e03",
+      "name": "Verify Extraction (09)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 09 AI Output Verification Layer"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ai_output": "={{ $json.invoice_json }}",
+            "sources": "={{ JSON.stringify([{ id: \"DOC\", text: ($(\"Normalise Document Request\").first().json.document_text || \"\").slice(0, 8000) }]) }}",
+            "json_schema": "{\"type\":\"object\",\"required\":[\"invoice_number\",\"vendor_name\",\"currency\",\"total\"],\"properties\":{\"invoice_number\":{\"type\":\"string\",\"minLength\":1},\"vendor_name\":{\"type\":\"string\",\"minLength\":2},\"currency\":{\"type\":\"string\",\"pattern\":\"^[A-Z]{3}$\"},\"total\":{\"type\":\"number\"},\"subtotal\":{\"type\":[\"number\",\"null\"]},\"tax\":{\"type\":[\"number\",\"null\"]},\"confidence\":{\"type\":[\"number\",\"null\"],\"minimum\":0,\"maximum\":1}}}",
+            "required_fields": "invoice_number,vendor_name,currency,total",
+            "business_rules": "[{\"id\":\"totals_add_up\",\"type\":\"sum_equals\",\"fields\":[\"subtotal\",\"tax\"],\"target\":\"total\",\"tolerance\":0.02},{\"id\":\"invoice_number_format\",\"type\":\"regex\",\"field\":\"invoice_number\",\"pattern\":\"^[A-Za-z0-9][A-Za-z0-9._/-]{0,30}$\"}]",
+            "mode": "deterministic_only",
+            "confidence_threshold": "0.8",
+            "source_workflow": "06-financial-document-intelligence"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ai_output",
+              "displayName": "ai_output",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sources",
+              "displayName": "sources",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "json_schema",
+              "displayName": "json_schema",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "required_fields",
+              "displayName": "required_fields",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "business_rules",
+              "displayName": "business_rules",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "mode",
+              "displayName": "mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "confidence_threshold",
+              "displayName": "confidence_threshold",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "80cdbe0a-93ac-4a0a-af46-1f9ec26bf8ef",
+      "name": "Needs Human Review?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        900,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "nr1",
+              "leftValue": "={{ $(\"Assess Exceptions\").first().json.needs_human_review }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "c0f3b785-dd54-4342-b4e3-9be594b81f6d",
+      "name": "Escalate to Governance (05)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1140,
+        -180
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 05 Agent Governance and HITL"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "requesting_workflow": "06-financial-document-intelligence",
+            "proposed_action": "={{ \"Post invoice \" + ($(\"Assess Exceptions\").first().json.invoice.invoice_number || \"unknown\") + \" from \" + ($(\"Assess Exceptions\").first().json.invoice.vendor_name || \"unknown vendor\") + \" despite \" + $(\"Assess Exceptions\").first().json.exception_counts.total + \" exception(s)\" }}",
+            "action_type": "write",
+            "affected_system": "accounts-payable-sandbox",
+            "parameters": "={{ JSON.stringify({ invoice: $(\"Assess Exceptions\").first().json.invoice, exceptions: $(\"Assess Exceptions\").first().json.exceptions }).slice(0, 4000) }}",
+            "agent_reasoning": "={{ \"Reconciliation raised \" + $(\"Assess Exceptions\").first().json.exception_counts.critical + \" critical and \" + $(\"Assess Exceptions\").first().json.exception_counts.high + \" high exceptions. A human must decide whether to post this document.\" }}",
+            "agent_confidence": "={{ String($(\"Assess Exceptions\").first().json.system_confidence) }}",
+            "idempotency_key": "={{ \"invoice-\" + $(\"Assess Exceptions\").first().json.fingerprint }}",
+            "override_token": "",
+            "simulate_decision": "={{ $(\"Normalise Document Request\").first().json.source_workflow.startsWith(\"06-test-suite\") ? \"reject\" : \"\" }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "requesting_workflow",
+              "displayName": "requesting_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "proposed_action",
+              "displayName": "proposed_action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "action_type",
+              "displayName": "action_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "affected_system",
+              "displayName": "affected_system",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "parameters",
+              "displayName": "parameters",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "agent_reasoning",
+              "displayName": "agent_reasoning",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "agent_confidence",
+              "displayName": "agent_confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "idempotency_key",
+              "displayName": "idempotency_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "override_token",
+              "displayName": "override_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "simulate_decision",
+              "displayName": "simulate_decision",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "31f5d462-ea90-459c-b42a-36ddc7fbe8ba",
+      "name": "Clean, No Review Needed",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1140,
+        160
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cr1",
+              "name": "decision",
+              "value": "not_required",
+              "type": "string"
+            },
+            {
+              "id": "cr2",
+              "name": "approved",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "cr3",
+              "name": "risk_level",
+              "value": "LOW",
+              "type": "string"
+            },
+            {
+              "id": "cr4",
+              "name": "decision_reason",
+              "value": "No exceptions were raised, so the document was accepted without human review.",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "091437f7-0e6b-4ae4-8220-fe22855c7126",
+      "name": "Record in Ledger",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        1380,
+        0
+      ],
+      "parameters": {
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATA_TABLE_ID",
+          "cachedResultName": "agentic_invoice_ledger"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "fingerprint": "={{ $(\"Assess Exceptions\").first().json.fingerprint }}",
+            "invoice_number": "={{ $(\"Assess Exceptions\").first().json.invoice.invoice_number }}",
+            "vendor_name": "={{ $(\"Assess Exceptions\").first().json.invoice.vendor_name }}",
+            "invoice_date": "={{ $(\"Assess Exceptions\").first().json.invoice.invoice_date }}",
+            "currency": "={{ $(\"Assess Exceptions\").first().json.invoice.currency }}",
+            "total_amount": "={{ $(\"Assess Exceptions\").first().json.invoice.total }}",
+            "status": "={{ $(\"Assess Exceptions\").first().json.status }}",
+            "confidence": "={{ $(\"Assess Exceptions\").first().json.system_confidence }}",
+            "exceptions_json": "={{ JSON.stringify($(\"Assess Exceptions\").first().json.exceptions).slice(0, 3000) }}",
+            "first_seen_at": "={{ $now.toISO() }}",
+            "execution_id": "={{ $execution.id }}"
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "db833e09-059a-436a-9a4f-302d91b79656",
+      "name": "Build Document Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1620,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const a = $('Assess Exceptions').first().json;\n\nfunction unwrap(n) {\n  try { const v = $(n).first().json; return (v && v.json) ? v.json : v; } catch (e) { return null; }\n}\nconst verification = unwrap('Verify Extraction (09)');\n\nlet governance = null;\ntry { governance = $('Escalate to Governance (05)').first().json; } catch (e) { governance = null; }\nif (governance && governance.json) { governance = governance.json; }\nif (!governance) { try { governance = $('Clean, No Review Needed').first().json; } catch (e) { governance = null; } }\n\nreturn [{\n  json: {\n    document_ref: a.document_ref,\n    n8n_execution_id: $execution.id,\n    status: a.status,\n    accepted: a.status === 'accepted',\n    system_confidence: a.system_confidence,\n    invoice: a.invoice,\n    fingerprint: a.fingerprint,\n    is_duplicate: a.is_duplicate,\n    duplicate_of: a.duplicate_of,\n    exceptions: a.exceptions,\n    exception_counts: a.exception_counts,\n    extraction_source: a.extraction_source,\n    model: a.model,\n    verification: verification ? { verified: verification.verified, score: verification.score, issues: verification.issues } : null,\n    review: governance ? { decision: governance.decision, approved: !!governance.approved, risk_level: governance.risk_level, reason: governance.decision_reason } : null,\n    latency_ms: a.started_at_ms ? (Date.now() - Number(a.started_at_ms)) : null\n  }\n}];"
+      }
+    },
+    {
+      "id": "bb5040c2-d648-4caf-8dd8-fc33d3b59659",
+      "name": "Sticky Note b0538aad",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {
+        "content": "## 06 Financial Document Intelligence\n\nDocument text in, a reconciled and audited invoice record out.\n\nExtraction can come from the Model Router (using the Git-versioned `finance/invoice-extractor` prompt) or be supplied directly, which lets the reconciliation logic be tested without model variance.",
+        "color": 4,
+        "width": 440,
+        "height": 240
+      }
+    },
+    {
+      "id": "08ae203f-8ca2-4745-860a-3550f4727776",
+      "name": "Sticky Note 148baec4",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        640
+      ],
+      "parameters": {
+        "content": "## The model is never asked whether the invoice adds up\n\nLine items are summed and compared to the subtotal; subtotal plus tax is compared to the total; quantity times unit price is compared to each line amount — all to a 0.02 tolerance. Dates are range-checked, the currency must be ISO 4217, and an implied tax rate above 60 percent is flagged.\n\nThe prompt deliberately tells the extractor **not** to correct a wrong printed total. Silently fixing it would hide exactly the discrepancy this workflow exists to find.",
+        "color": 6,
+        "width": 480,
+        "height": 300
+      }
+    },
+    {
+      "id": "0d33f738-d16d-435c-8f55-1e244e3ab6cc",
+      "name": "Sticky Note 29ef7b3a",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        1040
+      ],
+      "parameters": {
+        "content": "## Duplicates and escalation\n\nA fingerprint of `vendor | invoice number | currency | total` is checked against the ledger data table before anything is accepted, so the same invoice submitted twice is caught even when the file name and document reference differ.\n\nSystem confidence starts at 1.0 and is only ever reduced by evidence. Any exception routes the document to Governance rather than posting it.",
+        "color": 3,
+        "width": 460,
+        "height": 260
+      }
+    },
+    {
+      "id": "7a8820dc-4cf0-4ea9-b832-a0037fc3f659",
+      "name": "Test Suite Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1440,
+        700
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "6d98200f-aa31-4223-b6fa-6039885cc7ca",
+      "name": "Build Invoice Fixtures",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1220,
+        700
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Invoice fixtures. Every vendor, number and amount below is invented; no real\n// financial or customer data appears anywhere in this repository.\n//\n// Most cases supply extraction_override so the reconciliation logic is exercised\n// deterministically, without model variance. I12 goes through the real model path.\n//\n// The vendor name is scoped to this execution so that I01 inserts a fresh ledger\n// row and I07 duplicates it, without colliding with rows left by earlier runs.\nconst RUN = 'R' + $execution.id;\nconst VENDOR = 'Northwind Traders ' + RUN;\n\nfunction inv(o) {\n  return JSON.stringify(Object.assign({\n    document_type: 'invoice',\n    invoice_number: 'INV-1000',\n    vendor_name: VENDOR,\n    customer_name: 'Acme Supplies Pty Ltd',\n    invoice_date: '2026-08-14',\n    due_date: '2026-09-13',\n    currency: 'EUR',\n    line_items: [{ description: 'Widget A', quantity: 10, unit_price: 80, amount: 800 }, { description: 'Widget B', quantity: 4, unit_price: 50, amount: 200 }],\n    subtotal: 1000,\n    tax: 240.5,\n    total: 1240.5,\n    payment_terms: 'Net 30',\n    confidence: 0.94,\n    notes: []\n  }, o));\n}\n\nconst F = [\n  { case_id: 'I01-clean-invoice', expect_status: 'accepted', expect_codes: [],\n    extraction_override: inv({}) },\n  { case_id: 'I02-totals-mismatch', expect_status: 'rejected', expect_codes: ['totals_mismatch'],\n    extraction_override: inv({ invoice_number: 'INV-1002', total: 1300 }) },\n  { case_id: 'I03-missing-vendor', expect_status: 'rejected', expect_codes: ['missing_required_field'],\n    extraction_override: inv({ invoice_number: 'INV-1003', vendor_name: null }) },\n  { case_id: 'I04-line-items-do-not-sum', expect_status: 'rejected', expect_codes: ['line_items_do_not_sum'],\n    extraction_override: inv({ invoice_number: 'INV-1004', line_items: [{ description: 'Widget A', quantity: 10, unit_price: 80, amount: 800 }] }) },\n  { case_id: 'I05-low-confidence', expect_status: 'needs_review', expect_codes: ['low_confidence'],\n    extraction_override: inv({ invoice_number: 'INV-1005', confidence: 0.42 }) },\n  { case_id: 'I06-unsupported-document-type', expect_status: 'rejected', expect_codes: ['unsupported_document_type'],\n    extraction_override: inv({ invoice_number: 'INV-1006', document_type: 'contract' }) },\n  { case_id: 'I07-duplicate-of-I01', expect_status: 'rejected', expect_codes: ['duplicate_invoice'],\n    extraction_override: inv({}) },\n  { case_id: 'I08-malformed-extraction', expect_status: 'rejected', expect_codes: ['extraction_failed'],\n    extraction_override: '{\"invoice_number\": \"INV-1008\", \"total\": ' },\n  { case_id: 'I09-invalid-date', expect_status: 'needs_review', expect_codes: ['invalid_date'],\n    extraction_override: inv({ invoice_number: 'INV-1009', invoice_date: '13/45/2026', due_date: null }) },\n  { case_id: 'I10-invalid-currency', expect_status: 'needs_review', expect_codes: ['invalid_currency'],\n    extraction_override: inv({ invoice_number: 'INV-1010', currency: 'EURO' }) },\n  { case_id: 'I11-future-dated', expect_status: 'needs_review', expect_codes: ['future_dated'],\n    extraction_override: inv({ invoice_number: 'INV-1011', invoice_date: '2099-01-01', due_date: null }) },\n  { case_id: 'I12-real-model-extraction', expect_status: null, expect_codes: [], expect_model_path: true,\n    extraction_override: '',\n    document_text: 'INVOICE\\n\\nAcme Supplies Pty Ltd\\n17 Harbour Road, Adelaide SA 5000\\n\\nInvoice number: INV-7781\\nInvoice date: 2026-08-02\\nDue date: 2026-09-01\\nVendor: Blue Harbour Logistics ' + RUN + '\\n\\nDescription                Qty   Unit price   Amount\\nPallet freight             3     120.00       360.00\\nHandling surcharge         1      45.00        45.00\\n\\nSubtotal        405.00\\nGST 10%          40.50\\nTotal EUR       445.50\\n\\nPayment terms: Net 30' }\n];\n\nreturn F.map(function (f) {\n  return { json: {\n    case_id: f.case_id,\n    expect_status: f.expect_status,\n    expect_codes: f.expect_codes || [],\n    expect_model_path: !!f.expect_model_path,\n    document_text: f.document_text || ('Fixture ' + f.case_id + ' supplies a pre-parsed extraction, so no document text is needed.'),\n    document_ref: 'test-' + $execution.id + '-' + f.case_id,\n    extraction_override: f.extraction_override,\n    confidence_floor: '0.7',\n    source_workflow: '06-test-suite::' + f.case_id\n  } };\n});"
+      }
+    },
+    {
+      "id": "1571428f-f898-4755-9053-54c2ae13d7c4",
+      "name": "Invoice Fixture Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1000,
+        700
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "21bbbe0c-eaca-4364-bda6-ca0b1936e239",
+      "name": "Run Invoice Fixture",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -760,
+        840
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "06 Financial Document Intelligence Agent"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "document_text": "={{ $json.document_text }}",
+            "document_ref": "={{ $json.document_ref }}",
+            "extraction_override": "={{ $json.extraction_override }}",
+            "confidence_floor": "={{ $json.confidence_floor }}",
+            "source_workflow": "={{ $json.source_workflow }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "document_text",
+              "displayName": "document_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "document_ref",
+              "displayName": "document_ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "extraction_override",
+              "displayName": "extraction_override",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "confidence_floor",
+              "displayName": "confidence_floor",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "f12c15bb-835d-4667-83e6-88ba47ba5a33",
+      "name": "Slim Invoice Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -520,
+        840
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const r = ($json && $json.json) ? $json.json : $json;\nreturn { json: {\n  document_ref: r.document_ref,\n  status: r.status,\n  accepted: r.accepted,\n  system_confidence: r.system_confidence,\n  codes: (r.exceptions || []).map(function (e) { return e.code; }),\n  exception_details: (r.exceptions || []).map(function (e) { return e.code + ': ' + e.detail; }).slice(0, 4),\n  is_duplicate: r.is_duplicate,\n  extraction_source: r.extraction_source,\n  invoice_number: r.invoice ? r.invoice.invoice_number : null,\n  total: r.invoice ? r.invoice.total : null,\n  verification_verified: r.verification ? r.verification.verified : null,\n  review_decision: r.review ? r.review.decision : null,\n  model_provider: r.model ? r.model.provider : null,\n  latency_ms: r.latency_ms\n} };"
+      }
+    },
+    {
+      "id": "a311569e-51d4-4108-bf9a-2cf97276f3ac",
+      "name": "Assert Invoice Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -760,
+        560
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const fixtures = $('Build Invoice Fixtures').all().map(function (i) { return i.json; });\nconst results = $input.all().map(function (i) { return i.json; });\n\nconst rows = results.map(function (r, idx) {\n  const fx = fixtures[idx] || {};\n  const fails = [];\n  if (fx.expect_status && r.status !== fx.expect_status) {\n    fails.push('expected status ' + fx.expect_status + ' but got ' + r.status);\n  }\n  (fx.expect_codes || []).forEach(function (c) {\n    if ((r.codes || []).indexOf(c) === -1) { fails.push('expected exception code ' + c + ' was not raised'); }\n  });\n  if (fx.expect_model_path) {\n    if (r.extraction_source !== 'model') { fails.push('expected the real model extraction path, got ' + r.extraction_source); }\n    if (!r.invoice_number) { fails.push('model extraction produced no invoice_number'); }\n  }\n  return {\n    case_id: fx.case_id, pass: fails.length === 0,\n    expected_status: fx.expect_status, actual_status: r.status,\n    expected_codes: fx.expect_codes, actual_codes: r.codes,\n    system_confidence: r.system_confidence,\n    invoice_number: r.invoice_number, total: r.total,\n    extraction_source: r.extraction_source, model_provider: r.model_provider,\n    verification_verified: r.verification_verified, review_decision: r.review_decision,\n    exception_details: r.exception_details,\n    fail_reasons: fails, latency_ms_measured: r.latency_ms\n  };\n});\n\nconst passed = rows.filter(function (r) { return r.pass; }).length;\nconst deterministic = rows.filter(function (r) { return r.extraction_source === 'supplied'; });\nconst lats = deterministic.map(function (r) { return r.latency_ms_measured; }).filter(function (v) { return typeof v === 'number'; }).sort(function (a, b) { return a - b; });\nconst modelRuns = rows.filter(function (r) { return r.extraction_source === 'model'; });\n\nreturn [{ json: {\n  suite: 'invoice-fixtures-v1', generated_at: new Date().toISOString(), n8n_execution_id: $execution.id,\n  note: 'Eleven cases supply a pre-parsed extraction so the reconciliation, duplicate and exception logic is exercised without model variance. I12 runs the real extraction path through the Model Router. All vendor names, invoice numbers and amounts are invented.',\n  total: rows.length, passed: passed, failed: rows.length - passed, all_passed: passed === rows.length,\n  deterministic_latency_ms_p50_measured: lats.length ? lats[Math.max(0, Math.ceil(0.5 * lats.length) - 1)] : null,\n  deterministic_latency_ms_max_measured: lats.length ? lats[lats.length - 1] : null,\n  model_path_latency_ms_measured: modelRuns.length ? modelRuns[0].latency_ms_measured : null,\n  cases: rows\n} }];"
+      }
+    }
+  ],
+  "connections": {
+    "Document Request": {
+      "main": [
+        [
+          {
+            "node": "Normalise Document Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise Document Request": {
+      "main": [
+        [
+          {
+            "node": "Extraction Supplied?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraction Supplied?": {
+      "main": [
+        [
+          {
+            "node": "Use Supplied Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Extractor Prompt (08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Supplied Extraction": {
+      "main": [
+        [
+          {
+            "node": "Validate and Reconcile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Extractor Prompt (08)": {
+      "main": [
+        [
+          {
+            "node": "Extract Fields (02 Router)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Fields (02 Router)": {
+      "main": [
+        [
+          {
+            "node": "Capture Model Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Model Extraction": {
+      "main": [
+        [
+          {
+            "node": "Validate and Reconcile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and Reconcile": {
+      "main": [
+        [
+          {
+            "node": "Check Invoice Ledger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Invoice Ledger": {
+      "main": [
+        [
+          {
+            "node": "Assess Exceptions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assess Exceptions": {
+      "main": [
+        [
+          {
+            "node": "Verify Extraction (09)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Extraction (09)": {
+      "main": [
+        [
+          {
+            "node": "Needs Human Review?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Human Review?": {
+      "main": [
+        [
+          {
+            "node": "Escalate to Governance (05)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Clean, No Review Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalate to Governance (05)": {
+      "main": [
+        [
+          {
+            "node": "Record in Ledger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean, No Review Needed": {
+      "main": [
+        [
+          {
+            "node": "Record in Ledger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record in Ledger": {
+      "main": [
+        [
+          {
+            "node": "Build Document Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Suite Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build Invoice Fixtures",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Invoice Fixtures": {
+      "main": [
+        [
+          {
+            "node": "Invoice Fixture Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice Fixture Loop": {
+      "main": [
+        [
+          {
+            "node": "Assert Invoice Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run Invoice Fixture",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Invoice Fixture": {
+      "main": [
+        [
+          {
+            "node": "Slim Invoice Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slim Invoice Result": {
+      "main": [
+        [
+          {
+            "node": "Invoice Fixture Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "description": "Invoice extraction with arithmetic reconciliation, duplicate fingerprinting against a ledger, an explicit exception taxonomy, verification and human escalation. Never asserts a document is clean without deterministic proof.",
+  "versionCounter": 2,
+  "sourceWorkflowId": null,
+  "nodeGroups": [],
+  "activeVersion": {
+    "versionId": "e7483cf4-0ea8-4869-bd42-5023cd7d249a",
+    "workflowId": "1msPTQimtesoxhmm",
+    "nodes": [
+      {
+        "id": "547e663b-1bf3-4ff3-9ba2-40be51858de7",
+        "name": "Document Request",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -1440,
+          0
+        ],
+        "parameters": {
+          "inputSource": "workflowInputs",
+          "workflowInputs": {
+            "values": [
+              {
+                "name": "document_text",
+                "type": "string"
+              },
+              {
+                "name": "document_ref",
+                "type": "string"
+              },
+              {
+                "name": "extraction_override",
+                "type": "string"
+              },
+              {
+                "name": "confidence_floor",
+                "type": "string"
+              },
+              {
+                "name": "source_workflow",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "ebe27c70-1334-4024-b00c-eaae05c3af64",
+        "name": "Normalise Document Request",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          -1220,
+          0
+        ],
+        "parameters": {
+          "mode": "manual",
+          "includeOtherFields": false,
+          "assignments": {
+            "assignments": [
+              {
+                "id": "f1",
+                "name": "document_text",
+                "value": "={{ $json.document_text || \"\" }}",
+                "type": "string"
+              },
+              {
+                "id": "f2",
+                "name": "document_ref",
+                "value": "={{ $json.document_ref || (\"doc-\" + $execution.id) }}",
+                "type": "string"
+              },
+              {
+                "id": "f3",
+                "name": "extraction_override",
+                "value": "={{ $json.extraction_override || \"\" }}",
+                "type": "string"
+              },
+              {
+                "id": "f4",
+                "name": "confidence_floor",
+                "value": "={{ Number($json.confidence_floor || 0.7) }}",
+                "type": "number"
+              },
+              {
+                "id": "f5",
+                "name": "source_workflow",
+                "value": "={{ $json.source_workflow || \"unknown\" }}",
+                "type": "string"
+              },
+              {
+                "id": "f6",
+                "name": "has_override",
+                "value": "={{ ($json.extraction_override || \"\").trim().length > 0 }}",
+                "type": "boolean"
+              },
+              {
+                "id": "f7",
+                "name": "started_at_ms",
+                "value": "={{ $now.toMillis() }}",
+                "type": "number"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "c6682388-b49b-457a-b1a2-f39809fbbdb3",
+        "name": "Extraction Supplied?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          -1000,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "o1",
+                "leftValue": "={{ $json.has_override }}",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        }
+      },
+      {
+        "id": "1e7e3c37-d4a8-4d86-9b7d-e82eb4a6dade",
+        "name": "Use Supplied Extraction",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          -780,
+          -200
+        ],
+        "parameters": {
+          "mode": "manual",
+          "includeOtherFields": false,
+          "assignments": {
+            "assignments": [
+              {
+                "id": "u1",
+                "name": "extraction_raw",
+                "value": "={{ $json.extraction_override }}",
+                "type": "string"
+              },
+              {
+                "id": "u2",
+                "name": "extraction_source",
+                "value": "supplied",
+                "type": "string"
+              },
+              {
+                "id": "u3",
+                "name": "model_provider",
+                "value": "",
+                "type": "string"
+              },
+              {
+                "id": "u4",
+                "name": "model_latency_ms",
+                "value": 0,
+                "type": "number"
+              },
+              {
+                "id": "u5",
+                "name": "model_cost_usd",
+                "value": 0,
+                "type": "number"
+              }
+            ]
+          }
+        },
+        "notes": "Test-harness path. Lets the reconciliation and exception logic be exercised deterministically without spending a model call or depending on model variance."
+      },
+      {
+        "id": "1e41f771-be6f-469e-8a68-86fc8c201ad0",
+        "name": "Get Extractor Prompt (08)",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          -780,
+          200
+        ],
+        "parameters": {
+          "mode": "once",
+          "source": "database",
+          "workflowId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "aYVpA31jgNL0shma",
+            "cachedResultName": "[Platform] 08 GitOps Prompt Management"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "prompt_id": "finance/invoice-extractor",
+              "variables": "={{ JSON.stringify({ document_text: $json.document_text, today: $now.toFormat(\"yyyy-MM-dd\") }) }}",
+              "ref": "",
+              "owner": "",
+              "repo": "",
+              "strict": "true",
+              "source_workflow": "06-financial-document-intelligence"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "prompt_id",
+                "displayName": "prompt_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "variables",
+                "displayName": "variables",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "ref",
+                "displayName": "ref",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "owner",
+                "displayName": "owner",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "repo",
+                "displayName": "repo",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "strict",
+                "displayName": "strict",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "source_workflow",
+                "displayName": "source_workflow",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "9ec0ea89-9301-4ffc-807b-55e8b3c13f59",
+        "name": "Extract Fields (02 Router)",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          -540,
+          200
+        ],
+        "parameters": {
+          "mode": "once",
+          "source": "database",
+          "workflowId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "CICW1oBcK0DYWvUc",
+            "cachedResultName": "[Platform] 02 Intelligent Model Router"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "task_type": "extraction",
+              "objective": "balanced",
+              "privacy": "sensitive",
+              "input": "={{ ($json.json ? $json.json.prompt : $json.prompt) || (\"Extract invoice fields as JSON from:\\n\" + $(\"Normalise Document Request\").first().json.document_text) }}",
+              "system_prompt": "You output raw JSON only. No markdown fences, no prose.",
+              "force_provider": "",
+              "source_workflow": "06-financial-document-intelligence",
+              "run_label": "={{ $(\"Normalise Document Request\").first().json.document_ref }}"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "task_type",
+                "displayName": "task_type",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "objective",
+                "displayName": "objective",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "privacy",
+                "displayName": "privacy",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "input",
+                "displayName": "input",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "system_prompt",
+                "displayName": "system_prompt",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "force_provider",
+                "displayName": "force_provider",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "source_workflow",
+                "displayName": "source_workflow",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "run_label",
+                "displayName": "run_label",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 3000,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "82e4ff8b-a42a-48fa-a3c1-cbed1683549a",
+        "name": "Capture Model Extraction",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          -300,
+          200
+        ],
+        "parameters": {
+          "mode": "manual",
+          "includeOtherFields": false,
+          "assignments": {
+            "assignments": [
+              {
+                "id": "c1",
+                "name": "extraction_raw",
+                "value": "={{ ($json.json ? $json.json.output : $json.output) || \"\" }}",
+                "type": "string"
+              },
+              {
+                "id": "c2",
+                "name": "extraction_source",
+                "value": "model",
+                "type": "string"
+              },
+              {
+                "id": "c3",
+                "name": "model_provider",
+                "value": "={{ ($json.json ? $json.json.selected_provider : $json.selected_provider) || \"\" }}",
+                "type": "string"
+              },
+              {
+                "id": "c4",
+                "name": "model_latency_ms",
+                "value": "={{ Number(($json.json ? $json.json.latency_ms : $json.latency_ms) || 0) }}",
+                "type": "number"
+              },
+              {
+                "id": "c5",
+                "name": "model_cost_usd",
+                "value": "={{ Number(($json.json ? $json.json.estimated_cost_usd : $json.estimated_cost_usd) || 0) }}",
+                "type": "number"
+              },
+              {
+                "id": "c6",
+                "name": "model_error",
+                "value": "={{ ($json.json ? $json.json.error : $json.error) || \"\" }}",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "d5a73629-428b-4b13-ae8b-438c55f5b0fe",
+        "name": "Validate and Reconcile",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -60,
+          0
+        ],
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "language": "javaScript",
+          "jsCode": "// Deterministic reconciliation. Everything below is arithmetic and format\n// checking - no model opinion is involved in deciding whether an invoice is sound.\nconst req = $('Normalise Document Request').first().json;\nconst src = $json;\n\nconst exceptions = [];\nfunction ex(code, severity, detail) { exceptions.push({ code: code, severity: severity, detail: detail }); }\n\nfunction num(v) {\n  if (v === null || v === undefined || v === '') { return null; }\n  if (typeof v === 'number') { return isFinite(v) ? v : null; }\n  const cleaned = String(v).replace(/[^0-9.,\\-]/g, '').replace(/,(?=\\d{3}\\b)/g, '').replace(',', '.');\n  const n = Number(cleaned);\n  return isFinite(n) ? n : null;\n}\n\nlet inv = null;\nlet parseError = null;\nconst raw = String(src.extraction_raw || '').replace(/^\\s*```(?:json)?/i, '').replace(/```\\s*$/, '').trim();\nif (!raw) {\n  parseError = src.model_error ? ('extraction step failed: ' + src.model_error) : 'extraction produced no output';\n} else {\n  try { inv = JSON.parse(raw); } catch (e) { parseError = 'extraction is not valid JSON: ' + String(e.message || e); }\n}\nif (parseError) { ex('extraction_failed', 'critical', parseError); }\nif (!inv || typeof inv !== 'object') { inv = {}; }\n\n// ---- Document type ------------------------------------------------------\nconst SUPPORTED = ['invoice', 'credit_note', 'receipt'];\nconst docType = String(inv.document_type || 'invoice').toLowerCase();\nif (SUPPORTED.indexOf(docType) === -1) {\n  ex('unsupported_document_type', 'critical', 'document_type \"' + docType + '\" is not one of ' + SUPPORTED.join(', '));\n}\n\n// ---- Required fields ----------------------------------------------------\nconst REQUIRED = ['invoice_number', 'vendor_name', 'invoice_date', 'currency', 'total'];\nconst missing = REQUIRED.filter(function (f) {\n  const v = inv[f];\n  return v === null || v === undefined || String(v).trim() === '';\n});\nmissing.forEach(function (f) { ex('missing_required_field', 'critical', f); });\n\n// ---- Currency -----------------------------------------------------------\nconst currency = String(inv.currency || '').toUpperCase().trim();\nif (currency && !/^[A-Z]{3}$/.test(currency)) {\n  ex('invalid_currency', 'high', 'currency \"' + inv.currency + '\" is not a three-letter ISO 4217 code');\n}\n\n// ---- Dates --------------------------------------------------------------\nconst ISO = /^\\d{4}-\\d{2}-\\d{2}$/;\nconst invDate = inv.invoice_date ? String(inv.invoice_date) : null;\nconst dueDate = inv.due_date ? String(inv.due_date) : null;\nif (invDate && !ISO.test(invDate)) {\n  ex('invalid_date', 'high', 'invoice_date \"' + invDate + '\" is not ISO YYYY-MM-DD');\n} else if (invDate) {\n  const d = new Date(invDate + 'T00:00:00Z');\n  if (isNaN(d.getTime())) { ex('invalid_date', 'high', 'invoice_date \"' + invDate + '\" is not a real date'); }\n  else if (d.getTime() > Date.now() + 86400000) { ex('future_dated', 'medium', 'invoice_date ' + invDate + ' is in the future'); }\n}\nif (dueDate && ISO.test(dueDate) && invDate && ISO.test(invDate) && dueDate < invDate) {\n  ex('due_before_invoice_date', 'high', 'due_date ' + dueDate + ' precedes invoice_date ' + invDate);\n}\n\n// ---- Arithmetic ---------------------------------------------------------\nconst TOL = 0.02;\nconst subtotal = num(inv.subtotal);\nconst tax = num(inv.tax);\nconst total = num(inv.total);\nconst items = Array.isArray(inv.line_items) ? inv.line_items : [];\n\nlet lineSum = null;\nif (items.length) {\n  let sum = 0;\n  let usable = true;\n  items.forEach(function (li, i) {\n    const amount = num(li.amount);\n    const qty = num(li.quantity);\n    const unit = num(li.unit_price);\n    if (amount !== null) {\n      sum += amount;\n      if (qty !== null && unit !== null && Math.abs(qty * unit - amount) > TOL) {\n        ex('line_item_arithmetic', 'high', 'line ' + (i + 1) + ': quantity ' + qty + ' x unit ' + unit + ' = ' + (qty * unit).toFixed(2) + ' but amount is ' + amount);\n      }\n    } else if (qty !== null && unit !== null) {\n      sum += qty * unit;\n    } else {\n      usable = false;\n    }\n    if (amount !== null && amount < 0 && docType !== 'credit_note') {\n      ex('negative_line_amount', 'high', 'line ' + (i + 1) + ' has a negative amount on a ' + docType);\n    }\n  });\n  lineSum = usable ? Math.round(sum * 100) / 100 : null;\n  if (!usable) { ex('line_items_unparseable', 'medium', 'at least one line item has neither an amount nor quantity and unit price'); }\n}\n\nif (lineSum !== null && subtotal !== null && Math.abs(lineSum - subtotal) > TOL) {\n  ex('line_items_do_not_sum', 'critical', 'line items total ' + lineSum.toFixed(2) + ' but subtotal is ' + subtotal.toFixed(2));\n}\nif (subtotal !== null && tax !== null && total !== null && Math.abs((subtotal + tax) - total) > TOL) {\n  ex('totals_mismatch', 'critical', 'subtotal ' + subtotal.toFixed(2) + ' + tax ' + tax.toFixed(2) + ' = ' + (subtotal + tax).toFixed(2) + ' but total is ' + total.toFixed(2));\n}\nif (total !== null && total < 0 && docType !== 'credit_note') {\n  ex('negative_total', 'high', 'total ' + total + ' is negative on a ' + docType);\n}\nif (tax !== null && subtotal !== null && subtotal > 0) {\n  const rate = tax / subtotal;\n  if (rate > 0.6) { ex('implausible_tax_rate', 'medium', 'implied tax rate is ' + Math.round(rate * 100) + ' percent'); }\n}\n\n// ---- Model confidence ---------------------------------------------------\nconst confidence = typeof inv.confidence === 'number' ? inv.confidence : null;\nconst floor = Number(req.confidence_floor || 0.7);\nif (confidence === null) { ex('confidence_not_reported', 'medium', 'the extractor did not report a confidence value'); }\nelse if (confidence < floor) { ex('low_confidence', 'high', 'reported confidence ' + confidence + ' is below the floor of ' + floor); }\n\n// ---- Fingerprint for duplicate detection --------------------------------\nfunction normKey(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }\nconst fingerprint = [\n  normKey(inv.vendor_name),\n  normKey(inv.invoice_number),\n  currency,\n  total === null ? 'na' : total.toFixed(2)\n].join('|');\n\nconst normalised = {\n  document_type: docType,\n  invoice_number: inv.invoice_number || null,\n  vendor_name: inv.vendor_name || null,\n  customer_name: inv.customer_name || null,\n  invoice_date: invDate,\n  due_date: dueDate,\n  currency: currency || null,\n  line_items: items,\n  line_item_count: items.length,\n  line_item_sum: lineSum,\n  subtotal: subtotal,\n  tax: tax,\n  total: total,\n  payment_terms: inv.payment_terms || null,\n  confidence: confidence,\n  notes: Array.isArray(inv.notes) ? inv.notes : []\n};\n\nreturn {\n  json: {\n    document_ref: req.document_ref,\n    source_workflow: req.source_workflow,\n    started_at_ms: req.started_at_ms,\n    confidence_floor: floor,\n    extraction_source: src.extraction_source,\n    model: { provider: src.model_provider || null, latency_ms: src.model_latency_ms || 0, estimated_cost_usd: src.model_cost_usd || 0 },\n    invoice: normalised,\n    invoice_json: JSON.stringify(normalised),\n    fingerprint: fingerprint,\n    exceptions: exceptions,\n    parse_error: parseError\n  }\n};"
+        }
+      },
+      {
+        "id": "7bea6bf1-d88b-4999-97cd-7da169004cb2",
+        "name": "Check Invoice Ledger",
+        "type": "n8n-nodes-base.dataTable",
+        "typeVersion": 1,
+        "position": [
+          180,
+          0
+        ],
+        "parameters": {
+          "resource": "row",
+          "operation": "get",
+          "dataTableId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "VPK0D0xm7cz5mf2H",
+            "cachedResultName": "agentic_invoice_ledger"
+          },
+          "matchType": "allConditions",
+          "filters": {
+            "conditions": [
+              {
+                "keyName": "fingerprint",
+                "condition": "eq",
+                "keyValue": "={{ $json.fingerprint }}"
+              }
+            ]
+          },
+          "returnAll": false,
+          "limit": 1
+        },
+        "alwaysOutputData": true,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "445f157b-5d54-4f9a-bf20-90318d9b556c",
+        "name": "Assess Exceptions",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          420,
+          0
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "javaScript",
+          "jsCode": "// Folds the duplicate-ledger lookup into the exception list and computes a\n// system confidence that is independent of what the model claimed about itself.\nconst base = $('Validate and Reconcile').first().json;\nconst rows = $input.all().map(function (i) { return i.json; }).filter(function (r) { return r && r.fingerprint; });\n\nconst exceptions = (base.exceptions || []).slice();\nconst prior = rows[0] || null;\nif (prior) {\n  exceptions.push({\n    code: 'duplicate_invoice', severity: 'critical',\n    detail: 'fingerprint already recorded on ' + (prior.first_seen_at || 'an earlier run') +\n      ' (ledger row ' + prior.id + ', execution ' + (prior.execution_id || 'unknown') + ')'\n  });\n}\n\nconst critical = exceptions.filter(function (e) { return e.severity === 'critical'; });\nconst high = exceptions.filter(function (e) { return e.severity === 'high'; });\nconst medium = exceptions.filter(function (e) { return e.severity === 'medium'; });\n\n// System confidence starts at 1 and is reduced by evidence, never raised by it.\nlet confidence = 1;\nconfidence -= critical.length * 0.5;\nconfidence -= high.length * 0.2;\nconfidence -= medium.length * 0.05;\nconst modelConf = base.invoice && typeof base.invoice.confidence === 'number' ? base.invoice.confidence : null;\nif (modelConf !== null) { confidence = Math.min(confidence, 0.5 + 0.5 * modelConf); }\nconfidence = Math.max(0, Math.round(confidence * 100) / 100);\n\nconst status = critical.length ? 'rejected' : (high.length || medium.length ? 'needs_review' : 'accepted');\n\nreturn [{\n  json: Object.assign({}, base, {\n    exceptions: exceptions,\n    exception_counts: { critical: critical.length, high: high.length, medium: medium.length, total: exceptions.length },\n    is_duplicate: !!prior,\n    duplicate_of: prior ? { ledger_row: prior.id, first_seen_at: prior.first_seen_at, execution_id: prior.execution_id } : null,\n    system_confidence: confidence,\n    status: status,\n    needs_human_review: status !== 'accepted'\n  })\n}];"
+        }
+      },
+      {
+        "id": "966d5968-4668-4326-93bb-0cc2f7ae5e03",
+        "name": "Verify Extraction (09)",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          660,
+          0
+        ],
+        "parameters": {
+          "mode": "once",
+          "source": "database",
+          "workflowId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "vCn6THeEhjhhhxsy",
+            "cachedResultName": "[Platform] 09 AI Output Verification Layer"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "ai_output": "={{ $json.invoice_json }}",
+              "sources": "={{ JSON.stringify([{ id: \"DOC\", text: ($(\"Normalise Document Request\").first().json.document_text || \"\").slice(0, 8000) }]) }}",
+              "json_schema": "{\"type\":\"object\",\"required\":[\"invoice_number\",\"vendor_name\",\"currency\",\"total\"],\"properties\":{\"invoice_number\":{\"type\":\"string\",\"minLength\":1},\"vendor_name\":{\"type\":\"string\",\"minLength\":2},\"currency\":{\"type\":\"string\",\"pattern\":\"^[A-Z]{3}$\"},\"total\":{\"type\":\"number\"},\"subtotal\":{\"type\":[\"number\",\"null\"]},\"tax\":{\"type\":[\"number\",\"null\"]},\"confidence\":{\"type\":[\"number\",\"null\"],\"minimum\":0,\"maximum\":1}}}",
+              "required_fields": "invoice_number,vendor_name,currency,total",
+              "business_rules": "[{\"id\":\"totals_add_up\",\"type\":\"sum_equals\",\"fields\":[\"subtotal\",\"tax\"],\"target\":\"total\",\"tolerance\":0.02},{\"id\":\"invoice_number_format\",\"type\":\"regex\",\"field\":\"invoice_number\",\"pattern\":\"^[A-Za-z0-9][A-Za-z0-9._/-]{0,30}$\"}]",
+              "mode": "deterministic_only",
+              "confidence_threshold": "0.8",
+              "source_workflow": "06-financial-document-intelligence"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "ai_output",
+                "displayName": "ai_output",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "sources",
+                "displayName": "sources",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "json_schema",
+                "displayName": "json_schema",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "required_fields",
+                "displayName": "required_fields",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "business_rules",
+                "displayName": "business_rules",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "mode",
+                "displayName": "mode",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "confidence_threshold",
+                "displayName": "confidence_threshold",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "source_workflow",
+                "displayName": "source_workflow",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "80cdbe0a-93ac-4a0a-af46-1f9ec26bf8ef",
+        "name": "Needs Human Review?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          900,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "nr1",
+                "leftValue": "={{ $(\"Assess Exceptions\").first().json.needs_human_review }}",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        }
+      },
+      {
+        "id": "c0f3b785-dd54-4342-b4e3-9be594b81f6d",
+        "name": "Escalate to Governance (05)",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          1140,
+          -180
+        ],
+        "parameters": {
+          "mode": "once",
+          "source": "database",
+          "workflowId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "G3OIbtaw2z11zIxP",
+            "cachedResultName": "[Platform] 05 Agent Governance and HITL"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "requesting_workflow": "06-financial-document-intelligence",
+              "proposed_action": "={{ \"Post invoice \" + ($(\"Assess Exceptions\").first().json.invoice.invoice_number || \"unknown\") + \" from \" + ($(\"Assess Exceptions\").first().json.invoice.vendor_name || \"unknown vendor\") + \" despite \" + $(\"Assess Exceptions\").first().json.exception_counts.total + \" exception(s)\" }}",
+              "action_type": "write",
+              "affected_system": "accounts-payable-sandbox",
+              "parameters": "={{ JSON.stringify({ invoice: $(\"Assess Exceptions\").first().json.invoice, exceptions: $(\"Assess Exceptions\").first().json.exceptions }).slice(0, 4000) }}",
+              "agent_reasoning": "={{ \"Reconciliation raised \" + $(\"Assess Exceptions\").first().json.exception_counts.critical + \" critical and \" + $(\"Assess Exceptions\").first().json.exception_counts.high + \" high exceptions. A human must decide whether to post this document.\" }}",
+              "agent_confidence": "={{ String($(\"Assess Exceptions\").first().json.system_confidence) }}",
+              "idempotency_key": "={{ \"invoice-\" + $(\"Assess Exceptions\").first().json.fingerprint }}",
+              "override_token": "",
+              "simulate_decision": "={{ $(\"Normalise Document Request\").first().json.source_workflow.startsWith(\"06-test-suite\") ? \"reject\" : \"\" }}"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "requesting_workflow",
+                "displayName": "requesting_workflow",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "proposed_action",
+                "displayName": "proposed_action",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "action_type",
+                "displayName": "action_type",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "affected_system",
+                "displayName": "affected_system",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "parameters",
+                "displayName": "parameters",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "agent_reasoning",
+                "displayName": "agent_reasoning",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "agent_confidence",
+                "displayName": "agent_confidence",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "idempotency_key",
+                "displayName": "idempotency_key",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "override_token",
+                "displayName": "override_token",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "simulate_decision",
+                "displayName": "simulate_decision",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "31f5d462-ea90-459c-b42a-36ddc7fbe8ba",
+        "name": "Clean, No Review Needed",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          1140,
+          160
+        ],
+        "parameters": {
+          "mode": "manual",
+          "includeOtherFields": false,
+          "assignments": {
+            "assignments": [
+              {
+                "id": "cr1",
+                "name": "decision",
+                "value": "not_required",
+                "type": "string"
+              },
+              {
+                "id": "cr2",
+                "name": "approved",
+                "value": true,
+                "type": "boolean"
+              },
+              {
+                "id": "cr3",
+                "name": "risk_level",
+                "value": "LOW",
+                "type": "string"
+              },
+              {
+                "id": "cr4",
+                "name": "decision_reason",
+                "value": "No exceptions were raised, so the document was accepted without human review.",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "091437f7-0e6b-4ae4-8220-fe22855c7126",
+        "name": "Record in Ledger",
+        "type": "n8n-nodes-base.dataTable",
+        "typeVersion": 1,
+        "position": [
+          1380,
+          0
+        ],
+        "parameters": {
+          "operation": "insert",
+          "dataTableId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "VPK0D0xm7cz5mf2H",
+            "cachedResultName": "agentic_invoice_ledger"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "fingerprint": "={{ $(\"Assess Exceptions\").first().json.fingerprint }}",
+              "invoice_number": "={{ $(\"Assess Exceptions\").first().json.invoice.invoice_number }}",
+              "vendor_name": "={{ $(\"Assess Exceptions\").first().json.invoice.vendor_name }}",
+              "invoice_date": "={{ $(\"Assess Exceptions\").first().json.invoice.invoice_date }}",
+              "currency": "={{ $(\"Assess Exceptions\").first().json.invoice.currency }}",
+              "total_amount": "={{ $(\"Assess Exceptions\").first().json.invoice.total }}",
+              "status": "={{ $(\"Assess Exceptions\").first().json.status }}",
+              "confidence": "={{ $(\"Assess Exceptions\").first().json.system_confidence }}",
+              "exceptions_json": "={{ JSON.stringify($(\"Assess Exceptions\").first().json.exceptions).slice(0, 3000) }}",
+              "first_seen_at": "={{ $now.toISO() }}",
+              "execution_id": "={{ $execution.id }}"
+            }
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "db833e09-059a-436a-9a4f-302d91b79656",
+        "name": "Build Document Result",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1620,
+          0
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "javaScript",
+          "jsCode": "const a = $('Assess Exceptions').first().json;\n\nfunction unwrap(n) {\n  try { const v = $(n).first().json; return (v && v.json) ? v.json : v; } catch (e) { return null; }\n}\nconst verification = unwrap('Verify Extraction (09)');\n\nlet governance = null;\ntry { governance = $('Escalate to Governance (05)').first().json; } catch (e) { governance = null; }\nif (governance && governance.json) { governance = governance.json; }\nif (!governance) { try { governance = $('Clean, No Review Needed').first().json; } catch (e) { governance = null; } }\n\nreturn [{\n  json: {\n    document_ref: a.document_ref,\n    n8n_execution_id: $execution.id,\n    status: a.status,\n    accepted: a.status === 'accepted',\n    system_confidence: a.system_confidence,\n    invoice: a.invoice,\n    fingerprint: a.fingerprint,\n    is_duplicate: a.is_duplicate,\n    duplicate_of: a.duplicate_of,\n    exceptions: a.exceptions,\n    exception_counts: a.exception_counts,\n    extraction_source: a.extraction_source,\n    model: a.model,\n    verification: verification ? { verified: verification.verified, score: verification.score, issues: verification.issues } : null,\n    review: governance ? { decision: governance.decision, approved: !!governance.approved, risk_level: governance.risk_level, reason: governance.decision_reason } : null,\n    latency_ms: a.started_at_ms ? (Date.now() - Number(a.started_at_ms)) : null\n  }\n}];"
+        }
+      },
+      {
+        "id": "bb5040c2-d648-4caf-8dd8-fc33d3b59659",
+        "name": "Sticky Note b0538aad",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          100,
+          300
+        ],
+        "parameters": {
+          "content": "## 06 Financial Document Intelligence\n\nDocument text in, a reconciled and audited invoice record out.\n\nExtraction can come from the Model Router (using the Git-versioned `finance/invoice-extractor` prompt) or be supplied directly, which lets the reconciliation logic be tested without model variance.",
+          "color": 4,
+          "width": 440,
+          "height": 240
+        }
+      },
+      {
+        "id": "08ae203f-8ca2-4745-860a-3550f4727776",
+        "name": "Sticky Note 148baec4",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          100,
+          640
+        ],
+        "parameters": {
+          "content": "## The model is never asked whether the invoice adds up\n\nLine items are summed and compared to the subtotal; subtotal plus tax is compared to the total; quantity times unit price is compared to each line amount — all to a 0.02 tolerance. Dates are range-checked, the currency must be ISO 4217, and an implied tax rate above 60 percent is flagged.\n\nThe prompt deliberately tells the extractor **not** to correct a wrong printed total. Silently fixing it would hide exactly the discrepancy this workflow exists to find.",
+          "color": 6,
+          "width": 480,
+          "height": 300
+        }
+      },
+      {
+        "id": "0d33f738-d16d-435c-8f55-1e244e3ab6cc",
+        "name": "Sticky Note 29ef7b3a",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          100,
+          1040
+        ],
+        "parameters": {
+          "content": "## Duplicates and escalation\n\nA fingerprint of `vendor | invoice number | currency | total` is checked against the ledger data table before anything is accepted, so the same invoice submitted twice is caught even when the file name and document reference differ.\n\nSystem confidence starts at 1.0 and is only ever reduced by evidence. Any exception routes the document to Governance rather than posting it.",
+          "color": 3,
+          "width": 460,
+          "height": 260
+        }
+      },
+      {
+        "id": "7a8820dc-4cf0-4ea9-b832-a0037fc3f659",
+        "name": "Test Suite Trigger",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          -1440,
+          700
+        ],
+        "parameters": {}
+      },
+      {
+        "id": "6d98200f-aa31-4223-b6fa-6039885cc7ca",
+        "name": "Build Invoice Fixtures",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -1220,
+          700
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "javaScript",
+          "jsCode": "// Invoice fixtures. Every vendor, number and amount below is invented; no real\n// financial or customer data appears anywhere in this repository.\n//\n// Most cases supply extraction_override so the reconciliation logic is exercised\n// deterministically, without model variance. I12 goes through the real model path.\n//\n// The vendor name is scoped to this execution so that I01 inserts a fresh ledger\n// row and I07 duplicates it, without colliding with rows left by earlier runs.\nconst RUN = 'R' + $execution.id;\nconst VENDOR = 'Northwind Traders ' + RUN;\n\nfunction inv(o) {\n  return JSON.stringify(Object.assign({\n    document_type: 'invoice',\n    invoice_number: 'INV-1000',\n    vendor_name: VENDOR,\n    customer_name: 'Acme Supplies Pty Ltd',\n    invoice_date: '2026-08-14',\n    due_date: '2026-09-13',\n    currency: 'EUR',\n    line_items: [{ description: 'Widget A', quantity: 10, unit_price: 80, amount: 800 }, { description: 'Widget B', quantity: 4, unit_price: 50, amount: 200 }],\n    subtotal: 1000,\n    tax: 240.5,\n    total: 1240.5,\n    payment_terms: 'Net 30',\n    confidence: 0.94,\n    notes: []\n  }, o));\n}\n\nconst F = [\n  { case_id: 'I01-clean-invoice', expect_status: 'accepted', expect_codes: [],\n    extraction_override: inv({}) },\n  { case_id: 'I02-totals-mismatch', expect_status: 'rejected', expect_codes: ['totals_mismatch'],\n    extraction_override: inv({ invoice_number: 'INV-1002', total: 1300 }) },\n  { case_id: 'I03-missing-vendor', expect_status: 'rejected', expect_codes: ['missing_required_field'],\n    extraction_override: inv({ invoice_number: 'INV-1003', vendor_name: null }) },\n  { case_id: 'I04-line-items-do-not-sum', expect_status: 'rejected', expect_codes: ['line_items_do_not_sum'],\n    extraction_override: inv({ invoice_number: 'INV-1004', line_items: [{ description: 'Widget A', quantity: 10, unit_price: 80, amount: 800 }] }) },\n  { case_id: 'I05-low-confidence', expect_status: 'needs_review', expect_codes: ['low_confidence'],\n    extraction_override: inv({ invoice_number: 'INV-1005', confidence: 0.42 }) },\n  { case_id: 'I06-unsupported-document-type', expect_status: 'rejected', expect_codes: ['unsupported_document_type'],\n    extraction_override: inv({ invoice_number: 'INV-1006', document_type: 'contract' }) },\n  { case_id: 'I07-duplicate-of-I01', expect_status: 'rejected', expect_codes: ['duplicate_invoice'],\n    extraction_override: inv({}) },\n  { case_id: 'I08-malformed-extraction', expect_status: 'rejected', expect_codes: ['extraction_failed'],\n    extraction_override: '{\"invoice_number\": \"INV-1008\", \"total\": ' },\n  { case_id: 'I09-invalid-date', expect_status: 'needs_review', expect_codes: ['invalid_date'],\n    extraction_override: inv({ invoice_number: 'INV-1009', invoice_date: '13/45/2026', due_date: null }) },\n  { case_id: 'I10-invalid-currency', expect_status: 'needs_review', expect_codes: ['invalid_currency'],\n    extraction_override: inv({ invoice_number: 'INV-1010', currency: 'EURO' }) },\n  { case_id: 'I11-future-dated', expect_status: 'needs_review', expect_codes: ['future_dated'],\n    extraction_override: inv({ invoice_number: 'INV-1011', invoice_date: '2099-01-01', due_date: null }) },\n  { case_id: 'I12-real-model-extraction', expect_status: null, expect_codes: [], expect_model_path: true,\n    extraction_override: '',\n    document_text: 'INVOICE\\n\\nAcme Supplies Pty Ltd\\n17 Harbour Road, Adelaide SA 5000\\n\\nInvoice number: INV-7781\\nInvoice date: 2026-08-02\\nDue date: 2026-09-01\\nVendor: Blue Harbour Logistics ' + RUN + '\\n\\nDescription                Qty   Unit price   Amount\\nPallet freight             3     120.00       360.00\\nHandling surcharge         1      45.00        45.00\\n\\nSubtotal        405.00\\nGST 10%          40.50\\nTotal EUR       445.50\\n\\nPayment terms: Net 30' }\n];\n\nreturn F.map(function (f) {\n  return { json: {\n    case_id: f.case_id,\n    expect_status: f.expect_status,\n    expect_codes: f.expect_codes || [],\n    expect_model_path: !!f.expect_model_path,\n    document_text: f.document_text || ('Fixture ' + f.case_id + ' supplies a pre-parsed extraction, so no document text is needed.'),\n    document_ref: 'test-' + $execution.id + '-' + f.case_id,\n    extraction_override: f.extraction_override,\n    confidence_floor: '0.7',\n    source_workflow: '06-test-suite::' + f.case_id\n  } };\n});"
+        }
+      },
+      {
+        "id": "1571428f-f898-4755-9053-54c2ae13d7c4",
+        "name": "Invoice Fixture Loop",
+        "type": "n8n-nodes-base.splitInBatches",
+        "typeVersion": 3,
+        "position": [
+          -1000,
+          700
+        ],
+        "parameters": {
+          "batchSize": 1,
+          "options": {}
+        }
+      },
+      {
+        "id": "21bbbe0c-eaca-4364-bda6-ca0b1936e239",
+        "name": "Run Invoice Fixture",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          -760,
+          840
+        ],
+        "parameters": {
+          "mode": "once",
+          "source": "database",
+          "workflowId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "1msPTQimtesoxhmm",
+            "cachedResultName": "06 Financial Document Intelligence Agent"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "document_text": "={{ $json.document_text }}",
+              "document_ref": "={{ $json.document_ref }}",
+              "extraction_override": "={{ $json.extraction_override }}",
+              "confidence_floor": "={{ $json.confidence_floor }}",
+              "source_workflow": "={{ $json.source_workflow }}"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "document_text",
+                "displayName": "document_text",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "document_ref",
+                "displayName": "document_ref",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "extraction_override",
+                "displayName": "extraction_override",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "confidence_floor",
+                "displayName": "confidence_floor",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "source_workflow",
+                "displayName": "source_workflow",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        }
+      },
+      {
+        "id": "f12c15bb-835d-4667-83e6-88ba47ba5a33",
+        "name": "Slim Invoice Result",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -520,
+          840
+        ],
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "language": "javaScript",
+          "jsCode": "const r = ($json && $json.json) ? $json.json : $json;\nreturn { json: {\n  document_ref: r.document_ref,\n  status: r.status,\n  accepted: r.accepted,\n  system_confidence: r.system_confidence,\n  codes: (r.exceptions || []).map(function (e) { return e.code; }),\n  exception_details: (r.exceptions || []).map(function (e) { return e.code + ': ' + e.detail; }).slice(0, 4),\n  is_duplicate: r.is_duplicate,\n  extraction_source: r.extraction_source,\n  invoice_number: r.invoice ? r.invoice.invoice_number : null,\n  total: r.invoice ? r.invoice.total : null,\n  verification_verified: r.verification ? r.verification.verified : null,\n  review_decision: r.review ? r.review.decision : null,\n  model_provider: r.model ? r.model.provider : null,\n  latency_ms: r.latency_ms\n} };"
+        }
+      },
+      {
+        "id": "a311569e-51d4-4108-bf9a-2cf97276f3ac",
+        "name": "Assert Invoice Results",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -760,
+          560
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "javaScript",
+          "jsCode": "const fixtures = $('Build Invoice Fixtures').all().map(function (i) { return i.json; });\nconst results = $input.all().map(function (i) { return i.json; });\n\nconst rows = results.map(function (r, idx) {\n  const fx = fixtures[idx] || {};\n  const fails = [];\n  if (fx.expect_status && r.status !== fx.expect_status) {\n    fails.push('expected status ' + fx.expect_status + ' but got ' + r.status);\n  }\n  (fx.expect_codes || []).forEach(function (c) {\n    if ((r.codes || []).indexOf(c) === -1) { fails.push('expected exception code ' + c + ' was not raised'); }\n  });\n  if (fx.expect_model_path) {\n    if (r.extraction_source !== 'model') { fails.push('expected the real model extraction path, got ' + r.extraction_source); }\n    if (!r.invoice_number) { fails.push('model extraction produced no invoice_number'); }\n  }\n  return {\n    case_id: fx.case_id, pass: fails.length === 0,\n    expected_status: fx.expect_status, actual_status: r.status,\n    expected_codes: fx.expect_codes, actual_codes: r.codes,\n    system_confidence: r.system_confidence,\n    invoice_number: r.invoice_number, total: r.total,\n    extraction_source: r.extraction_source, model_provider: r.model_provider,\n    verification_verified: r.verification_verified, review_decision: r.review_decision,\n    exception_details: r.exception_details,\n    fail_reasons: fails, latency_ms_measured: r.latency_ms\n  };\n});\n\nconst passed = rows.filter(function (r) { return r.pass; }).length;\nconst deterministic = rows.filter(function (r) { return r.extraction_source === 'supplied'; });\nconst lats = deterministic.map(function (r) { return r.latency_ms_measured; }).filter(function (v) { return typeof v === 'number'; }).sort(function (a, b) { return a - b; });\nconst modelRuns = rows.filter(function (r) { return r.extraction_source === 'model'; });\n\nreturn [{ json: {\n  suite: 'invoice-fixtures-v1', generated_at: new Date().toISOString(), n8n_execution_id: $execution.id,\n  note: 'Eleven cases supply a pre-parsed extraction so the reconciliation, duplicate and exception logic is exercised without model variance. I12 runs the real extraction path through the Model Router. All vendor names, invoice numbers and amounts are invented.',\n  total: rows.length, passed: passed, failed: rows.length - passed, all_passed: passed === rows.length,\n  deterministic_latency_ms_p50_measured: lats.length ? lats[Math.max(0, Math.ceil(0.5 * lats.length) - 1)] : null,\n  deterministic_latency_ms_max_measured: lats.length ? lats[lats.length - 1] : null,\n  model_path_latency_ms_measured: modelRuns.length ? modelRuns[0].latency_ms_measured : null,\n  cases: rows\n} }];"
+        }
+      }
+    ],
+    "connections": {
+      "Document Request": {
+        "main": [
+          [
+            {
+              "node": "Normalise Document Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalise Document Request": {
+        "main": [
+          [
+            {
+              "node": "Extraction Supplied?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extraction Supplied?": {
+        "main": [
+          [
+            {
+              "node": "Use Supplied Extraction",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Get Extractor Prompt (08)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Use Supplied Extraction": {
+        "main": [
+          [
+            {
+              "node": "Validate and Reconcile",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Extractor Prompt (08)": {
+        "main": [
+          [
+            {
+              "node": "Extract Fields (02 Router)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract Fields (02 Router)": {
+        "main": [
+          [
+            {
+              "node": "Capture Model Extraction",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Capture Model Extraction": {
+        "main": [
+          [
+            {
+              "node": "Validate and Reconcile",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validate and Reconcile": {
+        "main": [
+          [
+            {
+              "node": "Check Invoice Ledger",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Invoice Ledger": {
+        "main": [
+          [
+            {
+              "node": "Assess Exceptions",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Assess Exceptions": {
+        "main": [
+          [
+            {
+              "node": "Verify Extraction (09)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Verify Extraction (09)": {
+        "main": [
+          [
+            {
+              "node": "Needs Human Review?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Needs Human Review?": {
+        "main": [
+          [
+            {
+              "node": "Escalate to Governance (05)",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Clean, No Review Needed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Escalate to Governance (05)": {
+        "main": [
+          [
+            {
+              "node": "Record in Ledger",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Clean, No Review Needed": {
+        "main": [
+          [
+            {
+              "node": "Record in Ledger",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Record in Ledger": {
+        "main": [
+          [
+            {
+              "node": "Build Document Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Test Suite Trigger": {
+        "main": [
+          [
+            {
+              "node": "Build Invoice Fixtures",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Invoice Fixtures": {
+        "main": [
+          [
+            {
+              "node": "Invoice Fixture Loop",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Invoice Fixture Loop": {
+        "main": [
+          [
+            {
+              "node": "Assert Invoice Results",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Run Invoice Fixture",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run Invoice Fixture": {
+        "main": [
+          [
+            {
+              "node": "Slim Invoice Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Slim Invoice Result": {
+        "main": [
+          [
+            {
+              "node": "Invoice Fixture Loop",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Tejesh Nenavath (via MCP)",
+    "name": "Add financial document test suite",
+    "description": "Added nodes: Test Suite Trigger, Build Invoice Fixtures, Invoice Fixture Loop, Run Invoice Fixture, Slim Invoice Result and 1 more\nConnections: 6 added, 0 removed",
+    "autosaved": false,
+    "createdAt": "2026-09-08T05:16:54.610Z",
+    "updatedAt": "2026-09-08T05:16:54.610Z",
+    "workflowPublishHistory": [
+      {
+        "id": 75,
+        "workflowId": "1msPTQimtesoxhmm",
+        "versionId": "e7483cf4-0ea8-4869-bd42-5023cd7d249a",
+        "event": "activated",
+        "userId": "304a85db-b680-4711-837a-69e38e9a3ef6",
+        "createdAt": "2026-09-08T05:17:01.818Z"
+      }
+    ]
+  }
+}

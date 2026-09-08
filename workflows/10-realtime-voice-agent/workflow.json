@@ -1,0 +1,1209 @@
+{
+  "name": "10 Real-Time Voice Automation Agent",
+  "nodes": [
+    {
+      "id": "33167b2e-10df-425e-8527-165e1cd50539",
+      "name": "Voice Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1500,
+        0
+      ],
+      "parameters": {
+        "path": "voice-agent",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "7542686d-60ad-46c4-8328-652c11b76cb7",
+      "name": "Normalise Voice Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1280,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// Webhook payloads arrive in several shapes depending on the client, so read\n// defensively. Audio is optional: a text payload exercises the whole pipeline\n// downstream of transcription, which is what the automated tests use.\nconst j = $json || {};\nconst body = j.body || j;\nconst binary = $binary || {};\nconst audioKeys = Object.keys(binary);\n\nconst text = String(body.text || body.transcript || body.message || '').trim();\nconst hasAudio = audioKeys.length > 0;\n\nreturn {\n  json: {\n    session_id: String(body.session_id || ('sess-' + $execution.id)),\n    supplied_text: text,\n    has_audio: hasAudio,\n    audio_property: hasAudio ? audioKeys[0] : null,\n    speak_reply: String(body.speak_reply === undefined ? 'true' : body.speak_reply) !== 'false',\n    simulate_decision: String(body.simulate_decision || ''),\n    t_start_ms: Date.now()\n  }\n};"
+      }
+    },
+    {
+      "id": "ecda962c-2afc-45d6-bd84-022436fa2446",
+      "name": "Audio Supplied?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1060,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ha1",
+              "leftValue": "={{ $json.has_audio }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "c219f7bf-1c07-4238-9427-df7172c696f8",
+      "name": "Transcribe Audio",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        -840,
+        -160
+      ],
+      "parameters": {
+        "resource": "audio",
+        "operation": "transcribe",
+        "binaryPropertyName": "={{ $json.audio_property || \"data\" }}",
+        "options": {
+          "temperature": 0
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "openAiApi": {
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "id": "a7a5bc84-0dae-4bfa-96f5-48b82db060c3",
+      "name": "Capture Transcript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        -160
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const req = $('Normalise Voice Request').first().json;\nconst r = $json || {};\nconst transcript = String(r.text || r.transcript || '').trim();\nreturn {\n  json: Object.assign({}, req, {\n    transcript: transcript,\n    transcript_source: 'speech_to_text',\n    stt_error: r.error ? String(r.error) : (transcript ? null : 'transcription returned no text'),\n    t_transcribed_ms: Date.now()\n  })\n};"
+      }
+    },
+    {
+      "id": "6d0b6e6b-c387-401d-9477-cb9706f912bf",
+      "name": "Use Supplied Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -840,
+        160
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const req = $json;\nreturn {\n  json: Object.assign({}, req, {\n    transcript: req.supplied_text,\n    transcript_source: 'text_payload',\n    stt_error: req.supplied_text ? null : 'no audio and no text supplied',\n    t_transcribed_ms: Date.now()\n  })\n};"
+      }
+    },
+    {
+      "id": "d407a7a2-3475-4f61-83a1-018f945f1e0b",
+      "name": "Get Intent Prompt (08)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -400,
+        0
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 08 GitOps Prompt Management"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "prompt_id": "voice/intent-router",
+            "variables": "={{ JSON.stringify({ transcript: $json.transcript, supported_intents: \"check_opening_hours (no slots), check_order_status (slot: order_reference), get_delivery_estimate (slot: postcode), speak_to_human (no slots), cancel_order (slot: order_reference, CHANGES DATA)\" }) }}",
+            "ref": "",
+            "owner": "",
+            "repo": "",
+            "strict": "true",
+            "source_workflow": "10-realtime-voice-agent"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "prompt_id",
+              "displayName": "prompt_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "variables",
+              "displayName": "variables",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "ref",
+              "displayName": "ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "owner",
+              "displayName": "owner",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "repo",
+              "displayName": "repo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "strict",
+              "displayName": "strict",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "3a92b778-d011-4e9d-afe3-0f422b177250",
+      "name": "Classify Intent (02 Router)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -180,
+        0
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 02 Intelligent Model Router"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "task_type": "classification",
+            "objective": "latency",
+            "privacy": "standard",
+            "input": "={{ ($json.json ? $json.json.prompt : $json.prompt) || \"\" }}",
+            "system_prompt": "You output raw JSON only. Never invent an intent name. Latency matters: be brief.",
+            "force_provider": "",
+            "source_workflow": "10-realtime-voice-agent",
+            "run_label": "={{ \"intent-\" + $execution.id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "task_type",
+              "displayName": "task_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "objective",
+              "displayName": "objective",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "privacy",
+              "displayName": "privacy",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "input",
+              "displayName": "input",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "system_prompt",
+              "displayName": "system_prompt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "force_provider",
+              "displayName": "force_provider",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "run_label",
+              "displayName": "run_label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "06f02bd1-09ef-4452-9952-b5ef5e511149",
+      "name": "Resolve Intent and Tool",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        40,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// The tool surface is a closed registry. The model chooses a name from it and\n// nothing else; an unknown name becomes 'unsupported' rather than an attempt to\n// do something undefined. Whether an intent changes data is declared HERE, not\n// by the model, and those intents are the ones sent to Governance.\nconst raw = ($json && $json.json) ? $json.json : $json;\n\n// The upstream state is whichever branch produced the transcript.\nlet base = null;\ntry { base = $('Capture Transcript').first().json; } catch (e) { base = null; }\nif (!base || base.transcript === undefined) {\n  try { base = $('Use Supplied Text').first().json; } catch (e) { base = base; }\n}\nbase = base || {};\n\nconst TOOLS = {\n  check_opening_hours:   { changes_data: false, required_slots: [] },\n  check_order_status:    { changes_data: false, required_slots: ['order_reference'] },\n  get_delivery_estimate: { changes_data: false, required_slots: ['postcode'] },\n  speak_to_human:        { changes_data: false, required_slots: [] },\n  cancel_order:          { changes_data: true,  required_slots: ['order_reference'] }\n};\n\nfunction repairJson(text) {\n  try { return JSON.parse(text); } catch (e) { /* continue */ }\n  const i = text.indexOf('{');\n  const j = text.lastIndexOf('}');\n  if (i >= 0 && j > i) { try { return JSON.parse(text.slice(i, j + 1)); } catch (e) { /* continue */ } }\n  return null;\n}\n\nlet parsed = null;\nlet note = null;\nif (raw && raw.ok && raw.output) {\n  parsed = repairJson(String(raw.output).replace(/^\\s*```(?:json)?/i, '').replace(/```\\s*$/, '').trim());\n  if (!parsed) { note = 'intent classifier response could not be parsed'; }\n} else {\n  note = 'intent classifier call failed: ' + ((raw && raw.error) ? raw.error : 'no output');\n}\nparsed = parsed || {};\n\nlet intent = String(parsed.intent || '').trim();\nif (!TOOLS[intent]) {\n  if (intent) { note = (note ? note + '; ' : '') + 'model proposed unregistered intent \"' + intent.slice(0, 40) + '\"'; }\n  intent = 'unsupported';\n}\n\nconst def = TOOLS[intent] || { changes_data: false, required_slots: [] };\nconst slots = (parsed.slots && typeof parsed.slots === 'object') ? parsed.slots : {};\nconst missing = def.required_slots.filter(function (s) {\n  return !slots[s] || String(slots[s]).trim() === '';\n});\nconst confidence = typeof parsed.confidence === 'number' ? parsed.confidence : 0;\n\nreturn {\n  json: Object.assign({}, base, {\n    intent: intent,\n    intent_confidence: confidence,\n    slots: slots,\n    missing_slots: missing,\n    changes_data: def.changes_data,\n    needs_governance: def.changes_data,\n    needs_confirmation: !!parsed.needs_confirmation || missing.length > 0 || confidence < 0.7 || def.changes_data,\n    classifier_note: note,\n    classifier_router: { provider: raw ? raw.selected_provider : null, model: raw ? raw.selected_model : null, latency_ms: raw ? raw.latency_ms : null, estimated_cost_usd: raw ? raw.estimated_cost_usd : null },\n    t_intent_ms: Date.now()\n  })\n};"
+      }
+    },
+    {
+      "id": "5f67774b-f5cf-4caa-bb4c-08ccef148dfc",
+      "name": "Intent Changes Data?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "gn1",
+              "leftValue": "={{ $json.needs_governance }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "f52cf561-a22c-4dc8-9b87-e3583f9684c6",
+      "name": "Request Approval (05)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        480,
+        -180
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 05 Agent Governance and HITL"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "requesting_workflow": "10-realtime-voice-agent",
+            "proposed_action": "={{ \"Voice caller asked to \" + $json.intent + \" with slots \" + JSON.stringify($json.slots) }}",
+            "action_type": "update",
+            "affected_system": "sandbox",
+            "parameters": "={{ JSON.stringify($json.slots) }}",
+            "agent_reasoning": "={{ \"Caller transcript: \" + String($json.transcript).slice(0, 300) }}",
+            "agent_confidence": "={{ String($json.intent_confidence) }}",
+            "idempotency_key": "={{ \"voice-\" + $json.session_id + \"-\" + $json.intent }}",
+            "override_token": "",
+            "simulate_decision": "={{ $json.simulate_decision }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "requesting_workflow",
+              "displayName": "requesting_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "proposed_action",
+              "displayName": "proposed_action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "action_type",
+              "displayName": "action_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "affected_system",
+              "displayName": "affected_system",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "parameters",
+              "displayName": "parameters",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "agent_reasoning",
+              "displayName": "agent_reasoning",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "agent_confidence",
+              "displayName": "agent_confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "idempotency_key",
+              "displayName": "idempotency_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "override_token",
+              "displayName": "override_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "simulate_decision",
+              "displayName": "simulate_decision",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "6498505b-d555-4271-ac52-3e0ec06c28d3",
+      "name": "Read-Only Intent",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        180
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "rg1",
+              "name": "decision",
+              "value": "not_required",
+              "type": "string"
+            },
+            {
+              "id": "rg2",
+              "name": "approved",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "rg3",
+              "name": "risk_level",
+              "value": "LOW",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "46bcf577-5808-42ae-ad41-106c3692f0df",
+      "name": "Execute Restricted Tool",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The only side effects this workflow can produce are the ones written here.\n// The demo tools return static, invented data. A data-changing intent is never\n// executed even when Governance approved it: the approval is recorded and a\n// human completes the action. That is what keeps a public demo safe to point a\n// webhook at.\nconst state = $('Resolve Intent and Tool').first().json;\n\nlet governance = null;\ntry { governance = $('Request Approval (05)').first().json; } catch (e) { governance = null; }\nif (governance && governance.json) { governance = governance.json; }\nif (!governance) { try { governance = $('Read-Only Intent').first().json; } catch (e) { governance = null; } }\ngovernance = governance || { decision: 'unknown', approved: false, risk_level: 'HIGH' };\n\nconst HOURS = { monday: '9am to 6pm', tuesday: '9am to 6pm', wednesday: '9am to 6pm', thursday: '9am to 8pm', friday: '9am to 8pm', saturday: '10am to 5pm', sunday: '11am to 4pm' };\n\nlet toolResult = null;\nlet executed = false;\nlet refusal = null;\n\nif (state.intent === 'unsupported') {\n  refusal = 'The request was not recognised as one of the supported intents.';\n} else if (state.missing_slots.length) {\n  refusal = 'Cannot act yet: missing ' + state.missing_slots.join(' and ') + '.';\n} else if (state.changes_data) {\n  refusal = governance.approved\n    ? 'Approved by governance, but this demo never executes data-changing actions. The approval has been recorded for a human to action.'\n    : 'This action changes data and was not approved (' + governance.decision + ').';\n} else if (state.intent === 'check_opening_hours') {\n  toolResult = { hours: HOURS, note: 'Invented demo opening hours.' };\n  executed = true;\n} else if (state.intent === 'check_order_status') {\n  toolResult = { order_reference: state.slots.order_reference, status: 'in transit', last_scan: 'Adelaide depot', expected: '2 business days', note: 'Invented demo order data.' };\n  executed = true;\n} else if (state.intent === 'get_delivery_estimate') {\n  toolResult = { postcode: state.slots.postcode, estimate_business_days: 3, note: 'Invented demo delivery estimate.' };\n  executed = true;\n} else if (state.intent === 'speak_to_human') {\n  toolResult = { queued: true, note: 'A handover would be queued here. Nothing is actually sent in the demo.' };\n  executed = true;\n}\n\nreturn [{\n  json: Object.assign({}, state, {\n    governance: { decision: governance.decision, approved: !!governance.approved, risk_level: governance.risk_level, reason: governance.decision_reason || null },\n    tool_executed: executed,\n    tool_result: toolResult,\n    refusal: refusal,\n    tool_result_text: toolResult ? JSON.stringify(toolResult) : (refusal || 'no result'),\n    t_tool_ms: Date.now()\n  })\n}];"
+      }
+    },
+    {
+      "id": "9a852f9c-e11c-46bd-a6ac-369ec89e9768",
+      "name": "Compose Spoken Reply (02 Router)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 02 Intelligent Model Router"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "task_type": "conversation",
+            "objective": "latency",
+            "privacy": "standard",
+            "input": "=The caller said: \"{{ $json.transcript }}\"\n\nThe system produced this result:\n{{ $json.tool_result_text }}\n\nReply to the caller in at most two short spoken sentences. State only what the result contains. If the result is a refusal, say so plainly and say what you would need.",
+            "system_prompt": "You are a concise phone assistant. Speak naturally, never read out JSON or field names, and never state a fact that is not in the supplied result.",
+            "force_provider": "",
+            "source_workflow": "10-realtime-voice-agent",
+            "run_label": "={{ \"reply-\" + $execution.id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "task_type",
+              "displayName": "task_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "objective",
+              "displayName": "objective",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "privacy",
+              "displayName": "privacy",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "input",
+              "displayName": "input",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "system_prompt",
+              "displayName": "system_prompt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "force_provider",
+              "displayName": "force_provider",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "run_label",
+              "displayName": "run_label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "67b7dd70-35e0-4d81-ac9d-b343eba4341e",
+      "name": "Verify Reply (09)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 09 AI Output Verification Layer"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ai_output": "={{ ($json.json ? $json.json.output : $json.output) || \"\" }}",
+            "sources": "={{ JSON.stringify([{ id: \"TOOL\", text: $(\"Execute Restricted Tool\").first().json.tool_result_text }]) }}",
+            "json_schema": "",
+            "required_fields": "",
+            "business_rules": "[]",
+            "mode": "deterministic_only",
+            "confidence_threshold": "0.7",
+            "source_workflow": "10-realtime-voice-agent"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ai_output",
+              "displayName": "ai_output",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sources",
+              "displayName": "sources",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "json_schema",
+              "displayName": "json_schema",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "required_fields",
+              "displayName": "required_fields",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "business_rules",
+              "displayName": "business_rules",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "mode",
+              "displayName": "mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "confidence_threshold",
+              "displayName": "confidence_threshold",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "df29e612-39eb-40dd-b4dd-2591a574f0e5",
+      "name": "Speak the Reply?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "sp1",
+              "leftValue": "={{ $(\"Execute Restricted Tool\").first().json.speak_reply }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "1882dfcb-36b8-4ebf-92ff-f86c52b21923",
+      "name": "Synthesise Speech",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        1680,
+        -180
+      ],
+      "parameters": {
+        "resource": "audio",
+        "operation": "generate",
+        "model": "tts-1",
+        "input": "={{ ($(\"Compose Spoken Reply (02 Router)\").first().json.json ? $(\"Compose Spoken Reply (02 Router)\").first().json.json.output : $(\"Compose Spoken Reply (02 Router)\").first().json.output) || \"Sorry, I could not produce a reply.\" }}",
+        "voice": "nova",
+        "options": {
+          "response_format": "mp3",
+          "binaryPropertyOutput": "audio"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "openAiApi": {
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "id": "389552d3-56e9-4302-aea8-8350bac8a98e",
+      "name": "Text Only Reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1680,
+        180
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ts1",
+              "name": "speech_skipped",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "76b097c9-9d73-4de5-b57a-4603a5171487",
+      "name": "Build Voice Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Per-stage latency, measured. A voice agent lives or dies on where the time\n// goes, so each hop is reported separately rather than as one opaque total.\nconst tool = $('Execute Restricted Tool').first().json;\n\nfunction unwrap(n) {\n  try { const v = $(n).first().json; return (v && v.json) ? v.json : v; } catch (e) { return null; }\n}\nconst reply = unwrap('Compose Spoken Reply (02 Router)');\nconst verification = unwrap('Verify Reply (09)');\nconst intentPromptMeta = unwrap('Get Intent Prompt (08)');\n\nconst items = $input.all();\nconst spoke = items.some(function (i) { return i.binary && Object.keys(i.binary).length > 0; });\nconst skipped = items.some(function (i) { return i.json && i.json.speech_skipped; });\n\nconst tEnd = Date.now();\nconst t0 = Number(tool.t_start_ms || 0);\nfunction span(a, b) {\n  const x = Number(a || 0); const y = Number(b || 0);\n  return (x > 0 && y > 0 && y >= x) ? (y - x) : null;\n}\n\nconst stages = {\n  transcription_ms: span(tool.t_start_ms, tool.t_transcribed_ms),\n  intent_ms: span(tool.t_transcribed_ms, tool.t_intent_ms),\n  tool_ms: span(tool.t_intent_ms, tool.t_tool_ms),\n  reply_verify_speech_ms: span(tool.t_tool_ms, tEnd),\n  total_ms: t0 ? (tEnd - t0) : null\n};\n\nconst costs = [];\nif (tool.classifier_router && tool.classifier_router.estimated_cost_usd) { costs.push(Number(tool.classifier_router.estimated_cost_usd)); }\nif (reply && reply.estimated_cost_usd) { costs.push(Number(reply.estimated_cost_usd)); }\n\nreturn [{\n  json: {\n    generated_at: new Date().toISOString(),\n    n8n_execution_id: $execution.id,\n    session_id: tool.session_id,\n    transcript: tool.transcript,\n    transcript_source: tool.transcript_source,\n    stt_error: tool.stt_error,\n    intent: tool.intent,\n    intent_confidence: tool.intent_confidence,\n    slots: tool.slots,\n    missing_slots: tool.missing_slots,\n    changes_data: tool.changes_data,\n    needs_confirmation: tool.needs_confirmation,\n    classifier_note: tool.classifier_note,\n    governance: tool.governance,\n    tool_executed: tool.tool_executed,\n    tool_result: tool.tool_result,\n    refusal: tool.refusal,\n    reply_text: reply && reply.ok ? String(reply.output || '') : null,\n    speech: { requested: !!tool.speak_reply, produced: spoke, skipped: !!skipped },\n    verification: verification ? { verified: verification.verified, score: verification.score, issues: verification.issues } : null,\n    prompts: { intent_router: intentPromptMeta ? { version: intentPromptMeta.version, sha: intentPromptMeta.sha, degraded: intentPromptMeta.degraded } : null },\n    models: {\n      intent: tool.classifier_router,\n      reply: reply ? { provider: reply.selected_provider, model: reply.selected_model, latency_ms: reply.latency_ms, estimated_cost_usd: reply.estimated_cost_usd } : null\n    },\n    latency_measured_ms: stages,\n    estimated_cost_usd_total: Math.round(costs.reduce(function (a, b) { return a + b; }, 0) * 1000000) / 1000000\n  }\n}];"
+      }
+    },
+    {
+      "id": "e476e28b-f769-4ed6-bac6-3c551aa1c2b5",
+      "name": "Respond to Caller",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2160,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "options": {}
+      }
+    },
+    {
+      "id": "f40ce66a-fdea-4aa8-a77f-aa72942cc14c",
+      "name": "Sticky Note 03a94d06",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {
+        "content": "## 10 Real-Time Voice Automation Agent\n\naudio or text -> transcription -> intent -> restricted tool -> governance if it changes data -> reply -> verification -> speech -> webhook response.\n\nAudio is optional. A text payload exercises everything downstream of transcription, which is how the pipeline is tested without recording audio.",
+        "color": 4,
+        "width": 440,
+        "height": 240
+      }
+    },
+    {
+      "id": "f40a2a82-eb50-47bb-a20f-2a0ebf7681b6",
+      "name": "Sticky Note 09e66883",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        640
+      ],
+      "parameters": {
+        "content": "## What this agent is allowed to do\n\nThe tool surface is a **closed registry** of five intents. A name the model invents becomes `unsupported`; it never becomes an attempt to do something undefined.\n\nWhether an intent changes data is declared **in the registry, not by the model**. Those intents go to Governance, and even on approval this workflow **does not execute them** — the approval is recorded for a human. That is what makes a public voice demo safe to point a webhook at.",
+        "color": 6,
+        "width": 500,
+        "height": 300
+      }
+    },
+    {
+      "id": "6236bb6c-571a-4e04-8b6e-009089a61eef",
+      "name": "Sticky Note 4e3feb97",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        1040
+      ],
+      "parameters": {
+        "content": "## Latency is measured per stage\n\nTimestamps are taken at the webhook, after transcription, after intent and after the tool call, so the response reports `transcription_ms`, `intent_ms`, `tool_ms` and the reply/verify/speech tail separately.\n\nA single total would hide the fact that a voice agent usually spends its budget in speech-to-text and text-to-speech rather than in the parts that feel like the \"AI\".",
+        "color": 3,
+        "width": 460,
+        "height": 260
+      }
+    }
+  ],
+  "connections": {
+    "Voice Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalise Voice Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise Voice Request": {
+      "main": [
+        [
+          {
+            "node": "Audio Supplied?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audio Supplied?": {
+      "main": [
+        [
+          {
+            "node": "Transcribe Audio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use Supplied Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe Audio": {
+      "main": [
+        [
+          {
+            "node": "Capture Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Transcript": {
+      "main": [
+        [
+          {
+            "node": "Get Intent Prompt (08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Supplied Text": {
+      "main": [
+        [
+          {
+            "node": "Get Intent Prompt (08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Intent Prompt (08)": {
+      "main": [
+        [
+          {
+            "node": "Classify Intent (02 Router)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Intent (02 Router)": {
+      "main": [
+        [
+          {
+            "node": "Resolve Intent and Tool",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Intent and Tool": {
+      "main": [
+        [
+          {
+            "node": "Intent Changes Data?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Intent Changes Data?": {
+      "main": [
+        [
+          {
+            "node": "Request Approval (05)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read-Only Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request Approval (05)": {
+      "main": [
+        [
+          {
+            "node": "Execute Restricted Tool",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read-Only Intent": {
+      "main": [
+        [
+          {
+            "node": "Execute Restricted Tool",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Restricted Tool": {
+      "main": [
+        [
+          {
+            "node": "Compose Spoken Reply (02 Router)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Spoken Reply (02 Router)": {
+      "main": [
+        [
+          {
+            "node": "Verify Reply (09)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Reply (09)": {
+      "main": [
+        [
+          {
+            "node": "Speak the Reply?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Speak the Reply?": {
+      "main": [
+        [
+          {
+            "node": "Synthesise Speech",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Text Only Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Synthesise Speech": {
+      "main": [
+        [
+          {
+            "node": "Build Voice Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Text Only Reply": {
+      "main": [
+        [
+          {
+            "node": "Build Voice Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Voice Result": {
+      "main": [
+        [
+          {
+            "node": "Respond to Caller",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "description": "Webhook to speech: transcribe, classify intent, execute a restricted tool, gate risky intents through Governance, verify the reply, and speak it back. Every stage is timed separately so the latency budget is visible.",
+  "versionCounter": 1,
+  "sourceWorkflowId": null,
+  "nodeGroups": [],
+  "activeVersion": null
+}

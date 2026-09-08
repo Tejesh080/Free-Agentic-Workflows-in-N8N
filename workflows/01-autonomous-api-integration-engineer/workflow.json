@@ -1,0 +1,1316 @@
+{
+  "name": "01 Autonomous API Integration Engineer",
+  "nodes": [
+    {
+      "id": "32dc3f24-5e12-4066-8b64-7d7e145b4d66",
+      "name": "Integration Request",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1500,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "spec_url",
+              "type": "string"
+            },
+            {
+              "name": "spec_json",
+              "type": "string"
+            },
+            {
+              "name": "goal",
+              "type": "string"
+            },
+            {
+              "name": "base_url_override",
+              "type": "string"
+            },
+            {
+              "name": "max_probes",
+              "type": "string"
+            },
+            {
+              "name": "source_workflow",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c7bcad77-0cd3-4d59-b97d-45347fbc13ec",
+      "name": "Normalise Request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1280,
+        0
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "i1",
+              "name": "spec_url",
+              "value": "={{ ($json.spec_url || \"\").trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "i2",
+              "name": "spec_json",
+              "value": "={{ $json.spec_json || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "i3",
+              "name": "goal",
+              "value": "={{ ($json.goal || \"\").trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "i4",
+              "name": "base_url_override",
+              "value": "={{ ($json.base_url_override || \"\").trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "i5",
+              "name": "max_probes",
+              "value": "={{ Math.min(5, Math.max(0, Number($json.max_probes || 2))) }}",
+              "type": "number"
+            },
+            {
+              "id": "i6",
+              "name": "source_workflow",
+              "value": "={{ $json.source_workflow || \"unknown\" }}",
+              "type": "string"
+            },
+            {
+              "id": "i7",
+              "name": "has_spec_url",
+              "value": "={{ ($json.spec_url || \"\").trim().length > 0 }}",
+              "type": "boolean"
+            },
+            {
+              "id": "i8",
+              "name": "started_at_ms",
+              "value": "={{ $now.toMillis() }}",
+              "type": "number"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "70dd807e-d78f-4b35-b81a-796c74490b18",
+      "name": "Spec Supplied as URL?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1060,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "h1",
+              "leftValue": "={{ $json.has_spec_url }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "da6c8b14-fc1d-40e5-a7ae-9f1452387d2c",
+      "name": "Fetch OpenAPI Specification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -840,
+        -120
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.spec_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json, application/yaml;q=0.5"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-api-integration-engineer"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "4b404b0c-94e6-47a8-9de4-772bdcc39141",
+      "name": "Use Inline Specification",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -840,
+        140
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "x1",
+              "name": "statusCode",
+              "value": 200,
+              "type": "number"
+            },
+            {
+              "id": "x2",
+              "name": "body",
+              "value": "={{ $json.spec_json }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ce607799-5fde-48cc-bc76-7397b3c8eece",
+      "name": "Parse OpenAPI Specification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -600,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// DETERMINISTIC specification parsing. The source workflow this replaces used a\n// web scraper plus an LLM to guess at endpoints; an OpenAPI document already\n// states them exactly, so no model is involved in this step at all.\nconst req = $('Normalise Request').first().json;\nconst res = $json || {};\nconst status = Number(res.statusCode !== undefined ? res.statusCode : 200);\n\n// The HTTP Request node returns different shapes depending on the response\n// content type and on whether full-response mode is on, and an inline spec\n// arrives differently again. Accept every shape rather than assuming one.\nfunction pickPayload(r) {\n  if (r && r.body !== undefined && r.body !== null && r.body !== '') { return r.body; }\n  if (r && r.data !== undefined && r.data !== null && r.data !== '') { return r.data; }\n  if (r && (r.paths || r.openapi || r.swagger)) { return r; }\n  return null;\n}\n\nlet spec = pickPayload(res);\nlet parseNote = null;\n\nif (typeof spec === 'string') {\n  const trimmed = spec.trim();\n  try { spec = JSON.parse(trimmed); }\n  catch (e) {\n    return { json: { ok: false, status: status,\n      error: 'specification body is a string but not valid JSON: ' + String(e.message || e) + '. YAML specifications are not supported; supply JSON.',\n      goal: req.goal, source_workflow: req.source_workflow, started_at_ms: req.started_at_ms, max_probes: req.max_probes } };\n  }\n}\n\nif (status < 200 || status >= 300) {\n  return { json: { ok: false, status: status, error: 'could not load specification, HTTP ' + status,\n    goal: req.goal, source_workflow: req.source_workflow, started_at_ms: req.started_at_ms, max_probes: req.max_probes } };\n}\n\nif (!spec || typeof spec !== 'object') {\n  return { json: { ok: false, status: status,\n    error: 'the response carried no usable specification payload. Observed item keys: [' + Object.keys(res).join(', ') + '], payload type: ' + (typeof spec),\n    goal: req.goal, source_workflow: req.source_workflow, started_at_ms: req.started_at_ms, max_probes: req.max_probes } };\n}\n\nif (!spec.paths || typeof spec.paths !== 'object') {\n  return { json: { ok: false, status: status,\n    error: 'document has no paths object, so it is not an OpenAPI specification. Top-level keys: [' + Object.keys(spec).slice(0, 15).join(', ') + ']',\n    goal: req.goal, source_workflow: req.source_workflow, started_at_ms: req.started_at_ms, max_probes: req.max_probes } };\n}\n\n// ---- Base URL -----------------------------------------------------------\nlet baseUrl = req.base_url_override || '';\nif (!baseUrl) {\n  const server = Array.isArray(spec.servers) && spec.servers.length ? String(spec.servers[0].url || '') : '';\n  if (/^https?:\\/\\//i.test(server)) {\n    baseUrl = server;\n  } else if (server && req.spec_url) {\n    const m = String(req.spec_url).match(/^(https?:\\/\\/[^\\/]+)/i);\n    baseUrl = m ? (m[1] + server) : '';\n  }\n}\nbaseUrl = baseUrl.replace(/\\/+$/, '');\n\n// ---- Authentication -----------------------------------------------------\nconst comps = spec.components || {};\nconst schemes = comps.securitySchemes || {};\nconst authSummary = Object.keys(schemes).map(function (k) {\n  const s = schemes[k] || {};\n  if (s.type === 'apiKey') { return k + ': apiKey in ' + s['in'] + ' named \"' + s.name + '\"'; }\n  if (s.type === 'http') { return k + ': http ' + s.scheme + (s.bearerFormat ? ' (' + s.bearerFormat + ')' : ''); }\n  if (s.type === 'oauth2') { return k + ': oauth2 with flows ' + Object.keys(s.flows || {}).join(', '); }\n  if (s.type === 'openIdConnect') { return k + ': openIdConnect at ' + s.openIdConnectUrl; }\n  return k + ': ' + (s.type || 'unknown');\n});\nconst globalSecurity = Array.isArray(spec.security) ? spec.security.map(function (o) { return Object.keys(o).join('+'); }) : [];\n\n// ---- Operations ---------------------------------------------------------\nconst METHODS = ['get', 'put', 'post', 'delete', 'patch', 'head', 'options'];\nconst READ_METHODS = ['get', 'head', 'options'];\nconst operations = [];\n\nObject.keys(spec.paths).forEach(function (p) {\n  const item = spec.paths[p] || {};\n  const pathLevelParams = Array.isArray(item.parameters) ? item.parameters : [];\n  METHODS.forEach(function (m) {\n    const op = item[m];\n    if (!op || typeof op !== 'object') { return; }\n    const params = pathLevelParams.concat(Array.isArray(op.parameters) ? op.parameters : []);\n    const required = params.filter(function (x) { return x && x.required; }).map(function (x) { return x['in'] + ':' + x.name; });\n    const optional = params.filter(function (x) { return x && !x.required; }).map(function (x) { return x['in'] + ':' + x.name; });\n    operations.push({\n      operation_id: op.operationId || (m + ' ' + p),\n      method: m.toUpperCase(),\n      path: p,\n      summary: (op.summary || op.description || '').slice(0, 180),\n      required_params: required,\n      optional_params: optional,\n      has_request_body: !!op.requestBody,\n      response_codes: Object.keys(op.responses || {}),\n      security: Array.isArray(op.security) ? op.security.map(function (o) { return Object.keys(o).join('+'); }) : globalSecurity,\n      write_effect: READ_METHODS.indexOf(m) === -1 ? 'write' : 'read',\n      deprecated: !!op.deprecated\n    });\n  });\n});\n\nconst digest = operations.map(function (o) {\n  return o.operation_id + '  ' + o.method + ' ' + o.path +\n    (o.required_params.length ? '  required=[' + o.required_params.join(', ') + ']' : '') +\n    (o.optional_params.length ? '  optional=[' + o.optional_params.join(', ') + ']' : '') +\n    (o.has_request_body ? '  body=yes' : '') +\n    '  effect=' + o.write_effect +\n    (o.summary ? '  -- ' + o.summary : '');\n}).join('\\n');\n\nreturn {\n  json: {\n    ok: true,\n    parse_note: parseNote,\n    goal: req.goal,\n    source_workflow: req.source_workflow,\n    started_at_ms: req.started_at_ms,\n    max_probes: req.max_probes,\n    api_title: (spec.info && spec.info.title) || 'unknown',\n    api_version: (spec.info && spec.info.version) || 'unknown',\n    openapi_version: spec.openapi || spec.swagger || 'unknown',\n    base_url: baseUrl,\n    auth_summary: authSummary.length ? authSummary.join('; ') : 'no security schemes declared',\n    auth_schemes: Object.keys(schemes),\n    operation_count: operations.length,\n    read_operation_count: operations.filter(function (o) { return o.write_effect === 'read'; }).length,\n    write_operation_count: operations.filter(function (o) { return o.write_effect === 'write'; }).length,\n    operation_ids: operations.map(function (o) { return o.operation_id; }),\n    operations: operations,\n    operations_digest: digest.slice(0, 20000)\n  }\n};"
+      }
+    },
+    {
+      "id": "db17cd41-22bf-4dad-b589-70d953ae59e7",
+      "name": "Get Planner Prompt (08)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -360,
+        0
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 08 GitOps Prompt Management"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "prompt_id": "api-integration/spec-analyst",
+            "variables": "={{ JSON.stringify({ goal: $json.goal, operations_digest: $json.operations_digest, auth_summary: $json.auth_summary, base_url: $json.base_url }) }}",
+            "ref": "",
+            "owner": "",
+            "repo": "",
+            "strict": "true",
+            "source_workflow": "01-autonomous-api-integration-engineer"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "prompt_id",
+              "displayName": "prompt_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "variables",
+              "displayName": "variables",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "ref",
+              "displayName": "ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "owner",
+              "displayName": "owner",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "repo",
+              "displayName": "repo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "strict",
+              "displayName": "strict",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "b42502c6-8a40-4f6d-b7e0-8087da98afd0",
+      "name": "Plan Integration (02 Router)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -120,
+        0
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 02 Intelligent Model Router"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "task_type": "code",
+            "objective": "quality",
+            "privacy": "standard",
+            "input": "={{ ($json.json ? $json.json.prompt : $json.prompt) || (\"Plan an integration for this goal: \" + $(\"Parse OpenAPI Specification\").first().json.goal + \"\\n\\nOPERATIONS\\n\" + $(\"Parse OpenAPI Specification\").first().json.operations_digest) }}",
+            "system_prompt": "You output raw JSON only: no markdown fences, no prose before or after. Never reference an operationId that is not in the supplied list. Produce AT MOST 4 steps. Keep every string field under 200 characters. Brevity matters more than completeness here: a truncated response is worthless.",
+            "force_provider": "",
+            "source_workflow": "01-autonomous-api-integration-engineer",
+            "run_label": "={{ $execution.id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "task_type",
+              "displayName": "task_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "objective",
+              "displayName": "objective",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "privacy",
+              "displayName": "privacy",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "input",
+              "displayName": "input",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "system_prompt",
+              "displayName": "system_prompt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "force_provider",
+              "displayName": "force_provider",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "run_label",
+              "displayName": "run_label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "60dd2183-83da-49cb-ad20-87afca548f8b",
+      "name": "Ground Plan Against Specification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        120,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// The single most valuable check in this workflow: every operationId the model\n// proposed must exist in the parsed specification. This is exact set membership,\n// so a hallucinated endpoint is caught with certainty rather than by opinion.\nconst spec = $('Parse OpenAPI Specification').first().json;\nconst raw = ($json && $json.json) ? $json.json : $json;\n\nconst byId = {};\n(spec.operations || []).forEach(function (o) { byId[o.operation_id] = o; });\n\n// Long structured responses get truncated mid-object often enough that discarding\n// them outright throws away a usable plan. Close what is still open, drop any\n// dangling partial member, and record that a repair happened.\nfunction repairJson(text) {\n  try { return { value: JSON.parse(text), repaired: false, error: null }; } catch (e) { /* fall through */ }\n\n  const stack = [];\n  let inStr = false;\n  let esc = false;\n  let lastTopLevelEnd = -1;\n  for (let i = 0; i < text.length; i++) {\n    const c = text[i];\n    if (inStr) {\n      if (esc) { esc = false; }\n      else if (c === '\\\\') { esc = true; }\n      else if (c === '\"') { inStr = false; }\n      continue;\n    }\n    if (c === '\"') { inStr = true; continue; }\n    if (c === '{' || c === '[') { stack.push(c); }\n    else if (c === '}' || c === ']') { stack.pop(); if (stack.length === 0) { lastTopLevelEnd = i; } }\n  }\n\n  if (lastTopLevelEnd > 0) {\n    try { return { value: JSON.parse(text.slice(0, lastTopLevelEnd + 1)), repaired: true, error: null }; } catch (e) { /* keep going */ }\n  }\n\n  let patched = text;\n  if (inStr) { patched += '\"'; }\n  // Remove a trailing partial member such as  , \"on_missing_fields\": \"half a sen\n  patched = patched.replace(/,\\s*\"[^\"]*\"\\s*:?\\s*[^,{}\\[\\]]*$/, '');\n  patched = patched.replace(/,\\s*$/, '');\n  for (let i = stack.length - 1; i >= 0; i--) { patched += (stack[i] === '{' ? '}' : ']'); }\n  try { return { value: JSON.parse(patched), repaired: true, error: null }; } catch (e) {\n    return { value: null, repaired: false, error: String(e.message || e) };\n  }\n}\n\nlet plan = null;\nlet parseError = null;\nlet planRepaired = false;\nif (raw && raw.ok && raw.output) {\n  const cleaned = String(raw.output).replace(/^\\s*```(?:json)?/i, '').replace(/```\\s*$/, '').trim();\n  const r = repairJson(cleaned);\n  plan = r.value;\n  planRepaired = r.repaired;\n  if (!plan) { parseError = r.error; }\n} else {\n  parseError = (raw && raw.error) ? String(raw.error) : 'model router returned no usable output';\n}\n\nconst issues = [];\nif (parseError) { issues.push({ code: 'plan_not_json', severity: 'critical', detail: parseError }); }\nif (planRepaired) { issues.push({ code: 'plan_json_repaired', severity: 'medium', detail: 'the planner response was truncated or malformed and was repaired by closing unbalanced structures; later steps may have been lost' }); }\n\nconst steps = (plan && Array.isArray(plan.steps)) ? plan.steps : [];\nconst grounded = [];\nconst hallucinated = [];\n\nsteps.forEach(function (s, i) {\n  const id = String(s.operation_id || '');\n  const op = byId[id];\n  if (!op) { hallucinated.push(id || '(step ' + (i + 1) + ' has no operation_id)'); return; }\n  grounded.push({\n    order: s.order || (i + 1),\n    operation_id: id,\n    method: op.method,\n    path: op.path,\n    purpose: s.purpose || null,\n    inputs: Array.isArray(s.inputs) ? s.inputs : [],\n    expected_response_fields: Array.isArray(s.expected_response_fields) ? s.expected_response_fields : [],\n    on_missing_fields: s.on_missing_fields || null,\n    write_effect: op.write_effect,\n    model_claimed_effect: s.write_effect || null,\n    effect_mismatch: (s.write_effect && s.write_effect !== op.write_effect) || false,\n    required_params: op.required_params,\n    risk_note: s.risk_note || null,\n    deprecated: op.deprecated\n  });\n});\n\nhallucinated.forEach(function (id) {\n  issues.push({ code: 'hallucinated_operation', severity: 'critical', detail: 'plan references operationId \"' + id + '\" which does not exist in the specification' });\n});\ngrounded.forEach(function (s) {\n  if (s.effect_mismatch) {\n    issues.push({ code: 'write_effect_mismatch', severity: 'high', detail: s.operation_id + ': model called it \"' + s.model_claimed_effect + '\" but the specification method ' + s.method + ' is a ' + s.write_effect });\n  }\n  if (s.deprecated) {\n    issues.push({ code: 'deprecated_operation', severity: 'medium', detail: s.operation_id + ' is marked deprecated in the specification' });\n  }\n});\n\nconst readSteps = grounded.filter(function (s) { return s.write_effect === 'read'; });\nconst writeSteps = grounded.filter(function (s) { return s.write_effect === 'write'; });\n\nreturn {\n  json: {\n    ok: !parseError && hallucinated.length === 0 && grounded.length > 0,\n    plan_repaired: planRepaired,\n    plan_summary: plan ? (plan.summary || null) : null,\n    auth_requirements: plan && Array.isArray(plan.auth_requirements) ? plan.auth_requirements : [],\n    open_questions: plan && Array.isArray(plan.open_questions) ? plan.open_questions : [],\n    model_confidence: plan && typeof plan.confidence === 'number' ? plan.confidence : null,\n    steps_proposed: steps.length,\n    steps_grounded: grounded.length,\n    hallucinated_operations: hallucinated,\n    grounding_rate: steps.length ? Math.round((grounded.length / steps.length) * 100) / 100 : null,\n    steps: grounded,\n    read_steps: readSteps,\n    write_steps: writeSteps,\n    has_write_steps: writeSteps.length > 0,\n    issues: issues,\n    plan_json: plan ? JSON.stringify(plan) : null,\n    router: { provider: raw ? raw.selected_provider : null, model: raw ? raw.selected_model : null, latency_ms: raw ? raw.latency_ms : null, estimated_cost_usd: raw ? raw.estimated_cost_usd : null }\n  }\n};"
+      }
+    },
+    {
+      "id": "90065fde-01ab-4312-9f17-797c5258b492",
+      "name": "Verify Plan (09)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        360,
+        0
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 09 AI Output Verification Layer"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ai_output": "={{ $json.plan_json || \"\" }}",
+            "sources": "={{ JSON.stringify([{ id: \"SPEC\", text: $(\"Parse OpenAPI Specification\").first().json.operations_digest }]) }}",
+            "json_schema": "{\"type\":\"object\",\"required\":[\"summary\",\"steps\"],\"properties\":{\"summary\":{\"type\":\"string\",\"minLength\":10},\"steps\":{\"type\":\"array\"},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1}}}",
+            "required_fields": "summary,steps",
+            "business_rules": "[]",
+            "mode": "deterministic_only",
+            "confidence_threshold": "0.75",
+            "source_workflow": "01-autonomous-api-integration-engineer"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ai_output",
+              "displayName": "ai_output",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sources",
+              "displayName": "sources",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "json_schema",
+              "displayName": "json_schema",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "required_fields",
+              "displayName": "required_fields",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "business_rules",
+              "displayName": "business_rules",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "mode",
+              "displayName": "mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "confidence_threshold",
+              "displayName": "confidence_threshold",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "3f4c9b8c-10a7-431d-b653-b3b3ecf9e761",
+      "name": "Plan Contains Write Steps?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        600,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "w1",
+              "leftValue": "={{ $(\"Ground Plan Against Specification\").first().json.has_write_steps }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "a9672f85-d712-4dd7-a4ca-764836a1baca",
+      "name": "Request Write Approval (05)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        840,
+        -180
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 05 Agent Governance and HITL"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "requesting_workflow": "01-autonomous-api-integration-engineer",
+            "proposed_action": "={{ \"Execute \" + $(\"Ground Plan Against Specification\").first().json.write_steps.length + \" write operation(s): \" + $(\"Ground Plan Against Specification\").first().json.write_steps.map(s => s.method + \" \" + s.path).join(\", \") }}",
+            "action_type": "write",
+            "affected_system": "={{ $(\"Parse OpenAPI Specification\").first().json.base_url }}",
+            "parameters": "={{ JSON.stringify($(\"Ground Plan Against Specification\").first().json.write_steps).slice(0, 4000) }}",
+            "agent_reasoning": "={{ $(\"Ground Plan Against Specification\").first().json.plan_summary || \"no summary produced\" }}",
+            "agent_confidence": "={{ String($(\"Ground Plan Against Specification\").first().json.model_confidence || 0.5) }}",
+            "idempotency_key": "={{ \"apiplan-\" + $execution.id }}",
+            "override_token": "",
+            "simulate_decision": ""
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "requesting_workflow",
+              "displayName": "requesting_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "proposed_action",
+              "displayName": "proposed_action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "action_type",
+              "displayName": "action_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "affected_system",
+              "displayName": "affected_system",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "parameters",
+              "displayName": "parameters",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "agent_reasoning",
+              "displayName": "agent_reasoning",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "agent_confidence",
+              "displayName": "agent_confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "idempotency_key",
+              "displayName": "idempotency_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "override_token",
+              "displayName": "override_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "simulate_decision",
+              "displayName": "simulate_decision",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "5173a687-7723-4f17-8a86-c4ce65b8be99",
+      "name": "No Write Steps to Approve",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        840,
+        160
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ng1",
+              "name": "decision",
+              "value": "not_required",
+              "type": "string"
+            },
+            {
+              "id": "ng2",
+              "name": "approved",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "ng3",
+              "name": "risk_level",
+              "value": "LOW",
+              "type": "string"
+            },
+            {
+              "id": "ng4",
+              "name": "decision_reason",
+              "value": "The plan contains only read operations, so no governance approval was requested.",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "2ff8e2ba-7d77-42e7-8d81-1c03569f4c55",
+      "name": "Build Safe Probe List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Only read operations are ever probed, only against the base URL the\n// specification itself declares, and only when the path needs no unknown\n// parameters. Write steps never reach this node regardless of approval, because\n// executing them is out of scope for a demonstration repository.\n//\n// Emits ONE container item, always. Returning an empty list here used to leave\n// the downstream loop with nothing to do, and its done-branch never fired, so no\n// integration report was produced at all.\nconst spec = $('Parse OpenAPI Specification').first().json;\nconst plan = $('Ground Plan Against Specification').first().json;\nconst maxProbes = Number(spec.max_probes || 2);\n\nconst probes = [];\nconst skipped = [];\n\nif (!spec.base_url) {\n  skipped.push('the specification declares no resolvable server URL');\n} else if (maxProbes === 0) {\n  skipped.push('max_probes is 0, so probing was disabled by the caller');\n} else {\n  (plan.read_steps || []).forEach(function (s) {\n    if (probes.length >= maxProbes) { skipped.push(s.operation_id + ': probe budget of ' + maxProbes + ' already used'); return; }\n    if (/\\{[^}]+\\}/.test(s.path)) { skipped.push(s.operation_id + ': path needs a template value that would have to be invented'); return; }\n    const needsAuthParam = (s.required_params || []).some(function (p) { return /^(header|cookie):/.test(p); });\n    if (needsAuthParam) { skipped.push(s.operation_id + ': requires a header or cookie parameter that is not available'); return; }\n    const query = (s.required_params || [])\n      .filter(function (p) { return p.indexOf('query:') === 0; })\n      .map(function (p) { return p.slice(6) + '=available'; })\n      .join('&');\n    probes.push({\n      operation_id: s.operation_id,\n      method: s.method,\n      path: s.path,\n      url: spec.base_url + s.path + (query ? '?' + query : ''),\n      expected_response_fields: s.expected_response_fields || []\n    });\n  });\n  if (!(plan.read_steps || []).length) { skipped.push('the plan contains no read-only steps to probe'); }\n}\n\nreturn [{ json: { probe_count: probes.length, probes: probes, probes_skipped: skipped } }];"
+      }
+    },
+    {
+      "id": "dcda6705-5bb8-455f-9f36-8ee1d248265a",
+      "name": "Build Integration Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1740,
+        -60
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const spec = $('Parse OpenAPI Specification').first().json;\nconst plan = $('Ground Plan Against Specification').first().json;\n\nfunction unwrap(n) {\n  try { const v = $(n).first().json; return (v && v.json) ? v.json : v; } catch (e) { return null; }\n}\nconst promptMeta = unwrap('Get Planner Prompt (08)');\nconst verification = unwrap('Verify Plan (09)');\n\nlet governance = null;\ntry { governance = $('Request Write Approval (05)').first().json; } catch (e) { governance = null; }\nif (governance && governance.json) { governance = governance.json; }\nif (!governance) { try { governance = $('No Write Steps to Approve').first().json; } catch (e) { governance = null; } }\n\nconst all = $input.all().map(function (i) { return i.json; });\nconst probes = all.filter(function (p) { return p && p.operation_id; });\nconst probeMeta = all.filter(function (p) { return p && p.probe_count !== undefined; })[0] || null;\n\nconst blocking = (plan.issues || []).filter(function (i) { return i.severity === 'critical'; });\nconst probesOk = probes.filter(function (p) { return p.ok; }).length;\nconst matched = probes.filter(function (p) { return p.schema_matches_plan; }).length;\nconst unverifiable = probes.filter(function (p) { return p.schema_unverifiable; }).length;\n\n// Readiness is deliberately conservative: anything unproven counts against it.\nconst readiness = [];\nreadiness.push({ check: 'specification_parsed', passed: !!spec.ok, detail: spec.ok ? (spec.operation_count + ' operations parsed') : spec.error });\nreadiness.push({ check: 'plan_grounded_in_specification', passed: plan.hallucinated_operations.length === 0 && plan.steps_grounded > 0, detail: plan.steps_grounded + '/' + plan.steps_proposed + ' steps matched a real operationId' });\nreadiness.push({ check: 'plan_passed_verification', passed: !!(verification && verification.verified), detail: verification ? ('score ' + verification.score) : 'verification unavailable' });\nreadiness.push({ check: 'read_endpoints_reachable', passed: probes.length > 0 && probesOk === probes.length, detail: probesOk + '/' + probes.length + ' probes returned a 2xx' });\nreadiness.push({ check: 'response_schema_matched_plan', passed: probes.length > 0 && matched > 0 && (matched + unverifiable) === probes.length, detail: matched + ' matched, ' + unverifiable + ' had no checkable field spec, ' + (probes.length - matched - unverifiable) + ' mismatched' });\nreadiness.push({ check: 'write_steps_authorised', passed: !plan.has_write_steps || !!(governance && governance.approved), detail: plan.has_write_steps ? ('governance decision: ' + (governance ? governance.decision : 'unknown')) : 'no write steps in the plan' });\nconst readyCount = readiness.filter(function (r) { return r.passed; }).length;\n\nreturn [{\n  json: {\n    generated_at: new Date().toISOString(),\n    n8n_execution_id: $execution.id,\n    goal: spec.goal,\n    api: {\n      title: spec.api_title, version: spec.api_version, openapi_version: spec.openapi_version,\n      base_url: spec.base_url, operation_count: spec.operation_count,\n      read_operations: spec.read_operation_count, write_operations: spec.write_operation_count,\n      authentication: spec.auth_summary, auth_schemes: spec.auth_schemes\n    },\n    prompt: promptMeta ? { id: 'api-integration/spec-analyst', version: promptMeta.version, sha: promptMeta.sha, provenance: promptMeta.provenance, degraded: promptMeta.degraded } : null,\n    model: plan.router,\n    plan: {\n      summary: plan.plan_summary,\n      repaired: !!plan.plan_repaired,\n      auth_requirements: plan.auth_requirements,\n      open_questions: plan.open_questions,\n      model_confidence: plan.model_confidence,\n      steps_proposed: plan.steps_proposed,\n      steps_grounded: plan.steps_grounded,\n      grounding_rate: plan.grounding_rate,\n      hallucinated_operations: plan.hallucinated_operations,\n      steps: plan.steps\n    },\n    verification: verification ? {\n      verified: verification.verified, score: verification.score,\n      issues: verification.issues, requires_human_review: verification.requires_human_review\n    } : { verified: false, score: null, issues: [{ code: 'verification_unavailable' }], requires_human_review: true },\n    governance: governance ? {\n      required: !!plan.has_write_steps, decision: governance.decision, approved: !!governance.approved,\n      risk_level: governance.risk_level, reason: governance.decision_reason\n    } : { required: !!plan.has_write_steps, decision: 'unknown', approved: false },\n    probes: {\n      attempted: probes.length, succeeded: probesOk, schema_matched: matched, schema_unverifiable: unverifiable,\n      skipped: probeMeta ? probeMeta.probes_skipped : [],\n      note: 'Only GET/HEAD operations against the base URL declared by the specification are probed. Write operations are never executed by this workflow, approved or not.',\n      results: probes\n    },\n    issues: plan.issues,\n    blocking_issues: blocking,\n    readiness: { checks: readiness, passed: readyCount, total: readiness.length,\n      verdict: readyCount === readiness.length ? 'ready_to_implement' : (blocking.length ? 'blocked' : 'needs_attention') },\n    latency_ms: spec.started_at_ms ? (Date.now() - Number(spec.started_at_ms)) : null\n  }\n}];"
+      }
+    },
+    {
+      "id": "fd2ceca7-f0ff-4a81-81ce-d8a4a9ac2391",
+      "name": "Probe Read Endpoint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1740,
+        320
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-api-integration-engineer"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "e0b2bd8e-3add-4d80-bb73-23e4011d2091",
+      "name": "Validate Probe Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// Compares the live response against the fields the plan said it expected.\n// Reports what was actually observed rather than asserting the integration works.\nconst probe = $('Probe Loop').first().json;\nconst res = $json || {};\nconst status = Number(res.statusCode || 0);\nconst body = res.body;\n\nfunction collectKeys(v, prefix, out, depth) {\n  if (depth > 3 || out.length > 200) { return; }\n  if (Array.isArray(v)) { if (v.length) { collectKeys(v[0], prefix, out, depth + 1); } return; }\n  if (v && typeof v === 'object') {\n    Object.keys(v).forEach(function (k) {\n      const p = prefix ? (prefix + '.' + k) : k;\n      out.push(p);\n      collectKeys(v[k], p, out, depth + 1);\n    });\n  }\n}\nconst keys = [];\ncollectKeys(body, '', keys, 0);\n\n// Models describe response fields in several notations: 'rates.AUD', '$.rates',\n// '[].id', 'data[].email'. Normalise those to a plain dotted path.\n// They also sometimes write a prose DESCRIPTION instead of a path, such as\n// '<currency_code>: <currency_name> (object mapping)'. That is not checkable,\n// and counting it as a missing field would be a false positive, so it is\n// reported separately instead.\nconst rawExpected = probe.expected_response_fields || [];\nconst checkable = [];\nconst unverifiable = [];\n\nrawExpected.forEach(function (f) {\n  const norm = String(f)\n    .replace(/\\[\\d*\\]/g, '')\n    .replace(/^\\$\\.?/, '')\n    .replace(/^\\.+/, '')\n    .replace(/\\.+/g, '.')\n    .trim();\n  if (!norm) { return; }\n  if (/^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(norm)) { checkable.push(norm); }\n  else { unverifiable.push(String(f)); }\n});\n\nconst missing = checkable.filter(function (f) {\n  const leaf = f.split('.').pop();\n  return !keys.some(function (k) {\n    return k === f || k.endsWith('.' + f) || k.indexOf(f + '.') === 0 || k === leaf || k.endsWith('.' + leaf);\n  });\n});\n\nconst isArrayBody = Array.isArray(body);\nconst itemCount = isArrayBody ? body.length : (body && typeof body === 'object' ? 1 : 0);\nconst reachable = status >= 200 && status < 300;\n\nreturn {\n  json: {\n    operation_id: probe.operation_id,\n    method: probe.method,\n    path: probe.path,\n    url: probe.url,\n    status_code: status,\n    ok: reachable,\n    response_shape: isArrayBody ? 'array' : (body && typeof body === 'object' ? 'object' : typeof body),\n    item_count: itemCount,\n    observed_fields: keys.slice(0, 40),\n    expected_fields: checkable,\n    unverifiable_field_specs: unverifiable,\n    missing_expected_fields: missing,\n    schema_matches_plan: reachable && checkable.length > 0 && missing.length === 0,\n    schema_unverifiable: reachable && checkable.length === 0,\n    error: status >= 400 ? ('endpoint returned HTTP ' + status) : (status === 0 ? 'request failed or timed out' : null)\n  }\n};"
+      }
+    },
+    {
+      "id": "4b4312a6-8fff-4bd9-a259-54c7f9d3f69e",
+      "name": "Probe Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1500,
+        160
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "f9c28ffd-59fd-40ca-8836-72805f7c9c8d",
+      "name": "Sticky Note 7b7be760",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {
+        "content": "## 01 Autonomous API Integration Engineer\n\nGive it an OpenAPI specification and a goal. It parses the specification **deterministically** (no scraping, no guessing), plans an integration with the Model Router using a Git-versioned prompt, grounds every proposed step against the real operation list, verifies the plan, sends any write steps to Governance, safely probes read-only endpoints, and reports what it actually proved.",
+        "color": 4,
+        "width": 460,
+        "height": 260
+      }
+    },
+    {
+      "id": "c68bf5c8-c30a-4580-b370-7cd21321b468",
+      "name": "Sticky Note db12e69d",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        656
+      ],
+      "parameters": {
+        "content": "## Hallucinated endpoints are caught exactly\n\nThe plan is checked by **set membership** against the operationIds the specification declares. A model that invents a plausible endpoint fails this check with certainty — no second model, no judgement call. Method, path and read/write effect are taken from the specification, never from the model, and a disagreement between the two is reported as an issue.",
+        "color": 6,
+        "width": 460,
+        "height": 280
+      }
+    },
+    {
+      "id": "f208fe16-c858-4e4d-a1f1-910fc7768590",
+      "name": "Sticky Note 3babaae1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        1040
+      ],
+      "parameters": {
+        "content": "## Safety of the probe stage\n\nOnly GET and HEAD operations are probed, only against the base URL the specification itself declares, and only when the path template needs no invented identifier.\n\n**Write operations are never executed by this workflow**, whether or not Governance approved them. Approval is recorded in the report so a human can act on it deliberately.",
+        "color": 3,
+        "width": 460,
+        "height": 240
+      }
+    },
+    {
+      "id": "0c15879d-ae21-4f7f-bf35-4cc7395d2b7a",
+      "name": "Demo Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1500,
+        300
+      ],
+      "parameters": {},
+      "notes": "Runs the workflow against the public Swagger Petstore specification. Makes real model calls and real read-only HTTP probes."
+    },
+    {
+      "id": "f5c4cbd7-7484-4d81-9402-9e1953385a43",
+      "name": "Demo Request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1280,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d1",
+              "name": "spec_url",
+              "value": "https://raw.githubusercontent.com/Tejesh080/Free-Agentic-Workflows-in-N8N/main/workflows/01-autonomous-api-integration-engineer/sample-openapi.json",
+              "type": "string"
+            },
+            {
+              "id": "d2",
+              "name": "spec_json",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "d3",
+              "name": "goal",
+              "value": "Read the latest euro reference exchange rates for Australian dollars and US dollars, and list which currencies the API supports. Do not change anything.",
+              "type": "string"
+            },
+            {
+              "id": "d4",
+              "name": "base_url_override",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "d5",
+              "name": "max_probes",
+              "value": "2",
+              "type": "string"
+            },
+            {
+              "id": "d6",
+              "name": "source_workflow",
+              "value": "01-demo-trigger",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cc8b1c8f-6b86-4dbe-ac85-1893f93b19da",
+      "name": "Has Probes to Run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "hp1",
+              "leftValue": "={{ $json.probe_count }}",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              },
+              "rightValue": 0
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "0c78e8f8-9cc2-4267-a381-cce901c2fd1a",
+      "name": "Split Probe List",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        160
+      ],
+      "parameters": {
+        "fieldToSplitOut": "probes",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Integration Request": {
+      "main": [
+        [
+          {
+            "node": "Normalise Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise Request": {
+      "main": [
+        [
+          {
+            "node": "Spec Supplied as URL?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Spec Supplied as URL?": {
+      "main": [
+        [
+          {
+            "node": "Fetch OpenAPI Specification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use Inline Specification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch OpenAPI Specification": {
+      "main": [
+        [
+          {
+            "node": "Parse OpenAPI Specification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Inline Specification": {
+      "main": [
+        [
+          {
+            "node": "Parse OpenAPI Specification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse OpenAPI Specification": {
+      "main": [
+        [
+          {
+            "node": "Get Planner Prompt (08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Planner Prompt (08)": {
+      "main": [
+        [
+          {
+            "node": "Plan Integration (02 Router)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Integration (02 Router)": {
+      "main": [
+        [
+          {
+            "node": "Ground Plan Against Specification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ground Plan Against Specification": {
+      "main": [
+        [
+          {
+            "node": "Verify Plan (09)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Plan (09)": {
+      "main": [
+        [
+          {
+            "node": "Plan Contains Write Steps?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Contains Write Steps?": {
+      "main": [
+        [
+          {
+            "node": "Request Write Approval (05)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Write Steps to Approve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request Write Approval (05)": {
+      "main": [
+        [
+          {
+            "node": "Build Safe Probe List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Write Steps to Approve": {
+      "main": [
+        [
+          {
+            "node": "Build Safe Probe List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe Read Endpoint": {
+      "main": [
+        [
+          {
+            "node": "Validate Probe Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Probe Response": {
+      "main": [
+        [
+          {
+            "node": "Probe Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe Loop": {
+      "main": [
+        [
+          {
+            "node": "Build Integration Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Probe Read Endpoint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Trigger": {
+      "main": [
+        [
+          {
+            "node": "Demo Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Request": {
+      "main": [
+        [
+          {
+            "node": "Normalise Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Safe Probe List": {
+      "main": [
+        [
+          {
+            "node": "Has Probes to Run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Probes to Run?": {
+      "main": [
+        [
+          {
+            "node": "Split Probe List",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Integration Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Probe List": {
+      "main": [
+        [
+          {
+            "node": "Probe Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "description": "Parses an OpenAPI specification deterministically, plans an integration for a stated goal via the Model Router, grounds the plan against the real operation list, verifies it, sends write steps to Governance, and safely probes read-only endpoints.",
+  "versionCounter": 6,
+  "sourceWorkflowId": null,
+  "nodeGroups": [],
+  "activeVersion": null
+}

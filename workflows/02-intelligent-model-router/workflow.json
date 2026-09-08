@@ -1,0 +1,2204 @@
+{
+  "name": "[Platform] 02 Intelligent Model Router",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "task_type"
+            },
+            {
+              "name": "objective"
+            },
+            {
+              "name": "privacy"
+            },
+            {
+              "name": "input"
+            },
+            {
+              "name": "system_prompt"
+            },
+            {
+              "name": "force_provider"
+            },
+            {
+              "name": "source_workflow"
+            },
+            {
+              "name": "run_label"
+            }
+          ]
+        }
+      },
+      "id": "627847f7-d6f2-48ad-bbcb-25b0ff3ddb8d",
+      "name": "Router Request",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1184,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "request_id",
+              "value": "={{ $execution.id }}-{{ $itemIndex }}",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "task_type",
+              "value": "={{ ($json.task_type || \"general\").toLowerCase().trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "objective",
+              "value": "={{ ($json.objective || \"balanced\").toLowerCase().trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "a4",
+              "name": "privacy",
+              "value": "={{ ($json.privacy || \"standard\").toLowerCase().trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "a5",
+              "name": "input",
+              "value": "={{ $json.input || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a6",
+              "name": "system_prompt",
+              "value": "={{ $json.system_prompt || \"You are a careful, factual assistant. If you are not certain, say so explicitly.\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a7",
+              "name": "force_provider",
+              "value": "={{ ($json.force_provider || \"\").toLowerCase().trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "a8",
+              "name": "source_workflow",
+              "value": "={{ $json.source_workflow || \"unknown\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a9",
+              "name": "run_label",
+              "value": "={{ $json.run_label || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a10",
+              "name": "started_at_ms",
+              "value": "={{ $now.toMillis() }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fea9df75-417b-410b-a8e5-dc05e70da3ec",
+      "name": "Normalise Request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -960,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Deterministic model-selection engine. No LLM sits in the decision path.\n//\n// Every number in CANDIDATES is a CONFIGURED PRIOR, not a measurement:\n//   price_*_usd_per_mtok  vendor list price captured at build time. Operators MUST\n//                         re-check these. See docs/ROI-METHODOLOGY.md.\n//   quality_prior         operator-set 0..1 prior. Replace with measured evaluation\n//                         scores once the benchmark harness has been run.\n//   latency_prior_ms      seed value only. Real latency is measured per call and\n//                         written to the agentic_router_telemetry data table.\nconst CANDIDATES = [\n  {\n    key: 'gemini', provider: 'google', model: 'models/gemini-3-flash-preview',\n    branch: 'gemini', locality: 'cloud',\n    price_in_usd_per_mtok: 0.30, price_out_usd_per_mtok: 2.50,\n    quality_prior: 0.80, latency_prior_ms: 1500,\n    json_mode: true, tool_calls: true, context_tokens: 1000000, vision: true\n  },\n  {\n    key: 'openai', provider: 'openai', model: 'gpt-5-mini',\n    branch: 'openai', locality: 'cloud',\n    price_in_usd_per_mtok: 0.25, price_out_usd_per_mtok: 2.00,\n    quality_prior: 0.85, latency_prior_ms: 2600,\n    json_mode: true, tool_calls: true, context_tokens: 400000, vision: true\n  },\n  {\n    key: 'anthropic', provider: 'anthropic', model: 'claude-sonnet-5',\n    branch: 'anthropic', locality: 'cloud',\n    price_in_usd_per_mtok: 3.00, price_out_usd_per_mtok: 15.00,\n    quality_prior: 0.93, latency_prior_ms: 3400,\n    json_mode: true, tool_calls: true, context_tokens: 200000, vision: true\n  }\n  // To serve privacy=local_only, register a local candidate here, for example\n  // { key: 'ollama', provider: 'ollama', model: 'qwen3:8b', locality: 'local', ... }\n  // and add a matching branch to the Provider Switch + an Ollama chain node.\n];\n\n// Weight profiles per objective. Each profile sums to 1.0.\nconst WEIGHTS = {\n  quality:  { quality: 0.75, cost: 0.05, latency: 0.20 },\n  balanced: { quality: 0.45, cost: 0.30, latency: 0.25 },\n  cost:     { quality: 0.20, cost: 0.65, latency: 0.15 },\n  latency:  { quality: 0.25, cost: 0.15, latency: 0.60 }\n};\n\n// Hard capability requirements per task type, applied before scoring.\nconst TASK_REQUIREMENTS = {\n  extraction:     { json_mode: true, min_quality: 0.78 },\n  verification:   { json_mode: true, min_quality: 0.78 },\n  classification: { json_mode: true, min_quality: 0.70 },\n  reasoning:      { min_quality: 0.84 },\n  research:       { min_quality: 0.78, min_context_tokens: 200000 },\n  code:           { min_quality: 0.84 },\n  summarization:  { min_quality: 0.70 },\n  conversation:   { min_quality: 0.70 },\n  general:        { min_quality: 0.70 }\n};\n\nconst req = $json;\nconst objective = WEIGHTS[req.objective] ? req.objective : 'balanced';\nconst weights = WEIGHTS[objective];\nconst taskReq = TASK_REQUIREMENTS[req.task_type] || TASK_REQUIREMENTS.general;\n\n// Token estimate: roughly 4 characters per token. Explicitly an ESTIMATE - the\n// n8n LangChain chain nodes do not surface provider-reported token counts.\nconst inputChars = String(req.input || '').length + String(req.system_prompt || '').length;\nconst tokensInEst = Math.max(1, Math.ceil(inputChars / 4));\nconst tokensOutEst = Math.max(64, Math.ceil(tokensInEst * 0.5));\n\nconst policyFlags = [];\nconst rejected = [];\n\n// ---- Gate 1: privacy. NEVER bypassable, not even by force_provider. -------\n// local_only means the payload must never leave the host. With no local\n// candidate registered the router refuses instead of silently downgrading.\nlet privacyPool = CANDIDATES.slice();\nif (req.privacy === 'local_only') {\n  privacyPool.forEach(function (c) {\n    if (c.locality !== 'local') { rejected.push({ key: c.key, reason: 'privacy:local_only' }); }\n  });\n  privacyPool = privacyPool.filter(function (c) { return c.locality === 'local'; });\n  policyFlags.push('privacy_local_only');\n}\n\n// ---- Gate 2: task capability. Bypassable by an explicit force_provider. ---\nconst capable = [];\nprivacyPool.forEach(function (c) {\n  if (taskReq.json_mode && !c.json_mode) { rejected.push({ key: c.key, reason: 'requires_json_mode' }); return; }\n  if (taskReq.min_quality && c.quality_prior < taskReq.min_quality) { rejected.push({ key: c.key, reason: 'below_min_quality' }); return; }\n  if (taskReq.min_context_tokens && c.context_tokens < taskReq.min_context_tokens) { rejected.push({ key: c.key, reason: 'context_too_small' }); return; }\n  capable.push(c);\n});\n\n// ---- Scoring --------------------------------------------------------------\nfunction blendedPrice(c) {\n  return (c.price_in_usd_per_mtok * tokensInEst + c.price_out_usd_per_mtok * tokensOutEst) / 1000000;\n}\n\n// Lower is better for price and latency, so invert into a 0..1 goodness score.\nfunction invNorm(v, lo, hi) { return (hi - lo) < 1e-12 ? 1 : (hi - v) / (hi - lo); }\n\nfunction rank(pool) {\n  const priced = pool.map(function (c) { return { c: c, price: blendedPrice(c) }; });\n  const prices = priced.map(function (p) { return p.price; });\n  const lats = pool.map(function (c) { return c.latency_prior_ms; });\n  const maxPrice = prices.length ? Math.max.apply(null, prices) : 1;\n  const minPrice = prices.length ? Math.min.apply(null, prices) : 0;\n  const maxLat = lats.length ? Math.max.apply(null, lats) : 1;\n  const minLat = lats.length ? Math.min.apply(null, lats) : 0;\n  return priced.map(function (p) {\n    const costScore = invNorm(p.price, minPrice, maxPrice);\n    const latScore = invNorm(p.c.latency_prior_ms, minLat, maxLat);\n    const total = weights.quality * p.c.quality_prior + weights.cost * costScore + weights.latency * latScore;\n    return {\n      key: p.c.key, provider: p.c.provider, model: p.c.model, branch: p.c.branch,\n      score: Math.round(total * 10000) / 10000,\n      quality_prior: p.c.quality_prior,\n      cost_score: Math.round(costScore * 10000) / 10000,\n      latency_score: Math.round(latScore * 10000) / 10000,\n      estimated_cost_usd: Math.round(p.price * 1000000) / 1000000\n    };\n  }).sort(function (a, b) { return b.score - a.score; });\n}\n\nconst ranked = rank(capable);\nconst rankedIgnoringCapability = rank(privacyPool);\n\n// ---- Caller override (used by the benchmark harness) ----------------------\n// Forcing bypasses the capability gate so a benchmark can measure any provider\n// on any task. It can never bypass the privacy gate above.\nlet chosen = ranked.length ? ranked[0] : null;\nlet reason = '';\nif (req.force_provider) {\n  const forced = rankedIgnoringCapability.filter(function (r) { return r.key === req.force_provider; })[0];\n  if (forced) {\n    const wasCapable = ranked.filter(function (r) { return r.key === req.force_provider; }).length > 0;\n    chosen = forced;\n    reason = 'forced by caller (force_provider=' + req.force_provider + ')'\n      + (wasCapable ? '' : ' - capability gate bypassed for this task type');\n    policyFlags.push('forced_provider');\n    if (!wasCapable) { policyFlags.push('capability_gate_bypassed'); }\n  } else {\n    policyFlags.push('forced_provider_unavailable');\n  }\n}\n\nif (!chosen) {\n  const blockReason = req.privacy === 'local_only'\n    ? 'No local model provider is registered. Add a candidate with locality \"local\" and a matching switch branch to serve privacy=local_only requests.'\n    : 'No registered candidate satisfies the capability requirements for task_type=' + req.task_type + '.';\n  return {\n    json: Object.assign({}, req, {\n      routed: false,\n      branch: 'blocked',\n      block_reason: blockReason,\n      policy_flags: policyFlags,\n      rejected_candidates: rejected,\n      candidate_scores: ranked,\n      tokens_in_est: tokensInEst,\n      tokens_out_est: tokensOutEst\n    })\n  };\n}\n\nif (!reason) {\n  reason = 'objective=' + objective + ' weights(quality=' + weights.quality + ', cost=' + weights.cost\n    + ', latency=' + weights.latency + '); winning score ' + chosen.score\n    + ' (quality_prior=' + chosen.quality_prior + ', cost_score=' + chosen.cost_score\n    + ', latency_score=' + chosen.latency_score + ')';\n}\nconst fallbackPick = rankedIgnoringCapability.filter(function (r) { return r.key !== chosen.key; })[0];\n\nreturn {\n  json: Object.assign({}, req, {\n    routed: true,\n    branch: chosen.branch,\n    selected_provider: chosen.provider,\n    selected_model: chosen.model,\n    selected_key: chosen.key,\n    reason: reason,\n    fallback: fallbackPick ? (fallbackPick.provider + '/' + fallbackPick.model) : 'google/models/gemini-3.1-flash-lite',\n    estimated_cost_usd: chosen.estimated_cost_usd,\n    cost_basis: 'configured_list_price_estimate',\n    tokens_in_est: tokensInEst,\n    tokens_out_est: tokensOutEst,\n    candidate_scores: ranked.length ? ranked : rankedIgnoringCapability,\n    rejected_candidates: rejected,\n    policy_flags: policyFlags,\n    weights_used: weights\n  })\n};"
+      },
+      "id": "ea035c99-612e-4b0e-9895-15f3ce85a2f5",
+      "name": "Route Decision Engine",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -736,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.branch }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "gemini"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c2",
+                    "leftValue": "={{ $json.branch }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "openai"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c3",
+                    "leftValue": "={{ $json.branch }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "anthropic"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c4",
+                    "leftValue": "={{ $json.routed }}",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "false",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "3"
+        }
+      },
+      "id": "7a2b34ac-a1ba-453c-b6ab-7efb4ea00406",
+      "name": "Provider Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -512,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.input }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "={{ $json.system_prompt }}"
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "id": "df84469f-d5db-4f68-b6ef-15031c93fada",
+      "name": "Call Google Gemini",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -288,
+        -144
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "options": {
+          "temperature": 0.2,
+          "maxOutputTokens": 8192
+        }
+      },
+      "id": "c8d6af23-31ed-421d-9086-d09d1688b5c6",
+      "name": "Gemini Flash (fast tier)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -208,
+        96
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $(\"Route Decision Engine\").first().json.input }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "={{ $(\"Route Decision Engine\").first().json.system_prompt }}"
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "id": "cbf7db6b-39bf-4240-882c-7cd7284423f2",
+      "name": "Fallback Provider Call",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        64,
+        512
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {
+          "temperature": 0.2,
+          "maxOutputTokens": 8192
+        }
+      },
+      "id": "b34dd9e1-6a28-4b5d-9c85-067731e38a95",
+      "name": "Gemini Flash Lite (fallback tier)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        136,
+        744
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.input }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "={{ $json.system_prompt }}"
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "id": "265d763c-aee4-4c0d-b378-d8a5af7ef657",
+      "name": "Call OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -288,
+        256
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini",
+          "cachedResultName": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "reasoningEffort": "low",
+          "maxTokens": 8192,
+          "timeout": 90000,
+          "maxRetries": 1
+        }
+      },
+      "id": "ecbaec91-4c64-49f0-befe-da03d5b8327c",
+      "name": "GPT-5 Mini (balanced tier)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -208,
+        496
+      ],
+      "credentials": {
+        "openAiApi": {
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.input }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "={{ $json.system_prompt }}"
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "id": "18d64136-af6c-459d-b661-66bc52ebae93",
+      "name": "Call Anthropic",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -288,
+        768
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-sonnet-5",
+          "cachedResultName": "Claude Sonnet 5"
+        },
+        "options": {
+          "maxTokensToSample": 8192
+        }
+      },
+      "id": "19328297-c04c-4895-a71c-c9201633a797",
+      "name": "Claude Sonnet 5 (quality tier)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.6,
+      "position": [
+        -216,
+        984
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1",
+              "name": "text",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "b2",
+              "name": "route_stage",
+              "value": "blocked",
+              "type": "string"
+            },
+            {
+              "id": "b3",
+              "name": "call_status",
+              "value": "policy_blocked",
+              "type": "string"
+            },
+            {
+              "id": "b4",
+              "name": "error",
+              "value": "={{ $json.block_reason }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "809a600b-1254-4b4e-8dee-e9b21133d8c3",
+      "name": "Policy Block",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        416,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "p1",
+              "name": "route_stage",
+              "value": "primary",
+              "type": "string"
+            },
+            {
+              "id": "p2",
+              "name": "call_status",
+              "value": "ok",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "63eaa51e-115a-4562-8458-9c6bb15d3758",
+      "name": "Tag Primary Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        128,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f1",
+              "name": "route_stage",
+              "value": "fallback",
+              "type": "string"
+            },
+            {
+              "id": "f2",
+              "name": "call_status",
+              "value": "={{ $json.error ? \"failed\" : \"ok\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "561345b3-6a23-43da-a6b1-538349319025",
+      "name": "Tag Fallback Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        416,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Builds the public router response contract.\n// MEASURED and ESTIMATED values live under separate keys on purpose, so that\n// downstream READMEs and benchmark files can never present an estimate as a\n// measurement.\nconst decision = $('Route Decision Engine').first().json;\nconst req = $('Normalise Request').first().json;\nconst res = $json;\n\nconst endedAtMs = Date.now();\nconst startedAtMs = Number(req.started_at_ms || 0);\nconst latencyMs = startedAtMs > 0 ? (endedAtMs - startedAtMs) : null;\n\nconst text = typeof res.text === 'string' ? res.text : (res.output || res.response || '');\nconst stage = res.route_stage || 'primary';\nconst blocked = stage === 'blocked';\nconst usedFallback = stage === 'fallback';\n\nconst outChars = String(text || '').length;\nconst tokensOutEst = Math.max(0, Math.ceil(outChars / 4));\nconst tokensInEst = decision.tokens_in_est || 0;\n\n// Vendor list prices, USD per million tokens, captured at build time.\n// Operators must re-verify. See docs/ROI-METHODOLOGY.md.\nconst PRICES = {\n  'google/models/gemini-3-flash-preview': { in: 0.30, out: 2.50 },\n  'google/models/gemini-3.1-flash-lite': { in: 0.10, out: 0.40 },\n  'openai/gpt-5-mini': { in: 0.25, out: 2.00 },\n  'anthropic/claude-sonnet-5': { in: 3.00, out: 15.00 }\n};\n\nconst providerUsed = usedFallback ? 'google' : (decision.selected_provider || null);\nconst modelUsed = usedFallback ? 'models/gemini-3.1-flash-lite' : (decision.selected_model || null);\nconst priceKey = (providerUsed && modelUsed) ? (providerUsed + '/' + modelUsed) : null;\nconst price = (priceKey && PRICES[priceKey]) ? PRICES[priceKey] : null;\nconst estimatedCost = price\n  ? Math.round(((price.in * tokensInEst + price.out * tokensOutEst) / 1000000) * 1000000) / 1000000\n  : 0;\n\nconst succeeded = !blocked && !!text && res.call_status !== 'failed';\n\nreturn {\n  json: {\n    request_id: req.request_id,\n    source_workflow: req.source_workflow,\n    run_label: req.run_label,\n    ok: succeeded,\n    status: blocked ? 'policy_blocked' : (succeeded ? 'ok' : 'failed'),\n    output: text,\n    selected_provider: providerUsed,\n    selected_model: modelUsed,\n    reason: blocked ? decision.block_reason : decision.reason,\n    fallback: decision.fallback || null,\n    fallback_used: usedFallback,\n    route_stage: stage,\n    latency_ms: latencyMs,\n    measured: { latency_ms: latencyMs, output_chars: outChars },\n    estimated: {\n      tokens_in: tokensInEst,\n      tokens_out: tokensOutEst,\n      cost_usd: estimatedCost,\n      cost_basis: 'configured list price; tokens derived from characters/4'\n    },\n    estimated_cost_usd: estimatedCost,\n    task_type: req.task_type,\n    objective: req.objective,\n    privacy: req.privacy,\n    policy_flags: decision.policy_flags || [],\n    candidate_scores: decision.candidate_scores || [],\n    rejected_candidates: decision.rejected_candidates || [],\n    error: (blocked || !succeeded)\n      ? (res.error || decision.block_reason || 'empty model response')\n      : null\n  }\n};"
+      },
+      "id": "d2bb6021-6939-4016-abb6-4c32ac9a1731",
+      "name": "Measure and Normalise Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATA_TABLE_ID",
+          "cachedResultName": "agentic_router_telemetry"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "request_id": "={{ $json.request_id }}",
+            "source_workflow": "={{ $json.source_workflow }}",
+            "task_type": "={{ $json.task_type }}",
+            "objective": "={{ $json.objective }}",
+            "privacy": "={{ $json.privacy }}",
+            "selected_provider": "={{ $json.selected_provider }}",
+            "selected_model": "={{ $json.selected_model }}",
+            "fallback_used": "={{ $json.fallback_used }}",
+            "status": "={{ $json.status }}",
+            "latency_ms": "={{ $json.latency_ms }}",
+            "tokens_in_est": "={{ $json.estimated.tokens_in }}",
+            "tokens_out_est": "={{ $json.estimated.tokens_out }}",
+            "estimated_cost_usd": "={{ $json.estimated_cost_usd }}",
+            "error_message": "={{ $json.error }}",
+            "run_label": "={{ $json.run_label }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "2c7d1ca6-f5d1-400c-96ec-14c8c429cd2a",
+      "name": "Record Routing Telemetry",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        864,
+        208
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## Reusable platform service: LLM Model Router\n\nCalled by the domain workflows with **Execute Sub-workflow**.\n\n**Input** `task_type` (research | reasoning | extraction | verification | classification | summarization | code | conversation | general), `objective` (cost | balanced | quality | latency), `privacy` (standard | sensitive | local_only), `input`, `system_prompt`, `force_provider`, `caller`.\n\n**Output** `ok`, `status`, `output`, `selected_provider`, `selected_model`, `reason`, `fallback_used`, `latency_ms` (MEASURED), `estimated.cost_usd` (ESTIMATE), `candidate_scores[]`, `policy_flags[]`.",
+        "height": 300,
+        "width": 600,
+        "color": 4
+      },
+      "id": "c14afab0-f8b1-4b4f-a524-680d6aa35a49",
+      "name": "Sticky Note 70138b4b",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Deterministic selection, not an LLM guessing\n\nHard gates first (privacy locality, JSON-mode capability, minimum quality, context size), then a weighted score over quality prior, blended token price and latency prior.\n\n`privacy=local_only` is **refused**, not silently downgraded to a cloud provider, when no local candidate is registered.\n\nRegistry prices and quality priors are configured values, not measurements. Measured latency is captured per call into the `agentic_router_telemetry` data table.",
+        "height": 320,
+        "width": 460,
+        "color": 6
+      },
+      "id": "b69db178-7ee7-4d71-bcd4-065a802812a2",
+      "name": "Sticky Note 2037d82b",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Reliability\n\nEach provider call retries 3x with a 2s backoff, then routes its **error output** to a different vendor (Gemini Flash Lite), so a single provider outage degrades instead of failing.\n\nThe fallback itself uses `continueRegularOutput`, so even a total outage returns a structured `status: \"failed\"` envelope rather than crashing the caller.",
+        "height": 240,
+        "width": 480,
+        "color": 3
+      },
+      "id": "4476987d-6540-49c6-b340-a4361fbe36c5",
+      "name": "Sticky Note 5a649af2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        1120
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "28ae3ae0-6a1a-4b47-80a1-b4154c9eff13",
+      "name": "Benchmark Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1184,
+        1232
+      ],
+      "notes": "Runs the reproducible provider benchmark. Consumes real model calls."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reproducible benchmark matrix: every registered provider runs every task.\n// Each case carries a DETERMINISTIC check so the scores below are measured,\n// not asserted. Nothing here contains real customer data.\nconst PROVIDERS = ['gemini', 'openai', 'anthropic'];\n\nconst CASES = [\n  {\n    case_id: 'reasoning-1',\n    task_type: 'reasoning',\n    objective: 'quality',\n    check: 'contains_all',\n    system_prompt: 'Answer in at most three sentences. Be precise.',\n    input: 'In information retrieval, what is the trade-off between precision and recall? Name both terms explicitly.'\n  },\n  {\n    case_id: 'extraction-1',\n    task_type: 'extraction',\n    objective: 'balanced',\n    check: 'json_keys',\n    system_prompt: 'You output ONLY raw JSON. No markdown fences, no prose, no explanation.',\n    input: 'Extract the invoice fields as a JSON object with exactly the keys invoice_number, vendor, total, currency. Source text: \"Invoice INV-2043 from Northwind Traders. Amount due: 1240.50 EUR.\"'\n  },\n  {\n    case_id: 'summarization-1',\n    task_type: 'summarization',\n    objective: 'cost',\n    check: 'grounded_no_fabrication',\n    system_prompt: 'Summarise strictly from the source. Do not introduce facts that are not in the source.',\n    input: 'Summarise in under 60 words using only the source. SOURCE: \"The Halifax bridge was resurfaced in 2019. Traffic volume fell 12 percent in 2020 and recovered to 2018 levels by 2022. No tolls were introduced.\"'\n  }\n];\n\nconst runId = 'bench-' + $execution.id;\nconst rows = [];\n\nCASES.forEach(function (c) {\n  PROVIDERS.forEach(function (p) {\n    rows.push({\n      json: {\n        run_id: runId,\n        case_id: c.case_id,\n        check: c.check,\n        task_type: c.task_type,\n        objective: c.objective,\n        privacy: 'standard',\n        system_prompt: c.system_prompt,\n        input: c.input,\n        force_provider: p,\n        source_workflow: '02-benchmark-harness',\n        run_label: c.case_id + '::' + c.check + '::' + p\n      }\n    });\n  });\n});\n\nreturn rows;"
+      },
+      "id": "aa047621-0f1d-43ad-b8c3-009f48bd3776",
+      "name": "Build Benchmark Matrix",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        1232
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "66a70a1d-b9f9-497f-9a8e-8390aec20fdf",
+      "name": "Benchmark Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -736,
+        1232
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 02 Intelligent Model Router"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "task_type": "={{ $json.task_type }}",
+            "objective": "={{ $json.objective }}",
+            "privacy": "={{ $json.privacy }}",
+            "input": "={{ $json.input }}",
+            "system_prompt": "={{ $json.system_prompt }}",
+            "force_provider": "={{ $json.force_provider }}",
+            "run_label": "={{ $json.run_label }}",
+            "source_workflow": "={{ $json.source_workflow }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "task_type",
+              "displayName": "task_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "objective",
+              "displayName": "objective",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "privacy",
+              "displayName": "privacy",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "input",
+              "displayName": "input",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "system_prompt",
+              "displayName": "system_prompt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "force_provider",
+              "displayName": "force_provider",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "run_label",
+              "displayName": "run_label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "40974fa6-75e9-4625-965c-9dcddefad7f1",
+      "name": "Run Router Case",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -512,
+        1280
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Scores the benchmark with DETERMINISTIC checks and reports only measured\n// values. Latency is measured; cost is an estimate and is labelled as such.\n//\n// n8n's Execute Sub-workflow node returns the child's output wrapped in an\n// extra { json: ... } envelope, so unwrap defensively before reading fields.\nconst results = $input.all().map(function (i) {\n  return (i.json && i.json.json) ? i.json.json : i.json;\n});\n\nfunction stripFences(s) {\n  return String(s || '').replace(/^\\s*```(?:json)?/i, '').replace(/```\\s*$/, '').trim();\n}\n\nfunction checkContainsAll(text, needles) {\n  const lower = String(text || '').toLowerCase();\n  const missing = needles.filter(function (n) { return lower.indexOf(n.toLowerCase()) === -1; });\n  return { pass: missing.length === 0, detail: missing.length ? ('missing: ' + missing.join(', ')) : 'all required terms present' };\n}\n\nfunction checkJsonKeys(text, keys) {\n  let parsed = null;\n  try { parsed = JSON.parse(stripFences(text)); } catch (e) { return { pass: false, detail: 'not parseable as JSON' }; }\n  if (!parsed || typeof parsed !== 'object') { return { pass: false, detail: 'parsed value is not an object' }; }\n  const missing = keys.filter(function (k) { return !(k in parsed); });\n  return { pass: missing.length === 0, detail: missing.length ? ('missing keys: ' + missing.join(', ')) : 'schema satisfied' };\n}\n\nfunction checkGrounded(text, facts) {\n  const s = String(text || '');\n  const words = s.split(/\\s+/).filter(function (w) { return w.length > 0; });\n  const present = facts.filter(function (f) { return s.indexOf(f) !== -1; });\n  // Fabrication probe: tokens that do NOT appear in the source must not appear here.\n  const forbidden = ['2021', '2023', '2024', 'GBP', 'USD'];\n  const hallucinated = forbidden.filter(function (f) { return s.indexOf(f) !== -1; });\n  const pass = present.length >= 2 && hallucinated.length === 0 && words.length > 0 && words.length <= 90;\n  return {\n    pass: pass,\n    detail: 'grounded_facts=' + present.length + '/' + facts.length\n      + '; fabricated_tokens=' + (hallucinated.length ? hallucinated.join(',') : 'none')\n      + '; words=' + words.length\n  };\n}\n\nconst EXPECT = {\n  'reasoning-1': ['precision', 'recall'],\n  'extraction-1': ['invoice_number', 'vendor', 'total', 'currency'],\n  'summarization-1': ['2019', '2020', '2022']\n};\n\nconst rows = results.map(function (r) {\n  const parts = String(r.run_label || '').split('::');\n  const caseId = parts[0] || 'unknown';\n  const check = parts[1] || 'none';\n  const forced = parts[2] || (r.selected_provider || 'unknown');\n  const expect = EXPECT[caseId] || [];\n  let verdict = { pass: false, detail: 'no check registered for ' + caseId };\n  if (r.ok) {\n    if (check === 'contains_all') { verdict = checkContainsAll(r.output, expect); }\n    else if (check === 'json_keys') { verdict = checkJsonKeys(r.output, expect); }\n    else if (check === 'grounded_no_fabrication') { verdict = checkGrounded(r.output, expect); }\n  } else {\n    verdict = { pass: false, detail: 'call failed: ' + (r.error || 'unknown') };\n  }\n  return {\n    case_id: caseId,\n    check: check,\n    requested_provider: forced,\n    served_by_provider: r.selected_provider || null,\n    served_by_model: r.selected_model || null,\n    call_ok: !!r.ok,\n    fallback_used: !!r.fallback_used,\n    check_pass: verdict.pass,\n    check_detail: verdict.detail,\n    latency_ms_measured: typeof r.latency_ms === 'number' ? r.latency_ms : null,\n    output_chars_measured: r.measured ? r.measured.output_chars : null,\n    estimated_cost_usd: r.estimated_cost_usd\n  };\n});\n\nfunction pct(list, p) {\n  const xs = list.filter(function (v) { return typeof v === 'number' && isFinite(v); }).sort(function (a, b) { return a - b; });\n  if (!xs.length) { return null; }\n  const idx = Math.min(xs.length - 1, Math.max(0, Math.ceil((p / 100) * xs.length) - 1));\n  return xs[idx];\n}\n\nconst byProvider = {};\nrows.forEach(function (r) {\n  const key = r.requested_provider;\n  if (!byProvider[key]) { byProvider[key] = { provider: key, runs: 0, ok: 0, checks_passed: 0, fallbacks: 0, latencies: [], cost: 0 }; }\n  const p = byProvider[key];\n  p.runs += 1;\n  if (r.call_ok) { p.ok += 1; }\n  if (r.check_pass) { p.checks_passed += 1; }\n  if (r.fallback_used) { p.fallbacks += 1; }\n  if (typeof r.latency_ms_measured === 'number') { p.latencies.push(r.latency_ms_measured); }\n  p.cost += Number(r.estimated_cost_usd || 0);\n});\n\nconst summary = Object.keys(byProvider).map(function (k) {\n  const p = byProvider[k];\n  return {\n    requested_provider: p.provider,\n    runs: p.runs,\n    call_success_rate: p.runs ? Math.round((p.ok / p.runs) * 100) / 100 : null,\n    check_pass_rate: p.runs ? Math.round((p.checks_passed / p.runs) * 100) / 100 : null,\n    fallback_rate: p.runs ? Math.round((p.fallbacks / p.runs) * 100) / 100 : null,\n    latency_ms_p50_measured: pct(p.latencies, 50),\n    latency_ms_p95_measured: pct(p.latencies, 95),\n    latency_ms_min_measured: p.latencies.length ? Math.min.apply(null, p.latencies) : null,\n    latency_ms_max_measured: p.latencies.length ? Math.max.apply(null, p.latencies) : null,\n    total_estimated_cost_usd: Math.round(p.cost * 1000000) / 1000000\n  };\n}).sort(function (a, b) { return String(a.requested_provider).localeCompare(String(b.requested_provider)); });\n\nreturn [{\n  json: {\n    benchmark: 'router-provider-matrix-v1',\n    generated_at: new Date().toISOString(),\n    n8n_execution_id: $execution.id,\n    note: 'latency_ms_* are MEASURED wall-clock times inside n8n and include network, provider queueing and retry time. estimated_cost_usd values are ESTIMATES from configured list prices with tokens approximated as characters/4.',\n    sample_size_caveat: 'One run per (task, provider) cell. p50/p95 over 3 samples per provider are indicative only, not statistically stable.',\n    total_runs: rows.length,\n    provider_summary: summary,\n    runs: rows\n  }\n}];"
+      },
+      "id": "d39b70f8-92df-4b64-b9f6-49f4b2891b59",
+      "name": "Score Benchmark Run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -512,
+        1088
+      ]
+    }
+  ],
+  "connections": {
+    "Router Request": {
+      "main": [
+        [
+          {
+            "node": "Normalise Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise Request": {
+      "main": [
+        [
+          {
+            "node": "Route Decision Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Decision Engine": {
+      "main": [
+        [
+          {
+            "node": "Provider Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Provider Switch": {
+      "main": [
+        [
+          {
+            "node": "Call Google Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Anthropic",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Policy Block",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Google Gemini": {
+      "main": [
+        [
+          {
+            "node": "Tag Primary Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback Provider Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Flash (fast tier)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Call Google Gemini",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fallback Provider Call": {
+      "main": [
+        [
+          {
+            "node": "Tag Fallback Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Flash Lite (fallback tier)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Fallback Provider Call",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Tag Primary Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback Provider Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT-5 Mini (balanced tier)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Call OpenAI",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Anthropic": {
+      "main": [
+        [
+          {
+            "node": "Tag Primary Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback Provider Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Sonnet 5 (quality tier)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Call Anthropic",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Policy Block": {
+      "main": [
+        [
+          {
+            "node": "Measure and Normalise Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag Primary Result": {
+      "main": [
+        [
+          {
+            "node": "Measure and Normalise Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag Fallback Result": {
+      "main": [
+        [
+          {
+            "node": "Measure and Normalise Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Measure and Normalise Response": {
+      "main": [
+        [
+          {
+            "node": "Record Routing Telemetry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Benchmark Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build Benchmark Matrix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Benchmark Matrix": {
+      "main": [
+        [
+          {
+            "node": "Benchmark Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Benchmark Loop": {
+      "main": [
+        [
+          {
+            "node": "Score Benchmark Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run Router Case",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Router Case": {
+      "main": [
+        [
+          {
+            "node": "Benchmark Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "tags": [],
+  "description": "Reusable LLM routing service. Deterministic scoring over quality/cost/latency with privacy and capability gates, cross-vendor fallback, and measured latency telemetry.",
+  "versionCounter": 16,
+  "sourceWorkflowId": null,
+  "nodeGroups": [],
+  "activeVersion": {
+    "versionId": "f1c12ccf-f3ec-4d4c-874f-17bce2d3aa25",
+    "workflowId": "CICW1oBcK0DYWvUc",
+    "nodes": [
+      {
+        "parameters": {
+          "workflowInputs": {
+            "values": [
+              {
+                "name": "task_type"
+              },
+              {
+                "name": "objective"
+              },
+              {
+                "name": "privacy"
+              },
+              {
+                "name": "input"
+              },
+              {
+                "name": "system_prompt"
+              },
+              {
+                "name": "force_provider"
+              },
+              {
+                "name": "source_workflow"
+              },
+              {
+                "name": "run_label"
+              }
+            ]
+          }
+        },
+        "id": "627847f7-d6f2-48ad-bbcb-25b0ff3ddb8d",
+        "name": "Router Request",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -1184,
+          160
+        ]
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "a1",
+                "name": "request_id",
+                "value": "={{ $execution.id }}-{{ $itemIndex }}",
+                "type": "string"
+              },
+              {
+                "id": "a2",
+                "name": "task_type",
+                "value": "={{ ($json.task_type || \"general\").toLowerCase().trim() }}",
+                "type": "string"
+              },
+              {
+                "id": "a3",
+                "name": "objective",
+                "value": "={{ ($json.objective || \"balanced\").toLowerCase().trim() }}",
+                "type": "string"
+              },
+              {
+                "id": "a4",
+                "name": "privacy",
+                "value": "={{ ($json.privacy || \"standard\").toLowerCase().trim() }}",
+                "type": "string"
+              },
+              {
+                "id": "a5",
+                "name": "input",
+                "value": "={{ $json.input || \"\" }}",
+                "type": "string"
+              },
+              {
+                "id": "a6",
+                "name": "system_prompt",
+                "value": "={{ $json.system_prompt || \"You are a careful, factual assistant. If you are not certain, say so explicitly.\" }}",
+                "type": "string"
+              },
+              {
+                "id": "a7",
+                "name": "force_provider",
+                "value": "={{ ($json.force_provider || \"\").toLowerCase().trim() }}",
+                "type": "string"
+              },
+              {
+                "id": "a8",
+                "name": "source_workflow",
+                "value": "={{ $json.source_workflow || \"unknown\" }}",
+                "type": "string"
+              },
+              {
+                "id": "a9",
+                "name": "run_label",
+                "value": "={{ $json.run_label || \"\" }}",
+                "type": "string"
+              },
+              {
+                "id": "a10",
+                "name": "started_at_ms",
+                "value": "={{ $now.toMillis() }}",
+                "type": "number"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "fea9df75-417b-410b-a8e5-dc05e70da3ec",
+        "name": "Normalise Request",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          -960,
+          160
+        ]
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "// Deterministic model-selection engine. No LLM sits in the decision path.\n//\n// Every number in CANDIDATES is a CONFIGURED PRIOR, not a measurement:\n//   price_*_usd_per_mtok  vendor list price captured at build time. Operators MUST\n//                         re-check these. See docs/ROI-METHODOLOGY.md.\n//   quality_prior         operator-set 0..1 prior. Replace with measured evaluation\n//                         scores once the benchmark harness has been run.\n//   latency_prior_ms      seed value only. Real latency is measured per call and\n//                         written to the agentic_router_telemetry data table.\nconst CANDIDATES = [\n  {\n    key: 'gemini', provider: 'google', model: 'models/gemini-3-flash-preview',\n    branch: 'gemini', locality: 'cloud',\n    price_in_usd_per_mtok: 0.30, price_out_usd_per_mtok: 2.50,\n    quality_prior: 0.80, latency_prior_ms: 1500,\n    json_mode: true, tool_calls: true, context_tokens: 1000000, vision: true\n  },\n  {\n    key: 'openai', provider: 'openai', model: 'gpt-5-mini',\n    branch: 'openai', locality: 'cloud',\n    price_in_usd_per_mtok: 0.25, price_out_usd_per_mtok: 2.00,\n    quality_prior: 0.85, latency_prior_ms: 2600,\n    json_mode: true, tool_calls: true, context_tokens: 400000, vision: true\n  },\n  {\n    key: 'anthropic', provider: 'anthropic', model: 'claude-sonnet-5',\n    branch: 'anthropic', locality: 'cloud',\n    price_in_usd_per_mtok: 3.00, price_out_usd_per_mtok: 15.00,\n    quality_prior: 0.93, latency_prior_ms: 3400,\n    json_mode: true, tool_calls: true, context_tokens: 200000, vision: true\n  }\n  // To serve privacy=local_only, register a local candidate here, for example\n  // { key: 'ollama', provider: 'ollama', model: 'qwen3:8b', locality: 'local', ... }\n  // and add a matching branch to the Provider Switch + an Ollama chain node.\n];\n\n// Weight profiles per objective. Each profile sums to 1.0.\nconst WEIGHTS = {\n  quality:  { quality: 0.75, cost: 0.05, latency: 0.20 },\n  balanced: { quality: 0.45, cost: 0.30, latency: 0.25 },\n  cost:     { quality: 0.20, cost: 0.65, latency: 0.15 },\n  latency:  { quality: 0.25, cost: 0.15, latency: 0.60 }\n};\n\n// Hard capability requirements per task type, applied before scoring.\nconst TASK_REQUIREMENTS = {\n  extraction:     { json_mode: true, min_quality: 0.78 },\n  verification:   { json_mode: true, min_quality: 0.78 },\n  classification: { json_mode: true, min_quality: 0.70 },\n  reasoning:      { min_quality: 0.84 },\n  research:       { min_quality: 0.78, min_context_tokens: 200000 },\n  code:           { min_quality: 0.84 },\n  summarization:  { min_quality: 0.70 },\n  conversation:   { min_quality: 0.70 },\n  general:        { min_quality: 0.70 }\n};\n\nconst req = $json;\nconst objective = WEIGHTS[req.objective] ? req.objective : 'balanced';\nconst weights = WEIGHTS[objective];\nconst taskReq = TASK_REQUIREMENTS[req.task_type] || TASK_REQUIREMENTS.general;\n\n// Token estimate: roughly 4 characters per token. Explicitly an ESTIMATE - the\n// n8n LangChain chain nodes do not surface provider-reported token counts.\nconst inputChars = String(req.input || '').length + String(req.system_prompt || '').length;\nconst tokensInEst = Math.max(1, Math.ceil(inputChars / 4));\nconst tokensOutEst = Math.max(64, Math.ceil(tokensInEst * 0.5));\n\nconst policyFlags = [];\nconst rejected = [];\n\n// ---- Gate 1: privacy. NEVER bypassable, not even by force_provider. -------\n// local_only means the payload must never leave the host. With no local\n// candidate registered the router refuses instead of silently downgrading.\nlet privacyPool = CANDIDATES.slice();\nif (req.privacy === 'local_only') {\n  privacyPool.forEach(function (c) {\n    if (c.locality !== 'local') { rejected.push({ key: c.key, reason: 'privacy:local_only' }); }\n  });\n  privacyPool = privacyPool.filter(function (c) { return c.locality === 'local'; });\n  policyFlags.push('privacy_local_only');\n}\n\n// ---- Gate 2: task capability. Bypassable by an explicit force_provider. ---\nconst capable = [];\nprivacyPool.forEach(function (c) {\n  if (taskReq.json_mode && !c.json_mode) { rejected.push({ key: c.key, reason: 'requires_json_mode' }); return; }\n  if (taskReq.min_quality && c.quality_prior < taskReq.min_quality) { rejected.push({ key: c.key, reason: 'below_min_quality' }); return; }\n  if (taskReq.min_context_tokens && c.context_tokens < taskReq.min_context_tokens) { rejected.push({ key: c.key, reason: 'context_too_small' }); return; }\n  capable.push(c);\n});\n\n// ---- Scoring --------------------------------------------------------------\nfunction blendedPrice(c) {\n  return (c.price_in_usd_per_mtok * tokensInEst + c.price_out_usd_per_mtok * tokensOutEst) / 1000000;\n}\n\n// Lower is better for price and latency, so invert into a 0..1 goodness score.\nfunction invNorm(v, lo, hi) { return (hi - lo) < 1e-12 ? 1 : (hi - v) / (hi - lo); }\n\nfunction rank(pool) {\n  const priced = pool.map(function (c) { return { c: c, price: blendedPrice(c) }; });\n  const prices = priced.map(function (p) { return p.price; });\n  const lats = pool.map(function (c) { return c.latency_prior_ms; });\n  const maxPrice = prices.length ? Math.max.apply(null, prices) : 1;\n  const minPrice = prices.length ? Math.min.apply(null, prices) : 0;\n  const maxLat = lats.length ? Math.max.apply(null, lats) : 1;\n  const minLat = lats.length ? Math.min.apply(null, lats) : 0;\n  return priced.map(function (p) {\n    const costScore = invNorm(p.price, minPrice, maxPrice);\n    const latScore = invNorm(p.c.latency_prior_ms, minLat, maxLat);\n    const total = weights.quality * p.c.quality_prior + weights.cost * costScore + weights.latency * latScore;\n    return {\n      key: p.c.key, provider: p.c.provider, model: p.c.model, branch: p.c.branch,\n      score: Math.round(total * 10000) / 10000,\n      quality_prior: p.c.quality_prior,\n      cost_score: Math.round(costScore * 10000) / 10000,\n      latency_score: Math.round(latScore * 10000) / 10000,\n      estimated_cost_usd: Math.round(p.price * 1000000) / 1000000\n    };\n  }).sort(function (a, b) { return b.score - a.score; });\n}\n\nconst ranked = rank(capable);\nconst rankedIgnoringCapability = rank(privacyPool);\n\n// ---- Caller override (used by the benchmark harness) ----------------------\n// Forcing bypasses the capability gate so a benchmark can measure any provider\n// on any task. It can never bypass the privacy gate above.\nlet chosen = ranked.length ? ranked[0] : null;\nlet reason = '';\nif (req.force_provider) {\n  const forced = rankedIgnoringCapability.filter(function (r) { return r.key === req.force_provider; })[0];\n  if (forced) {\n    const wasCapable = ranked.filter(function (r) { return r.key === req.force_provider; }).length > 0;\n    chosen = forced;\n    reason = 'forced by caller (force_provider=' + req.force_provider + ')'\n      + (wasCapable ? '' : ' - capability gate bypassed for this task type');\n    policyFlags.push('forced_provider');\n    if (!wasCapable) { policyFlags.push('capability_gate_bypassed'); }\n  } else {\n    policyFlags.push('forced_provider_unavailable');\n  }\n}\n\nif (!chosen) {\n  const blockReason = req.privacy === 'local_only'\n    ? 'No local model provider is registered. Add a candidate with locality \"local\" and a matching switch branch to serve privacy=local_only requests.'\n    : 'No registered candidate satisfies the capability requirements for task_type=' + req.task_type + '.';\n  return {\n    json: Object.assign({}, req, {\n      routed: false,\n      branch: 'blocked',\n      block_reason: blockReason,\n      policy_flags: policyFlags,\n      rejected_candidates: rejected,\n      candidate_scores: ranked,\n      tokens_in_est: tokensInEst,\n      tokens_out_est: tokensOutEst\n    })\n  };\n}\n\nif (!reason) {\n  reason = 'objective=' + objective + ' weights(quality=' + weights.quality + ', cost=' + weights.cost\n    + ', latency=' + weights.latency + '); winning score ' + chosen.score\n    + ' (quality_prior=' + chosen.quality_prior + ', cost_score=' + chosen.cost_score\n    + ', latency_score=' + chosen.latency_score + ')';\n}\nconst fallbackPick = rankedIgnoringCapability.filter(function (r) { return r.key !== chosen.key; })[0];\n\nreturn {\n  json: Object.assign({}, req, {\n    routed: true,\n    branch: chosen.branch,\n    selected_provider: chosen.provider,\n    selected_model: chosen.model,\n    selected_key: chosen.key,\n    reason: reason,\n    fallback: fallbackPick ? (fallbackPick.provider + '/' + fallbackPick.model) : 'google/models/gemini-3.1-flash-lite',\n    estimated_cost_usd: chosen.estimated_cost_usd,\n    cost_basis: 'configured_list_price_estimate',\n    tokens_in_est: tokensInEst,\n    tokens_out_est: tokensOutEst,\n    candidate_scores: ranked.length ? ranked : rankedIgnoringCapability,\n    rejected_candidates: rejected,\n    policy_flags: policyFlags,\n    weights_used: weights\n  })\n};"
+        },
+        "id": "ea035c99-612e-4b0e-9895-15f3ce85a2f5",
+        "name": "Route Decision Engine",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -736,
+          160
+        ]
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "id": "c1",
+                      "leftValue": "={{ $json.branch }}",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "rightValue": "gemini"
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "id": "c2",
+                      "leftValue": "={{ $json.branch }}",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "rightValue": "openai"
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "id": "c3",
+                      "leftValue": "={{ $json.branch }}",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "rightValue": "anthropic"
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "id": "c4",
+                      "leftValue": "={{ $json.routed }}",
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "false",
+                        "singleValue": true
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              }
+            ]
+          },
+          "options": {
+            "fallbackOutput": "3"
+          }
+        },
+        "id": "7a2b34ac-a1ba-453c-b6ab-7efb4ea00406",
+        "name": "Provider Switch",
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.2,
+        "position": [
+          -512,
+          128
+        ]
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "={{ $json.input }}",
+          "messages": {
+            "messageValues": [
+              {
+                "message": "={{ $json.system_prompt }}"
+              }
+            ]
+          },
+          "batching": {}
+        },
+        "id": "df84469f-d5db-4f68-b6ef-15031c93fada",
+        "name": "Call Google Gemini",
+        "type": "@n8n/n8n-nodes-langchain.chainLlm",
+        "typeVersion": 1.9,
+        "position": [
+          -288,
+          -144
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "options": {
+            "temperature": 0.2,
+            "maxOutputTokens": 8192
+          }
+        },
+        "id": "c8d6af23-31ed-421d-9086-d09d1688b5c6",
+        "name": "Gemini Flash (fast tier)",
+        "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+        "typeVersion": 1.1,
+        "position": [
+          -208,
+          96
+        ],
+        "credentials": {
+          "googlePalmApi": {
+            "id": null,
+            "name": "Gateway credits",
+            "__aiGatewayManaged": true
+          }
+        }
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "={{ $(\"Route Decision Engine\").first().json.input }}",
+          "messages": {
+            "messageValues": [
+              {
+                "message": "={{ $(\"Route Decision Engine\").first().json.system_prompt }}"
+              }
+            ]
+          },
+          "batching": {}
+        },
+        "id": "cbf7db6b-39bf-4240-882c-7cd7284423f2",
+        "name": "Fallback Provider Call",
+        "type": "@n8n/n8n-nodes-langchain.chainLlm",
+        "typeVersion": 1.9,
+        "position": [
+          64,
+          512
+        ],
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 3000,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "modelName": "models/gemini-3.1-flash-lite",
+          "options": {
+            "temperature": 0.2,
+            "maxOutputTokens": 8192
+          }
+        },
+        "id": "b34dd9e1-6a28-4b5d-9c85-067731e38a95",
+        "name": "Gemini Flash Lite (fallback tier)",
+        "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+        "typeVersion": 1.1,
+        "position": [
+          136,
+          744
+        ],
+        "credentials": {
+          "googlePalmApi": {
+            "id": null,
+            "name": "Gateway credits",
+            "__aiGatewayManaged": true
+          }
+        }
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "={{ $json.input }}",
+          "messages": {
+            "messageValues": [
+              {
+                "message": "={{ $json.system_prompt }}"
+              }
+            ]
+          },
+          "batching": {}
+        },
+        "id": "265d763c-aee4-4c0d-b378-d8a5af7ef657",
+        "name": "Call OpenAI",
+        "type": "@n8n/n8n-nodes-langchain.chainLlm",
+        "typeVersion": 1.9,
+        "position": [
+          -288,
+          256
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "model": {
+            "__rl": true,
+            "mode": "list",
+            "value": "gpt-5-mini",
+            "cachedResultName": "gpt-5-mini"
+          },
+          "builtInTools": {},
+          "options": {
+            "reasoningEffort": "low",
+            "maxTokens": 8192,
+            "timeout": 90000,
+            "maxRetries": 1
+          }
+        },
+        "id": "ecbaec91-4c64-49f0-befe-da03d5b8327c",
+        "name": "GPT-5 Mini (balanced tier)",
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1.3,
+        "position": [
+          -208,
+          496
+        ],
+        "credentials": {
+          "openAiApi": {
+            "id": null,
+            "name": "Gateway credits",
+            "__aiGatewayManaged": true
+          }
+        }
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "={{ $json.input }}",
+          "messages": {
+            "messageValues": [
+              {
+                "message": "={{ $json.system_prompt }}"
+              }
+            ]
+          },
+          "batching": {}
+        },
+        "id": "18d64136-af6c-459d-b661-66bc52ebae93",
+        "name": "Call Anthropic",
+        "type": "@n8n/n8n-nodes-langchain.chainLlm",
+        "typeVersion": 1.9,
+        "position": [
+          -288,
+          768
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "model": {
+            "__rl": true,
+            "mode": "list",
+            "value": "claude-sonnet-5",
+            "cachedResultName": "Claude Sonnet 5"
+          },
+          "options": {
+            "maxTokensToSample": 8192
+          }
+        },
+        "id": "19328297-c04c-4895-a71c-c9201633a797",
+        "name": "Claude Sonnet 5 (quality tier)",
+        "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+        "typeVersion": 1.6,
+        "position": [
+          -216,
+          984
+        ],
+        "credentials": {
+          "anthropicApi": {
+            "id": null,
+            "name": "Gateway credits",
+            "__aiGatewayManaged": true
+          }
+        }
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "b1",
+                "name": "text",
+                "value": "",
+                "type": "string"
+              },
+              {
+                "id": "b2",
+                "name": "route_stage",
+                "value": "blocked",
+                "type": "string"
+              },
+              {
+                "id": "b3",
+                "name": "call_status",
+                "value": "policy_blocked",
+                "type": "string"
+              },
+              {
+                "id": "b4",
+                "name": "error",
+                "value": "={{ $json.block_reason }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "809a600b-1254-4b4e-8dee-e9b21133d8c3",
+        "name": "Policy Block",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          416,
+          -288
+        ]
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "p1",
+                "name": "route_stage",
+                "value": "primary",
+                "type": "string"
+              },
+              {
+                "id": "p2",
+                "name": "call_status",
+                "value": "ok",
+                "type": "string"
+              }
+            ]
+          },
+          "includeOtherFields": true,
+          "options": {}
+        },
+        "id": "63eaa51e-115a-4562-8458-9c6bb15d3758",
+        "name": "Tag Primary Result",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          128,
+          208
+        ]
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "f1",
+                "name": "route_stage",
+                "value": "fallback",
+                "type": "string"
+              },
+              {
+                "id": "f2",
+                "name": "call_status",
+                "value": "={{ $json.error ? \"failed\" : \"ok\" }}",
+                "type": "string"
+              }
+            ]
+          },
+          "includeOtherFields": true,
+          "options": {}
+        },
+        "id": "561345b3-6a23-43da-a6b1-538349319025",
+        "name": "Tag Fallback Result",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          416,
+          512
+        ]
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "// Builds the public router response contract.\n// MEASURED and ESTIMATED values live under separate keys on purpose, so that\n// downstream READMEs and benchmark files can never present an estimate as a\n// measurement.\nconst decision = $('Route Decision Engine').first().json;\nconst req = $('Normalise Request').first().json;\nconst res = $json;\n\nconst endedAtMs = Date.now();\nconst startedAtMs = Number(req.started_at_ms || 0);\nconst latencyMs = startedAtMs > 0 ? (endedAtMs - startedAtMs) : null;\n\nconst text = typeof res.text === 'string' ? res.text : (res.output || res.response || '');\nconst stage = res.route_stage || 'primary';\nconst blocked = stage === 'blocked';\nconst usedFallback = stage === 'fallback';\n\nconst outChars = String(text || '').length;\nconst tokensOutEst = Math.max(0, Math.ceil(outChars / 4));\nconst tokensInEst = decision.tokens_in_est || 0;\n\n// Vendor list prices, USD per million tokens, captured at build time.\n// Operators must re-verify. See docs/ROI-METHODOLOGY.md.\nconst PRICES = {\n  'google/models/gemini-3-flash-preview': { in: 0.30, out: 2.50 },\n  'google/models/gemini-3.1-flash-lite': { in: 0.10, out: 0.40 },\n  'openai/gpt-5-mini': { in: 0.25, out: 2.00 },\n  'anthropic/claude-sonnet-5': { in: 3.00, out: 15.00 }\n};\n\nconst providerUsed = usedFallback ? 'google' : (decision.selected_provider || null);\nconst modelUsed = usedFallback ? 'models/gemini-3.1-flash-lite' : (decision.selected_model || null);\nconst priceKey = (providerUsed && modelUsed) ? (providerUsed + '/' + modelUsed) : null;\nconst price = (priceKey && PRICES[priceKey]) ? PRICES[priceKey] : null;\nconst estimatedCost = price\n  ? Math.round(((price.in * tokensInEst + price.out * tokensOutEst) / 1000000) * 1000000) / 1000000\n  : 0;\n\nconst succeeded = !blocked && !!text && res.call_status !== 'failed';\n\nreturn {\n  json: {\n    request_id: req.request_id,\n    source_workflow: req.source_workflow,\n    run_label: req.run_label,\n    ok: succeeded,\n    status: blocked ? 'policy_blocked' : (succeeded ? 'ok' : 'failed'),\n    output: text,\n    selected_provider: providerUsed,\n    selected_model: modelUsed,\n    reason: blocked ? decision.block_reason : decision.reason,\n    fallback: decision.fallback || null,\n    fallback_used: usedFallback,\n    route_stage: stage,\n    latency_ms: latencyMs,\n    measured: { latency_ms: latencyMs, output_chars: outChars },\n    estimated: {\n      tokens_in: tokensInEst,\n      tokens_out: tokensOutEst,\n      cost_usd: estimatedCost,\n      cost_basis: 'configured list price; tokens derived from characters/4'\n    },\n    estimated_cost_usd: estimatedCost,\n    task_type: req.task_type,\n    objective: req.objective,\n    privacy: req.privacy,\n    policy_flags: decision.policy_flags || [],\n    candidate_scores: decision.candidate_scores || [],\n    rejected_candidates: decision.rejected_candidates || [],\n    error: (blocked || !succeeded)\n      ? (res.error || decision.block_reason || 'empty model response')\n      : null\n  }\n};"
+        },
+        "id": "d2bb6021-6939-4016-abb6-4c32ac9a1731",
+        "name": "Measure and Normalise Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          640,
+          208
+        ]
+      },
+      {
+        "parameters": {
+          "dataTableId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "LdqKndA7aAPelkQj",
+            "cachedResultName": "agentic_router_telemetry"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "request_id": "={{ $json.request_id }}",
+              "caller": "={{ $json.caller }}",
+              "task_type": "={{ $json.task_type }}",
+              "objective": "={{ $json.objective }}",
+              "privacy": "={{ $json.privacy }}",
+              "selected_provider": "={{ $json.selected_provider }}",
+              "selected_model": "={{ $json.selected_model }}",
+              "fallback_used": "={{ $json.fallback_used }}",
+              "status": "={{ $json.status }}",
+              "latency_ms": "={{ $json.latency_ms }}",
+              "tokens_in_est": "={{ $json.estimated.tokens_in }}",
+              "tokens_out_est": "={{ $json.estimated.tokens_out }}",
+              "estimated_cost_usd": "={{ $json.estimated_cost_usd }}",
+              "error_message": "={{ $json.error }}",
+              "run_label": "={{ $json.run_label }}",
+              "source_workflow": "={{ $json.source_workflow }}"
+            }
+          },
+          "options": {}
+        },
+        "id": "2c7d1ca6-f5d1-400c-96ec-14c8c429cd2a",
+        "name": "Record Routing Telemetry",
+        "type": "n8n-nodes-base.dataTable",
+        "typeVersion": 1,
+        "position": [
+          864,
+          208
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "content": "## Reusable platform service: LLM Model Router\n\nCalled by the domain workflows with **Execute Sub-workflow**.\n\n**Input** `task_type` (research | reasoning | extraction | verification | classification | summarization | code | conversation | general), `objective` (cost | balanced | quality | latency), `privacy` (standard | sensitive | local_only), `input`, `system_prompt`, `force_provider`, `caller`.\n\n**Output** `ok`, `status`, `output`, `selected_provider`, `selected_model`, `reason`, `fallback_used`, `latency_ms` (MEASURED), `estimated.cost_usd` (ESTIMATE), `candidate_scores[]`, `policy_flags[]`.",
+          "height": 300,
+          "width": 600,
+          "color": 4
+        },
+        "id": "c14afab0-f8b1-4b4f-a524-680d6aa35a49",
+        "name": "Sticky Note 70138b4b",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -16,
+          368
+        ]
+      },
+      {
+        "parameters": {
+          "content": "## Deterministic selection, not an LLM guessing\n\nHard gates first (privacy locality, JSON-mode capability, minimum quality, context size), then a weighted score over quality prior, blended token price and latency prior.\n\n`privacy=local_only` is **refused**, not silently downgraded to a cloud provider, when no local candidate is registered.\n\nRegistry prices and quality priors are configured values, not measurements. Measured latency is captured per call into the `agentic_router_telemetry` data table.",
+          "height": 320,
+          "width": 460,
+          "color": 6
+        },
+        "id": "b69db178-7ee7-4d71-bcd4-065a802812a2",
+        "name": "Sticky Note 2037d82b",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -80,
+          784
+        ]
+      },
+      {
+        "parameters": {
+          "content": "## Reliability\n\nEach provider call retries 3x with a 2s backoff, then routes its **error output** to a different vendor (Gemini Flash Lite), so a single provider outage degrades instead of failing.\n\nThe fallback itself uses `continueRegularOutput`, so even a total outage returns a structured `status: \"failed\"` envelope rather than crashing the caller.",
+          "height": 240,
+          "width": 480,
+          "color": 3
+        },
+        "id": "4476987d-6540-49c6-b340-a4361fbe36c5",
+        "name": "Sticky Note 5a649af2",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -80,
+          1120
+        ]
+      },
+      {
+        "parameters": {},
+        "id": "28ae3ae0-6a1a-4b47-80a1-b4154c9eff13",
+        "name": "Benchmark Trigger",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          -1184,
+          1232
+        ],
+        "notes": "Runs the reproducible provider benchmark. Consumes real model calls."
+      },
+      {
+        "parameters": {
+          "jsCode": "// Reproducible benchmark matrix: every registered provider runs every task.\n// Each case carries a DETERMINISTIC check so the scores below are measured,\n// not asserted. Nothing here contains real customer data.\nconst PROVIDERS = ['gemini', 'openai', 'anthropic'];\n\nconst CASES = [\n  {\n    case_id: 'reasoning-1',\n    task_type: 'reasoning',\n    objective: 'quality',\n    check: 'contains_all',\n    system_prompt: 'Answer in at most three sentences. Be precise.',\n    input: 'In information retrieval, what is the trade-off between precision and recall? Name both terms explicitly.'\n  },\n  {\n    case_id: 'extraction-1',\n    task_type: 'extraction',\n    objective: 'balanced',\n    check: 'json_keys',\n    system_prompt: 'You output ONLY raw JSON. No markdown fences, no prose, no explanation.',\n    input: 'Extract the invoice fields as a JSON object with exactly the keys invoice_number, vendor, total, currency. Source text: \"Invoice INV-2043 from Northwind Traders. Amount due: 1240.50 EUR.\"'\n  },\n  {\n    case_id: 'summarization-1',\n    task_type: 'summarization',\n    objective: 'cost',\n    check: 'grounded_no_fabrication',\n    system_prompt: 'Summarise strictly from the source. Do not introduce facts that are not in the source.',\n    input: 'Summarise in under 60 words using only the source. SOURCE: \"The Halifax bridge was resurfaced in 2019. Traffic volume fell 12 percent in 2020 and recovered to 2018 levels by 2022. No tolls were introduced.\"'\n  }\n];\n\nconst runId = 'bench-' + $execution.id;\nconst rows = [];\n\nCASES.forEach(function (c) {\n  PROVIDERS.forEach(function (p) {\n    rows.push({\n      json: {\n        run_id: runId,\n        case_id: c.case_id,\n        check: c.check,\n        task_type: c.task_type,\n        objective: c.objective,\n        privacy: 'standard',\n        system_prompt: c.system_prompt,\n        input: c.input,\n        force_provider: p,\n        source_workflow: '02-benchmark-harness',\n        run_label: c.case_id + '::' + c.check + '::' + p\n      }\n    });\n  });\n});\n\nreturn rows;"
+        },
+        "id": "aa047621-0f1d-43ad-b8c3-009f48bd3776",
+        "name": "Build Benchmark Matrix",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -960,
+          1232
+        ]
+      },
+      {
+        "parameters": {
+          "options": {}
+        },
+        "id": "66a70a1d-b9f9-497f-9a8e-8390aec20fdf",
+        "name": "Benchmark Loop",
+        "type": "n8n-nodes-base.splitInBatches",
+        "typeVersion": 3,
+        "position": [
+          -736,
+          1232
+        ]
+      },
+      {
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "CICW1oBcK0DYWvUc",
+            "cachedResultName": "[Platform] 02 Intelligent Model Router"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "task_type": "={{ $json.task_type }}",
+              "objective": "={{ $json.objective }}",
+              "privacy": "={{ $json.privacy }}",
+              "input": "={{ $json.input }}",
+              "system_prompt": "={{ $json.system_prompt }}",
+              "force_provider": "={{ $json.force_provider }}",
+              "run_label": "={{ $json.run_label }}",
+              "source_workflow": "={{ $json.source_workflow }}"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "task_type",
+                "displayName": "task_type",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "objective",
+                "displayName": "objective",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "privacy",
+                "displayName": "privacy",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "input",
+                "displayName": "input",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "system_prompt",
+                "displayName": "system_prompt",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "force_provider",
+                "displayName": "force_provider",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "source_workflow",
+                "displayName": "source_workflow",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "run_label",
+                "displayName": "run_label",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "id": "40974fa6-75e9-4625-965c-9dcddefad7f1",
+        "name": "Run Router Case",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          -512,
+          1280
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Scores the benchmark with DETERMINISTIC checks and reports only measured\n// values. Latency is measured; cost is an estimate and is labelled as such.\n//\n// n8n's Execute Sub-workflow node returns the child's output wrapped in an\n// extra { json: ... } envelope, so unwrap defensively before reading fields.\nconst results = $input.all().map(function (i) {\n  return (i.json && i.json.json) ? i.json.json : i.json;\n});\n\nfunction stripFences(s) {\n  return String(s || '').replace(/^\\s*```(?:json)?/i, '').replace(/```\\s*$/, '').trim();\n}\n\nfunction checkContainsAll(text, needles) {\n  const lower = String(text || '').toLowerCase();\n  const missing = needles.filter(function (n) { return lower.indexOf(n.toLowerCase()) === -1; });\n  return { pass: missing.length === 0, detail: missing.length ? ('missing: ' + missing.join(', ')) : 'all required terms present' };\n}\n\nfunction checkJsonKeys(text, keys) {\n  let parsed = null;\n  try { parsed = JSON.parse(stripFences(text)); } catch (e) { return { pass: false, detail: 'not parseable as JSON' }; }\n  if (!parsed || typeof parsed !== 'object') { return { pass: false, detail: 'parsed value is not an object' }; }\n  const missing = keys.filter(function (k) { return !(k in parsed); });\n  return { pass: missing.length === 0, detail: missing.length ? ('missing keys: ' + missing.join(', ')) : 'schema satisfied' };\n}\n\nfunction checkGrounded(text, facts) {\n  const s = String(text || '');\n  const words = s.split(/\\s+/).filter(function (w) { return w.length > 0; });\n  const present = facts.filter(function (f) { return s.indexOf(f) !== -1; });\n  // Fabrication probe: tokens that do NOT appear in the source must not appear here.\n  const forbidden = ['2021', '2023', '2024', 'GBP', 'USD'];\n  const hallucinated = forbidden.filter(function (f) { return s.indexOf(f) !== -1; });\n  const pass = present.length >= 2 && hallucinated.length === 0 && words.length > 0 && words.length <= 90;\n  return {\n    pass: pass,\n    detail: 'grounded_facts=' + present.length + '/' + facts.length\n      + '; fabricated_tokens=' + (hallucinated.length ? hallucinated.join(',') : 'none')\n      + '; words=' + words.length\n  };\n}\n\nconst EXPECT = {\n  'reasoning-1': ['precision', 'recall'],\n  'extraction-1': ['invoice_number', 'vendor', 'total', 'currency'],\n  'summarization-1': ['2019', '2020', '2022']\n};\n\nconst rows = results.map(function (r) {\n  const parts = String(r.run_label || '').split('::');\n  const caseId = parts[0] || 'unknown';\n  const check = parts[1] || 'none';\n  const forced = parts[2] || (r.selected_provider || 'unknown');\n  const expect = EXPECT[caseId] || [];\n  let verdict = { pass: false, detail: 'no check registered for ' + caseId };\n  if (r.ok) {\n    if (check === 'contains_all') { verdict = checkContainsAll(r.output, expect); }\n    else if (check === 'json_keys') { verdict = checkJsonKeys(r.output, expect); }\n    else if (check === 'grounded_no_fabrication') { verdict = checkGrounded(r.output, expect); }\n  } else {\n    verdict = { pass: false, detail: 'call failed: ' + (r.error || 'unknown') };\n  }\n  return {\n    case_id: caseId,\n    check: check,\n    requested_provider: forced,\n    served_by_provider: r.selected_provider || null,\n    served_by_model: r.selected_model || null,\n    call_ok: !!r.ok,\n    fallback_used: !!r.fallback_used,\n    check_pass: verdict.pass,\n    check_detail: verdict.detail,\n    latency_ms_measured: typeof r.latency_ms === 'number' ? r.latency_ms : null,\n    output_chars_measured: r.measured ? r.measured.output_chars : null,\n    estimated_cost_usd: r.estimated_cost_usd\n  };\n});\n\nfunction pct(list, p) {\n  const xs = list.filter(function (v) { return typeof v === 'number' && isFinite(v); }).sort(function (a, b) { return a - b; });\n  if (!xs.length) { return null; }\n  const idx = Math.min(xs.length - 1, Math.max(0, Math.ceil((p / 100) * xs.length) - 1));\n  return xs[idx];\n}\n\nconst byProvider = {};\nrows.forEach(function (r) {\n  const key = r.requested_provider;\n  if (!byProvider[key]) { byProvider[key] = { provider: key, runs: 0, ok: 0, checks_passed: 0, fallbacks: 0, latencies: [], cost: 0 }; }\n  const p = byProvider[key];\n  p.runs += 1;\n  if (r.call_ok) { p.ok += 1; }\n  if (r.check_pass) { p.checks_passed += 1; }\n  if (r.fallback_used) { p.fallbacks += 1; }\n  if (typeof r.latency_ms_measured === 'number') { p.latencies.push(r.latency_ms_measured); }\n  p.cost += Number(r.estimated_cost_usd || 0);\n});\n\nconst summary = Object.keys(byProvider).map(function (k) {\n  const p = byProvider[k];\n  return {\n    requested_provider: p.provider,\n    runs: p.runs,\n    call_success_rate: p.runs ? Math.round((p.ok / p.runs) * 100) / 100 : null,\n    check_pass_rate: p.runs ? Math.round((p.checks_passed / p.runs) * 100) / 100 : null,\n    fallback_rate: p.runs ? Math.round((p.fallbacks / p.runs) * 100) / 100 : null,\n    latency_ms_p50_measured: pct(p.latencies, 50),\n    latency_ms_p95_measured: pct(p.latencies, 95),\n    latency_ms_min_measured: p.latencies.length ? Math.min.apply(null, p.latencies) : null,\n    latency_ms_max_measured: p.latencies.length ? Math.max.apply(null, p.latencies) : null,\n    total_estimated_cost_usd: Math.round(p.cost * 1000000) / 1000000\n  };\n}).sort(function (a, b) { return String(a.requested_provider).localeCompare(String(b.requested_provider)); });\n\nreturn [{\n  json: {\n    benchmark: 'router-provider-matrix-v1',\n    generated_at: new Date().toISOString(),\n    n8n_execution_id: $execution.id,\n    note: 'latency_ms_* are MEASURED wall-clock times inside n8n and include network, provider queueing and retry time. estimated_cost_usd values are ESTIMATES from configured list prices with tokens approximated as characters/4.',\n    sample_size_caveat: 'One run per (task, provider) cell. p50/p95 over 3 samples per provider are indicative only, not statistically stable.',\n    total_runs: rows.length,\n    provider_summary: summary,\n    runs: rows\n  }\n}];"
+        },
+        "id": "d39b70f8-92df-4b64-b9f6-49f4b2891b59",
+        "name": "Score Benchmark Run",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -512,
+          1088
+        ]
+      }
+    ],
+    "connections": {
+      "Router Request": {
+        "main": [
+          [
+            {
+              "node": "Normalise Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalise Request": {
+        "main": [
+          [
+            {
+              "node": "Route Decision Engine",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Route Decision Engine": {
+        "main": [
+          [
+            {
+              "node": "Provider Switch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Provider Switch": {
+        "main": [
+          [
+            {
+              "node": "Call Google Gemini",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Call OpenAI",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Call Anthropic",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Policy Block",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call Google Gemini": {
+        "main": [
+          [
+            {
+              "node": "Tag Primary Result",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Fallback Provider Call",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Gemini Flash (fast tier)": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "Call Google Gemini",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fallback Provider Call": {
+        "main": [
+          [
+            {
+              "node": "Tag Fallback Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Gemini Flash Lite (fallback tier)": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "Fallback Provider Call",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call OpenAI": {
+        "main": [
+          [
+            {
+              "node": "Tag Primary Result",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Fallback Provider Call",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "GPT-5 Mini (balanced tier)": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "Call OpenAI",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call Anthropic": {
+        "main": [
+          [
+            {
+              "node": "Tag Primary Result",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Fallback Provider Call",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Claude Sonnet 5 (quality tier)": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "Call Anthropic",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Policy Block": {
+        "main": [
+          [
+            {
+              "node": "Measure and Normalise Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Tag Primary Result": {
+        "main": [
+          [
+            {
+              "node": "Measure and Normalise Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Tag Fallback Result": {
+        "main": [
+          [
+            {
+              "node": "Measure and Normalise Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Measure and Normalise Response": {
+        "main": [
+          [
+            {
+              "node": "Record Routing Telemetry",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Benchmark Trigger": {
+        "main": [
+          [
+            {
+              "node": "Build Benchmark Matrix",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Benchmark Matrix": {
+        "main": [
+          [
+            {
+              "node": "Benchmark Loop",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Benchmark Loop": {
+        "main": [
+          [
+            {
+              "node": "Score Benchmark Run",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Run Router Case",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run Router Case": {
+        "main": [
+          [
+            {
+              "node": "Benchmark Loop",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Tejesh Nenavath (via MCP)",
+    "name": "Raise output token budgets to stop truncated JSON",
+    "description": "Two callers (01 API integration and 06 financial documents) independently produced JSON that ended mid-object. Both current-generation models spend part of the output budget on reasoning tokens, so a 2048 cap was cutting the visible answer short. Raised Gemini to 8192 output tokens and set an explicit 8192 cap on OpenAI and Anthropic.",
+    "autosaved": false,
+    "createdAt": "2026-09-08T05:19:20.683Z",
+    "updatedAt": "2026-09-08T05:19:20.683Z",
+    "workflowPublishHistory": [
+      {
+        "id": 77,
+        "workflowId": "CICW1oBcK0DYWvUc",
+        "versionId": "f1c12ccf-f3ec-4d4c-874f-17bce2d3aa25",
+        "event": "activated",
+        "userId": "304a85db-b680-4711-837a-69e38e9a3ef6",
+        "createdAt": "2026-09-08T05:19:31.591Z"
+      }
+    ]
+  }
+}
