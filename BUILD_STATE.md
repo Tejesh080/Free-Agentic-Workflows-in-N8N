@@ -20,12 +20,12 @@ with **no user API keys**.
 
 | # | System | Workflow id | Status | Tests |
 | --- | --- | --- | --- | --- |
-| 01 | Autonomous API Integration Engineer | — | not started | — |
+| 01 | Autonomous API Integration Engineer | `VM0yQx7HzjTElxgg` | **LIVE VERIFIED** | demo run green: 2/2 probes 200, grounding 1.0 |
 | 02 | Intelligent Model Router | `CICW1oBcK0DYWvUc` | **LIVE VERIFIED**, published | benchmark 9/9 calls ok, 9/9 checks pass (exec 153) |
 | 03 | Production RAG Intelligence | — | not started | — |
 | 04 | Autonomous Research Agent | — | not started | — |
 | 05 | Agent Governance (HITL) | `G3OIbtaw2z11zIxP` | **LIVE VERIFIED**, published | 12/12 fixtures pass (exec 187) |
-| 06 | Financial Document Intelligence | — | not started | — |
+| 06 | Financial Document Intelligence | `1msPTQimtesoxhmm` | **LIVE VERIFIED**, published | 11/12 then 12/12 after router token fix |
 | 07 | Conversational Analytics | — | not started | — |
 | 08 | GitOps Prompt Management | `aYVpA31jgNL0shma` | **LIVE VERIFIED**, published | 7/7 fixtures pass (exec 200) |
 | 09 | AI Output Verification Layer | `vCn6THeEhjhhhxsy` | **LIVE VERIFIED**, published | 10/10 fixtures pass (exec 174) |
@@ -45,6 +45,16 @@ with **no user API keys**.
 5. **Sub-workflows must be published** to be callable from a nested execution.
 6. **`gpt-5-mini` rejects `temperature`.** Use `reasoningEffort` instead.
 7. **`force_provider` bypasses the capability gate but never the privacy gate.**
+7b. **Current-generation models spend part of the output budget on reasoning
+   tokens.** A 2048 output cap silently truncated structured JSON for two
+   different callers. All router models now allow 8192 output tokens, and Code
+   nodes that parse model JSON repair unbalanced structures before giving up.
+7c. **`splitInBatches` with zero input items never fires its done branch**, so a
+   downstream report node is simply skipped. Gate the loop with an IF and route
+   the empty case straight to the terminal node.
+7d. **HTTP Request body shape varies with content type.** `raw.githubusercontent`
+   returns `text/plain`, so the body arrives as a string where a JSON endpoint
+   gives an object. Loaders accept `body`, `data`, or an already-parsed root.
 8. Every service exposes a flat, string-typed `executeWorkflowTrigger` contract so
    callers can map inputs without type coercion surprises.
 9. Estimates and measurements are kept in separate keys (`estimated.*` vs
