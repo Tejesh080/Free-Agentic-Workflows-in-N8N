@@ -24,10 +24,10 @@ with **no user API keys**.
 | 02 | Intelligent Model Router | `CICW1oBcK0DYWvUc` | **LIVE VERIFIED**, published | benchmark 9/9 calls ok, 9/9 checks pass (exec 153) |
 | 03 | Production RAG Intelligence | — | not started | — |
 | 04 | Autonomous Research Agent | — | not started | — |
-| 05 | Agent Governance (HITL) | — | in progress | — |
+| 05 | Agent Governance (HITL) | `G3OIbtaw2z11zIxP` | **LIVE VERIFIED**, published | 12/12 fixtures pass (exec 187) |
 | 06 | Financial Document Intelligence | — | not started | — |
 | 07 | Conversational Analytics | — | not started | — |
-| 08 | GitOps Prompt Management | — | not started | — |
+| 08 | GitOps Prompt Management | `aYVpA31jgNL0shma` | **LIVE VERIFIED**, published | 7/7 fixtures pass (exec 200) |
 | 09 | AI Output Verification Layer | `vCn6THeEhjhhhxsy` | **LIVE VERIFIED**, published | 10/10 fixtures pass (exec 174) |
 | 10 | Real-Time Voice Agent | — | not started | — |
 
@@ -56,6 +56,14 @@ with **no user API keys**.
 - **Telegram chat id** (05): approval channel target. Bot credential already exists
   (`Telegram account`), chat id is unknown.
 - Everything else is covered by Gateway credits or n8n Data Tables.
+
+## Tooling notes
+
+- The Bash tool truncates very long commands (~200 lines). Write large files in
+  chunks of two, or with the Write tool.
+- Test harnesses must put a **Slim Result** node between the sub-workflow call and
+  the loop-back edge, otherwise `splitInBatches` keeps every full payload in
+  `contextData` and execution reads become enormous.
 
 ## Repo work already done
 

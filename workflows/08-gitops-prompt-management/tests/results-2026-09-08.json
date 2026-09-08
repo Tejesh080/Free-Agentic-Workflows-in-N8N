@@ -1,0 +1,106 @@
+{
+  "suite": "prompt-registry-fixtures-v1",
+  "generated_at": "2026-09-08T05:05:20.333Z",
+  "n8n_execution_id": "200",
+  "workflow": "[Platform] 08 GitOps Prompt Management",
+  "how_to_reproduce": "Run the 'Test Suite Trigger' manual trigger. Fetches the real prompts/ directory of this repository over the anonymous GitHub Contents API; no token required.",
+  "note": "latency_ms_measured includes the GitHub round trip. Cases that hit the local cache path (P02, P03, P07 reuse an already-fetched blob within the same GitHub edge cache window) are visibly faster; that is real, not smoothed.",
+  "total": 7,
+  "passed": 7,
+  "failed": 0,
+  "all_passed": true,
+  "latency_ms_p50_measured": 200,
+  "latency_ms_max_measured": 254,
+  "cases": [
+    {
+      "case_id": "P01-valid-render",
+      "pass": true,
+      "ok": true,
+      "degraded": false,
+      "source": "github",
+      "prompt_version": 3,
+      "prompt_chars": 1168,
+      "latency_ms_measured": 254,
+      "provenance": "main:prompts/research/planner.md blob 69981dd12589"
+    },
+    {
+      "case_id": "P02-missing-variable-strict-fails",
+      "pass": true,
+      "ok": false,
+      "degraded": false,
+      "source": "github",
+      "missing_variables": [
+        "depth"
+      ],
+      "issues": [
+        "unfilled placeholders: depth"
+      ],
+      "detail": "strict mode refuses to emit a prompt containing a literal {{depth}}",
+      "latency_ms_measured": 23
+    },
+    {
+      "case_id": "P03-missing-variable-lenient-renders",
+      "pass": true,
+      "ok": true,
+      "degraded": false,
+      "source": "github",
+      "missing_variables": [
+        "depth"
+      ],
+      "prompt_chars": 1132,
+      "latency_ms_measured": 30
+    },
+    {
+      "case_id": "P04-unknown-prompt-id",
+      "pass": true,
+      "ok": false,
+      "degraded": true,
+      "source": "none",
+      "issues": [
+        "prompt not found at prompts/research/does-not-exist.md on ref main"
+      ],
+      "latency_ms_measured": 208
+    },
+    {
+      "case_id": "P05-bad-ref-uses-bundled-fallback",
+      "pass": true,
+      "ok": true,
+      "degraded": true,
+      "source": "bundled_fallback",
+      "prompt_chars": 344,
+      "issues": [
+        "prompt not found on ref no-such-ref-zzz",
+        "served the bundled fallback copy; this is NOT the Git-tracked version"
+      ],
+      "latency_ms_measured": 225
+    },
+    {
+      "case_id": "P06-undeclared-variable-flagged",
+      "pass": true,
+      "ok": true,
+      "degraded": false,
+      "source": "github",
+      "unused_variables": [
+        "nonsense"
+      ],
+      "latency_ms_measured": 200,
+      "provenance": "main:prompts/rag/answerer.md blob 4673e058780a"
+    },
+    {
+      "case_id": "P07-malformed-variables-json",
+      "pass": true,
+      "ok": true,
+      "degraded": false,
+      "source": "github",
+      "missing_variables": [
+        "question",
+        "context_block",
+        "min_citations"
+      ],
+      "issues": [
+        "variables is not valid JSON"
+      ],
+      "latency_ms_measured": 23
+    }
+  ]
+}
