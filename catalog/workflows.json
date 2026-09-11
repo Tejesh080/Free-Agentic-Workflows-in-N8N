@@ -1,13 +1,30 @@
 {
   "$comment": "Machine-readable index of the repository, maintained by hand. scripts/validate-workflows.py checks it against the workflow folders, scripts/generate-workflow-readmes.py renders the per-workflow READMEs from it, and scripts/export-workflows.py uses n8n_workflow_id to pull each workflow from the instance it was built on.",
   "repository": "https://github.com/Tejesh080/Free-Agentic-Workflows-in-N8N",
-  "generated_at": "2026-09-08",
+  "generated_at": "2026-09-12",
   "n8n": {
     "built_on": "n8n Cloud",
     "credential_strategy": "Most systems run on n8n AI Gateway managed credentials, so Gemini, OpenAI, Anthropic and Firecrawl need no user API keys. See docs/CONNECTIONS.md."
   },
-  "platform_services": ["02", "05", "08", "09"],
-  "domain_workflows": ["01", "03", "04", "06", "07", "10"],
+  "platform_services": [
+    "02",
+    "05",
+    "08",
+    "09",
+    "11",
+    "12",
+    "13",
+    "15"
+  ],
+  "domain_workflows": [
+    "01",
+    "03",
+    "04",
+    "06",
+    "07",
+    "10",
+    "14"
+  ],
   "workflows": [
     {
       "number": "02",
@@ -16,12 +33,27 @@
       "role": "platform",
       "n8n_workflow_id": "CICW1oBcK0DYWvUc",
       "summary": "Deterministic LLM routing across Gemini, OpenAI and Anthropic with privacy and capability gates, cross-vendor fallback and measured latency telemetry.",
-      "entry_points": ["Execute Sub-workflow", "Manual (benchmark harness)"],
+      "entry_points": [
+        "Execute Sub-workflow",
+        "Manual (benchmark harness)"
+      ],
       "calls": [],
-      "called_by": ["01", "03", "04", "06", "07", "09", "10"],
+      "called_by": [
+        "01",
+        "03",
+        "04",
+        "06",
+        "07",
+        "09",
+        "10"
+      ],
       "status": "LIVE VERIFIED",
       "evidence": "workflows/02-intelligent-model-router/benchmarks/provider-matrix-2026-09-08.json",
-      "external_services": ["Google Gemini", "OpenAI", "Anthropic"],
+      "external_services": [
+        "Google Gemini",
+        "OpenAI",
+        "Anthropic"
+      ],
       "requires_user_credentials": false
     },
     {
@@ -31,9 +63,21 @@
       "role": "platform",
       "n8n_workflow_id": "vCn6THeEhjhhhxsy",
       "summary": "Deterministic-first verification: JSON Schema, required fields, arithmetic business rules, citation existence and safety markers, then optional claim-level entailment.",
-      "entry_points": ["Execute Sub-workflow", "Manual (test suite)"],
-      "calls": ["02"],
-      "called_by": ["01", "03", "04", "06", "07", "10"],
+      "entry_points": [
+        "Execute Sub-workflow",
+        "Manual (test suite)"
+      ],
+      "calls": [
+        "02"
+      ],
+      "called_by": [
+        "01",
+        "03",
+        "04",
+        "06",
+        "07",
+        "10"
+      ],
       "status": "LIVE VERIFIED",
       "evidence": "workflows/09-ai-output-verification/tests/results-2026-09-08.json",
       "external_services": [],
@@ -46,12 +90,21 @@
       "role": "platform",
       "n8n_workflow_id": "G3OIbtaw2z11zIxP",
       "summary": "Deterministic LOW/MEDIUM/HIGH/CRITICAL risk classification, policy validation, Telegram approval and deny-by-default for CRITICAL operations.",
-      "entry_points": ["Execute Sub-workflow", "Manual (test suite)"],
+      "entry_points": [
+        "Execute Sub-workflow",
+        "Manual (test suite)"
+      ],
       "calls": [],
-      "called_by": ["01", "06", "10"],
+      "called_by": [
+        "01",
+        "06",
+        "10"
+      ],
       "status": "LIVE VERIFIED",
       "evidence": "workflows/05-agent-governance/tests/results-2026-09-08.json",
-      "external_services": ["Telegram (human approval channel, optional for testing)"],
+      "external_services": [
+        "Telegram (human approval channel, optional for testing)"
+      ],
       "requires_user_credentials": true,
       "credential_note": "The classification engine and all four risk tiers are testable with no credentials via simulate_decision. Only the real human-approval leg needs a Telegram bot and chat id."
     },
@@ -62,12 +115,24 @@
       "role": "platform",
       "n8n_workflow_id": "aYVpA31jgNL0shma",
       "summary": "Fetches versioned prompts from GitHub at run time, validates declared variables, interpolates, and returns the blob SHA so every model call is traceable to exact prompt bytes.",
-      "entry_points": ["Execute Sub-workflow", "Manual (test suite)"],
+      "entry_points": [
+        "Execute Sub-workflow",
+        "Manual (test suite)"
+      ],
       "calls": [],
-      "called_by": ["01", "03", "04", "06", "07", "10"],
+      "called_by": [
+        "01",
+        "03",
+        "04",
+        "06",
+        "07",
+        "10"
+      ],
       "status": "LIVE VERIFIED",
       "evidence": "workflows/08-gitops-prompt-management/tests/results-2026-09-08.json",
-      "external_services": ["GitHub Contents API (anonymous)"],
+      "external_services": [
+        "GitHub Contents API (anonymous)"
+      ],
       "requires_user_credentials": false
     },
     {
@@ -77,12 +142,22 @@
       "role": "domain",
       "n8n_workflow_id": "VM0yQx7HzjTElxgg",
       "summary": "Parses an OpenAPI specification deterministically, plans an integration, grounds every step against the real operation list, verifies the plan, gates write steps through Governance and safely probes read-only endpoints.",
-      "entry_points": ["Execute Sub-workflow", "Manual (demo)"],
-      "calls": ["02", "05", "08", "09"],
+      "entry_points": [
+        "Execute Sub-workflow",
+        "Manual (demo)"
+      ],
+      "calls": [
+        "02",
+        "05",
+        "08",
+        "09"
+      ],
       "called_by": [],
       "status": "LIVE VERIFIED",
       "evidence": "workflows/01-autonomous-api-integration-engineer/benchmarks/demo-runs-2026-09-08.json",
-      "external_services": ["Any HTTP API described by an OpenAPI 3 document"],
+      "external_services": [
+        "Any HTTP API described by an OpenAPI 3 document"
+      ],
       "requires_user_credentials": false
     },
     {
@@ -92,12 +167,23 @@
       "role": "domain",
       "n8n_workflow_id": "BpvCMNOhjklm0YF5",
       "summary": "Ingestion to grounded answer: chunking with metadata, embeddings, vector storage, metadata-filtered retrieval, deterministic hybrid reranking, citation-bound generation, verification and an explicit no-answer path.",
-      "entry_points": ["Execute Sub-workflow", "Manual (ingest)", "Manual (test suite)"],
-      "calls": ["02", "08", "09"],
+      "entry_points": [
+        "Execute Sub-workflow",
+        "Manual (ingest)",
+        "Manual (test suite)"
+      ],
+      "calls": [
+        "02",
+        "08",
+        "09"
+      ],
       "called_by": [],
       "status": "LIVE VERIFIED",
       "evidence": "workflows/03-production-rag-intelligence/tests/results-2026-09-08.json",
-      "external_services": ["OpenAI embeddings", "Qdrant (optional, production swap)"],
+      "external_services": [
+        "OpenAI embeddings",
+        "Qdrant (optional, production swap)"
+      ],
       "requires_user_credentials": false,
       "credential_note": "Runs credential-free on the in-memory Simple Vector Store. Qdrant is the documented production swap and needs QDRANT_URL and QDRANT_API_KEY."
     },
@@ -108,12 +194,21 @@
       "role": "domain",
       "n8n_workflow_id": "eaFjl41WOLWVwJqR",
       "summary": "Plans a question into sub-questions, searches the live web, deduplicates evidence by URL and content shingles, synthesises a cited report, and verifies every claim against the retrieved sources.",
-      "entry_points": ["Execute Sub-workflow", "Manual (demo)"],
-      "calls": ["02", "08", "09"],
+      "entry_points": [
+        "Execute Sub-workflow",
+        "Manual (demo)"
+      ],
+      "calls": [
+        "02",
+        "08",
+        "09"
+      ],
       "called_by": [],
       "status": "LIVE VERIFIED",
       "evidence": "workflows/04-autonomous-research-agent/tests/results-2026-09-08.json",
-      "external_services": ["Firecrawl (web search and scrape)"],
+      "external_services": [
+        "Firecrawl (web search and scrape)"
+      ],
       "requires_user_credentials": false
     },
     {
@@ -123,8 +218,16 @@
       "role": "domain",
       "n8n_workflow_id": "1msPTQimtesoxhmm",
       "summary": "Invoice extraction with arithmetic reconciliation, duplicate fingerprinting against a ledger, an explicit exception taxonomy, verification and escalation to Governance.",
-      "entry_points": ["Execute Sub-workflow", "Manual (test suite)"],
-      "calls": ["02", "05", "08", "09"],
+      "entry_points": [
+        "Execute Sub-workflow",
+        "Manual (test suite)"
+      ],
+      "calls": [
+        "02",
+        "05",
+        "08",
+        "09"
+      ],
       "called_by": [],
       "status": "LIVE VERIFIED",
       "evidence": "workflows/06-financial-document-intelligence/tests/results-2026-09-08.json",
@@ -138,12 +241,23 @@
       "role": "domain",
       "n8n_workflow_id": "xTdqxbplj0oXmByi",
       "summary": "Natural-language analytics where the model never writes SQL: it emits a query spec validated against a metric and dimension registry, which a deterministic compiler turns into a parameterised read-only query.",
-      "entry_points": ["Execute Sub-workflow", "Manual (seed warehouse)", "Manual (demo)"],
-      "calls": ["02", "08", "09"],
+      "entry_points": [
+        "Execute Sub-workflow",
+        "Manual (seed warehouse)",
+        "Manual (demo)"
+      ],
+      "calls": [
+        "02",
+        "08",
+        "09"
+      ],
       "called_by": [],
       "status": "LIVE VERIFIED",
       "evidence": "workflows/07-conversational-analytics/sample-output.json",
-      "external_services": ["Postgres (optional, production swap)", "Google Search Console (optional)"],
+      "external_services": [
+        "Postgres (optional, production swap)",
+        "Google Search Console (optional)"
+      ],
       "requires_user_credentials": false,
       "credential_note": "Ships with a synthetic demo warehouse in an n8n Data Table and needs no database credentials."
     },
@@ -154,13 +268,144 @@
       "role": "domain",
       "n8n_workflow_id": "5Aup44P7oBr6Zolg",
       "summary": "Webhook to speech: transcription, intent classification against a closed tool registry, Governance for data-changing intents, verification, and speech synthesis, with per-stage latency measurement.",
-      "entry_points": ["Webhook POST /voice-agent"],
-      "calls": ["02", "05", "08", "09"],
+      "entry_points": [
+        "Webhook POST /voice-agent"
+      ],
+      "calls": [
+        "02",
+        "05",
+        "08",
+        "09"
+      ],
       "called_by": [],
       "status": "LIVE VERIFIED",
       "evidence": "workflows/10-realtime-voice-agent/tests/results-2026-09-08.json",
-      "external_services": ["OpenAI Whisper (speech to text)", "OpenAI TTS (text to speech)"],
+      "external_services": [
+        "OpenAI Whisper (speech to text)",
+        "OpenAI TTS (text to speech)"
+      ],
       "requires_user_credentials": false
+    },
+    {
+      "number": "11",
+      "name": "CRM Sync Service",
+      "folder": "11-crm-sync-service",
+      "role": "platform",
+      "n8n_workflow_id": "nsBj2yVhmQeg0MMj",
+      "summary": "Idempotent CRM write seam. Three supported operations, a write ledger checked before the CRM so a replay never duplicates, and a dry-run branch that simulates deterministic ids with no credential at all.",
+      "entry_points": [
+        "Execute Sub-workflow",
+        "Manual (test suite)"
+      ],
+      "calls": [],
+      "called_by": [
+        "14"
+      ],
+      "status": "LIVE VERIFIED",
+      "evidence": "workflows/11-crm-sync-service/tests/results-2026-09-12.json",
+      "external_services": [
+        "HubSpot"
+      ],
+      "requires_user_credentials": true,
+      "credential_note": "The three HubSpot nodes ship disabled with their configuration intact. Add a HubSpot App Token credential, enable them, and the live write path works; leave them alone and `dry_run=true` keeps the rest of the swarm testable."
+    },
+    {
+      "number": "12",
+      "name": "Lead Qualification Agent",
+      "folder": "12-lead-qualification-agent",
+      "role": "platform",
+      "n8n_workflow_id": "DNupHlx3mmhgwGuH",
+      "summary": "Deterministic lead scoring. The model returns labels from a closed value set with a verbatim quote for each; fixed weights turn labels into points, and a quote that is not in the source text costs the lead points instead of supporting it.",
+      "entry_points": [
+        "Execute Sub-workflow",
+        "Manual (test suite)"
+      ],
+      "calls": [
+        "02",
+        "08",
+        "09"
+      ],
+      "called_by": [
+        "14"
+      ],
+      "status": "LIVE VERIFIED",
+      "evidence": "workflows/12-lead-qualification-agent/tests/results-2026-09-12.json",
+      "external_services": [
+        "Firecrawl"
+      ],
+      "requires_user_credentials": false
+    },
+    {
+      "number": "13",
+      "name": "Outreach Composer",
+      "folder": "13-outreach-composer",
+      "role": "platform",
+      "n8n_workflow_id": "8pKcepZDrMN6557T",
+      "summary": "Drafts one outreach message, checks it against deterministic copy rules and the collected evidence, verifies it, and only then asks Governance. A send is a HIGH-risk action, so a human approves it by default.",
+      "entry_points": [
+        "Execute Sub-workflow",
+        "Manual (test suite)"
+      ],
+      "calls": [
+        "02",
+        "05",
+        "08",
+        "09"
+      ],
+      "called_by": [
+        "14"
+      ],
+      "status": "LIVE VERIFIED",
+      "evidence": "workflows/13-outreach-composer/tests/results-2026-09-12.json",
+      "external_services": [
+        "Telegram"
+      ],
+      "requires_user_credentials": true,
+      "credential_note": "Telegram is the only channel wired to a real credential, and it needs a chat id from the caller. Email and SMS are drafted and approved, then recorded as not configured."
+    },
+    {
+      "number": "14",
+      "name": "Revenue Swarm Orchestrator",
+      "folder": "14-revenue-swarm-orchestrator",
+      "role": "domain",
+      "n8n_workflow_id": "LBqg8FFAh9D1rWXu",
+      "summary": "Inbound lead to decision record. Deduplicates, qualifies, writes contact, deal and the scoring rationale to the CRM, composes governed outreach, and returns one record naming every step taken and every step skipped.",
+      "entry_points": [
+        "Webhook",
+        "Execute Sub-workflow",
+        "Manual (test suite)"
+      ],
+      "calls": [
+        "11",
+        "12",
+        "13"
+      ],
+      "called_by": [],
+      "status": "LIVE VERIFIED",
+      "evidence": "workflows/14-revenue-swarm-orchestrator/tests/results-2026-09-12.json",
+      "external_services": [],
+      "requires_user_credentials": true,
+      "credential_note": "The public webhook is guarded by an `x-swarm-key` header checked against a `SWARM_INGEST_KEY` n8n variable rather than a credential. While that variable is unset, every inbound lead is refused."
+    },
+    {
+      "number": "15",
+      "name": "Evaluation Harness",
+      "folder": "15-evaluation-harness",
+      "role": "platform",
+      "n8n_workflow_id": "nNIbXiOv4SaJlSz4",
+      "summary": "Scores a labelled golden set under the production rubric and a candidate rubric through the real qualification workflow, then applies a deterministic promotion gate: no regression on any tracked metric, and an improvement on at least one.",
+      "entry_points": [
+        "Manual (evaluation run)"
+      ],
+      "calls": [
+        "12"
+      ],
+      "called_by": [],
+      "status": "LIVE VERIFIED",
+      "evidence": "workflows/15-evaluation-harness/tests/results-2026-09-12.json",
+      "external_services": [],
+      "requires_user_credentials": false,
+      "credential_note": "No credentials of its own. It runs entirely through workflow 12 with supplied signals, so an evaluation makes no model call and costs nothing to re-run."
     }
   ]
 }

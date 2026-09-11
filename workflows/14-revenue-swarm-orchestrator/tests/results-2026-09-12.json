@@ -1,0 +1,470 @@
+{
+  "suite": "14-revenue-swarm",
+  "generated_at": "2026-09-11T16:03:07.969Z",
+  "n8n_execution_id": "664",
+  "workflow": "Revenue Swarm Orchestrator",
+  "how_to_reproduce": "Open the workflow in n8n and run the 'Test Suite Trigger' manual trigger.",
+  "note": "Six leads through the whole pipeline in dry run plus a second-workspace case. S01-S05 fix the tier by supplying signals so the CRM assertions are exact; S06 runs the real model; S07/S07x assert workspace isolation.",
+  "total": 8,
+  "passed": 8,
+  "failed": 0,
+  "all_passed": true,
+  "latency_ms_p50_measured": 5533,
+  "latency_ms_max_measured": 55687,
+  "cases": [
+    {
+      "case_id": "S01",
+      "note": "a HOT lead gets a contact, a deal, a scored task and a drafted message",
+      "passed": true,
+      "checks": [
+        {
+          "name": "outcome",
+          "pass": true,
+          "expected": "processed",
+          "actual": "processed"
+        },
+        {
+          "name": "tier",
+          "pass": true,
+          "expected": "HOT",
+          "actual": "HOT"
+        },
+        {
+          "name": "contact_written",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "deal_written",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "outreach_attempted",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "never_sent_in_dry_run",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "decision_record_complete",
+          "pass": true,
+          "expected": 5,
+          "actual": 5
+        },
+        {
+          "name": "rubric_recorded",
+          "pass": true,
+          "expected": "a rubric version",
+          "actual": "1.2.0"
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-664mtx58vsy-S01",
+          "actual": "trace-664mtx58vsy-S01"
+        }
+      ],
+      "latency_ms": 12207
+    },
+    {
+      "case_id": "S02",
+      "note": "the same lead a second time is not re-qualified",
+      "passed": true,
+      "checks": [
+        {
+          "name": "outcome",
+          "pass": true,
+          "expected": "duplicate",
+          "actual": "duplicate"
+        },
+        {
+          "name": "contact_written",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "deal_written",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "outreach_attempted",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "never_sent_in_dry_run",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        }
+      ],
+      "latency_ms": 30
+    },
+    {
+      "case_id": "S03",
+      "note": "a WARM lead gets a contact and a task but no deal",
+      "passed": true,
+      "checks": [
+        {
+          "name": "outcome",
+          "pass": true,
+          "expected": "processed",
+          "actual": "processed"
+        },
+        {
+          "name": "tier",
+          "pass": true,
+          "expected": "WARM",
+          "actual": "WARM"
+        },
+        {
+          "name": "contact_written",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "deal_written",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "outreach_attempted",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "never_sent_in_dry_run",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "decision_record_complete",
+          "pass": true,
+          "expected": 5,
+          "actual": 5
+        },
+        {
+          "name": "rubric_recorded",
+          "pass": true,
+          "expected": "a rubric version",
+          "actual": "1.2.0"
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-664mtx58vsy-S03",
+          "actual": "trace-664mtx58vsy-S03"
+        }
+      ],
+      "latency_ms": 55687
+    },
+    {
+      "case_id": "S04",
+      "note": "a disqualified lead is never written to the CRM",
+      "passed": true,
+      "checks": [
+        {
+          "name": "outcome",
+          "pass": true,
+          "expected": "disqualified",
+          "actual": "disqualified"
+        },
+        {
+          "name": "tier",
+          "pass": true,
+          "expected": "DISQUALIFIED",
+          "actual": "DISQUALIFIED"
+        },
+        {
+          "name": "contact_written",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "deal_written",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "outreach_attempted",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "never_sent_in_dry_run",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "decision_record_complete",
+          "pass": true,
+          "expected": 5,
+          "actual": 5
+        },
+        {
+          "name": "rubric_recorded",
+          "pass": true,
+          "expected": "a rubric version",
+          "actual": "1.2.0"
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-664mtx58vsy-S04",
+          "actual": "trace-664mtx58vsy-S04"
+        }
+      ],
+      "latency_ms": 517
+    },
+    {
+      "case_id": "S05",
+      "note": "a COLD lead is recorded but not written to",
+      "passed": true,
+      "checks": [
+        {
+          "name": "outcome",
+          "pass": true,
+          "expected": "processed",
+          "actual": "processed"
+        },
+        {
+          "name": "tier",
+          "pass": true,
+          "expected": "COLD",
+          "actual": "COLD"
+        },
+        {
+          "name": "contact_written",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "deal_written",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "outreach_attempted",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "never_sent_in_dry_run",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "decision_record_complete",
+          "pass": true,
+          "expected": 5,
+          "actual": 5
+        },
+        {
+          "name": "rubric_recorded",
+          "pass": true,
+          "expected": "a rubric version",
+          "actual": "1.2.0"
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-664mtx58vsy-S05",
+          "actual": "trace-664mtx58vsy-S05"
+        }
+      ],
+      "latency_ms": 1013
+    },
+    {
+      "case_id": "S06",
+      "note": "live: the whole pipeline with the real model, structure only",
+      "passed": true,
+      "checks": [
+        {
+          "name": "outcome_known",
+          "pass": true,
+          "expected": "processed|disqualified",
+          "actual": "processed"
+        },
+        {
+          "name": "score_in_range",
+          "pass": true,
+          "expected": "0..100",
+          "actual": 59
+        },
+        {
+          "name": "never_sent_in_dry_run",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "decision_record_complete",
+          "pass": true,
+          "expected": 5,
+          "actual": 5
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-664mtx58vsy-S06",
+          "actual": "trace-664mtx58vsy-S06"
+        }
+      ],
+      "latency_ms": 17154
+    },
+    {
+      "case_id": "S07",
+      "note": "a second workspace sending the identical lead is processed, not deduplicated",
+      "passed": true,
+      "checks": [
+        {
+          "name": "outcome",
+          "pass": true,
+          "expected": "processed",
+          "actual": "processed"
+        },
+        {
+          "name": "tier",
+          "pass": true,
+          "expected": "HOT",
+          "actual": "HOT"
+        },
+        {
+          "name": "contact_written",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "deal_written",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "outreach_attempted",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "never_sent_in_dry_run",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "decision_record_complete",
+          "pass": true,
+          "expected": 5,
+          "actual": 5
+        },
+        {
+          "name": "rubric_recorded",
+          "pass": true,
+          "expected": "a rubric version",
+          "actual": "1.2.0"
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "globex",
+          "actual": "globex"
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-664mtx58vsy-S07",
+          "actual": "trace-664mtx58vsy-S07"
+        }
+      ],
+      "latency_ms": 5533
+    },
+    {
+      "case_id": "S07x",
+      "note": "workspace isolation: an identical lead in a second workspace is not suppressed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "first_workspace_processed",
+          "pass": true,
+          "expected": "processed",
+          "actual": "processed"
+        },
+        {
+          "name": "second_workspace_processed",
+          "pass": true,
+          "expected": "processed",
+          "actual": "processed"
+        },
+        {
+          "name": "workspaces_distinct",
+          "pass": true,
+          "expected": "acme != globex",
+          "actual": "acme vs globex"
+        }
+      ],
+      "latency_ms": 5533
+    }
+  ]
+}

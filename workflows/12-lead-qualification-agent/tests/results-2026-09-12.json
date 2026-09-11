@@ -1,0 +1,629 @@
+{
+  "suite": "12-lead-qualification",
+  "generated_at": "2026-09-11T15:52:54.306Z",
+  "n8n_execution_id": "561",
+  "workflow": "Lead Qualification Agent",
+  "how_to_reproduce": "Open the workflow in n8n and run the 'Test Suite Trigger' manual trigger.",
+  "note": "Q01-Q08 supply signals directly, so each asserts an exact rubric score and makes no model call. Q09 runs the real model. Q10/Q11 exercise rubric overrides; Q10x and Q11x assert the A/B property and the malformed-rubric fallback across case pairs.",
+  "total": 13,
+  "passed": 13,
+  "failed": 0,
+  "all_passed": true,
+  "latency_ms_p50_measured": 242,
+  "latency_ms_max_measured": 10088,
+  "cases": [
+    {
+      "case_id": "Q01",
+      "note": "every signal at its best: a perfect 100",
+      "passed": true,
+      "checks": [
+        {
+          "name": "score",
+          "pass": true,
+          "expected": 100,
+          "actual": 100
+        },
+        {
+          "name": "tier",
+          "pass": true,
+          "expected": "HOT",
+          "actual": "HOT"
+        },
+        {
+          "name": "recommended_action",
+          "pass": true,
+          "expected": "route_to_sales",
+          "actual": "route_to_sales"
+        },
+        {
+          "name": "outreach_allowed",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "requires_human_review",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "rubric_version",
+          "pass": true,
+          "expected": "1.2.0",
+          "actual": "1.2.0"
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        }
+      ],
+      "latency_ms": 242
+    },
+    {
+      "case_id": "Q02",
+      "note": "a mid-market manager with an implied budget scores WARM",
+      "passed": true,
+      "checks": [
+        {
+          "name": "score",
+          "pass": true,
+          "expected": 69,
+          "actual": 69
+        },
+        {
+          "name": "tier",
+          "pass": true,
+          "expected": "WARM",
+          "actual": "WARM"
+        },
+        {
+          "name": "recommended_action",
+          "pass": true,
+          "expected": "nurture",
+          "actual": "nurture"
+        },
+        {
+          "name": "outreach_allowed",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "requires_human_review",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "rubric_version",
+          "pass": true,
+          "expected": "1.2.0",
+          "actual": "1.2.0"
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        }
+      ],
+      "latency_ms": 221
+    },
+    {
+      "case_id": "Q03",
+      "note": "an IC at a small company with no budget scores COLD",
+      "passed": true,
+      "checks": [
+        {
+          "name": "score",
+          "pass": true,
+          "expected": 36,
+          "actual": 36
+        },
+        {
+          "name": "tier",
+          "pass": true,
+          "expected": "COLD",
+          "actual": "COLD"
+        },
+        {
+          "name": "recommended_action",
+          "pass": true,
+          "expected": "hold",
+          "actual": "hold"
+        },
+        {
+          "name": "outreach_allowed",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "requires_human_review",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "rubric_version",
+          "pass": true,
+          "expected": "1.2.0",
+          "actual": "1.2.0"
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        }
+      ],
+      "latency_ms": 215
+    },
+    {
+      "case_id": "Q04",
+      "note": "a perfect lead for the wrong product is still disqualified",
+      "passed": true,
+      "checks": [
+        {
+          "name": "score",
+          "pass": true,
+          "expected": 15,
+          "actual": 15
+        },
+        {
+          "name": "tier",
+          "pass": true,
+          "expected": "DISQUALIFIED",
+          "actual": "DISQUALIFIED"
+        },
+        {
+          "name": "recommended_action",
+          "pass": true,
+          "expected": "discard",
+          "actual": "discard"
+        },
+        {
+          "name": "outreach_allowed",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "requires_human_review",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "rubric_version",
+          "pass": true,
+          "expected": "1.2.0",
+          "actual": "1.2.0"
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        }
+      ],
+      "latency_ms": 218
+    },
+    {
+      "case_id": "Q05",
+      "note": "a lead that says nothing cannot score",
+      "passed": true,
+      "checks": [
+        {
+          "name": "score",
+          "pass": true,
+          "expected": 0,
+          "actual": 0
+        },
+        {
+          "name": "tier",
+          "pass": true,
+          "expected": "DISQUALIFIED",
+          "actual": "DISQUALIFIED"
+        },
+        {
+          "name": "recommended_action",
+          "pass": true,
+          "expected": "discard",
+          "actual": "discard"
+        },
+        {
+          "name": "outreach_allowed",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "requires_human_review",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "rubric_version",
+          "pass": true,
+          "expected": "1.2.0",
+          "actual": "1.2.0"
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        }
+      ],
+      "latency_ms": 216
+    },
+    {
+      "case_id": "Q06",
+      "note": "a quote that is not in the lead costs points and forces review",
+      "passed": true,
+      "checks": [
+        {
+          "name": "score",
+          "pass": true,
+          "expected": 90,
+          "actual": 90
+        },
+        {
+          "name": "tier",
+          "pass": true,
+          "expected": "HOT",
+          "actual": "HOT"
+        },
+        {
+          "name": "recommended_action",
+          "pass": true,
+          "expected": "route_to_sales_after_review",
+          "actual": "route_to_sales_after_review"
+        },
+        {
+          "name": "outreach_allowed",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "requires_human_review",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "modifier_applied",
+          "pass": true,
+          "expected": "unsupported_evidence",
+          "actual": [
+            "unsupported_evidence"
+          ]
+        },
+        {
+          "name": "rubric_version",
+          "pass": true,
+          "expected": "1.2.0",
+          "actual": "1.2.0"
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        }
+      ],
+      "latency_ms": 230
+    },
+    {
+      "case_id": "Q07",
+      "note": "a lead with no email is rejected before any model call",
+      "passed": true,
+      "checks": [
+        {
+          "name": "score",
+          "pass": true,
+          "expected": 0,
+          "actual": 0
+        },
+        {
+          "name": "tier",
+          "pass": true,
+          "expected": "DISQUALIFIED",
+          "actual": "DISQUALIFIED"
+        },
+        {
+          "name": "recommended_action",
+          "pass": true,
+          "expected": "discard",
+          "actual": "discard"
+        },
+        {
+          "name": "outreach_allowed",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "requires_human_review",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "rubric_version",
+          "pass": true,
+          "expected": "not_run",
+          "actual": "not_run"
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        }
+      ],
+      "latency_ms": 12
+    },
+    {
+      "case_id": "Q08",
+      "note": "a consumer email address costs the same lead 8 points",
+      "passed": true,
+      "checks": [
+        {
+          "name": "score",
+          "pass": true,
+          "expected": 92,
+          "actual": 92
+        },
+        {
+          "name": "tier",
+          "pass": true,
+          "expected": "HOT",
+          "actual": "HOT"
+        },
+        {
+          "name": "recommended_action",
+          "pass": true,
+          "expected": "route_to_sales",
+          "actual": "route_to_sales"
+        },
+        {
+          "name": "outreach_allowed",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "requires_human_review",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "modifier_applied",
+          "pass": true,
+          "expected": "consumer_email_domain",
+          "actual": [
+            "consumer_email_domain"
+          ]
+        },
+        {
+          "name": "rubric_version",
+          "pass": true,
+          "expected": "1.2.0",
+          "actual": "1.2.0"
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        }
+      ],
+      "latency_ms": 286
+    },
+    {
+      "case_id": "Q09",
+      "note": "live: the real model extracts signals, structure only is asserted",
+      "passed": true,
+      "checks": [
+        {
+          "name": "score_in_range",
+          "pass": true,
+          "expected": "0..100",
+          "actual": 59
+        },
+        {
+          "name": "tier_known",
+          "pass": true,
+          "expected": "HOT|WARM|COLD|DISQUALIFIED",
+          "actual": "WARM"
+        },
+        {
+          "name": "signals_from_model",
+          "pass": true,
+          "expected": "model",
+          "actual": "model"
+        },
+        {
+          "name": "provider_recorded",
+          "pass": true,
+          "expected": "a provider name",
+          "actual": "google"
+        },
+        {
+          "name": "labels_readable",
+          "pass": true,
+          "expected": "every label inside the agreed value set",
+          "actual": []
+        },
+        {
+          "name": "rubric_version",
+          "pass": true,
+          "expected": "1.2.0",
+          "actual": "1.2.0"
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        }
+      ],
+      "latency_ms": 10088
+    },
+    {
+      "case_id": "Q10",
+      "note": "candidate rubric moves the tier threshold: same score, different tier",
+      "passed": true,
+      "checks": [
+        {
+          "name": "score",
+          "pass": true,
+          "expected": 69,
+          "actual": 69
+        },
+        {
+          "name": "tier",
+          "pass": true,
+          "expected": "HOT",
+          "actual": "HOT"
+        },
+        {
+          "name": "recommended_action",
+          "pass": true,
+          "expected": "route_to_sales",
+          "actual": "route_to_sales"
+        },
+        {
+          "name": "outreach_allowed",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "requires_human_review",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "rubric_version",
+          "pass": true,
+          "expected": "2.0.0-candidate",
+          "actual": "2.0.0-candidate"
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        }
+      ],
+      "latency_ms": 247
+    },
+    {
+      "case_id": "Q11",
+      "note": "a malformed candidate rubric cannot corrupt production scoring",
+      "passed": true,
+      "checks": [
+        {
+          "name": "score",
+          "pass": true,
+          "expected": 69,
+          "actual": 69
+        },
+        {
+          "name": "tier",
+          "pass": true,
+          "expected": "WARM",
+          "actual": "WARM"
+        },
+        {
+          "name": "recommended_action",
+          "pass": true,
+          "expected": "nurture",
+          "actual": "nurture"
+        },
+        {
+          "name": "outreach_allowed",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "requires_human_review",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "rubric_version",
+          "pass": true,
+          "expected": "1.2.0",
+          "actual": "1.2.0"
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        }
+      ],
+      "latency_ms": 326
+    },
+    {
+      "case_id": "Q10x",
+      "note": "rubric A/B: the candidate changes the tier without changing the score",
+      "passed": true,
+      "checks": [
+        {
+          "name": "score_unchanged",
+          "pass": true,
+          "expected": 69,
+          "actual": 69
+        },
+        {
+          "name": "tier_changed",
+          "pass": true,
+          "expected": "WARM -> HOT",
+          "actual": "WARM -> HOT"
+        }
+      ],
+      "latency_ms": 247
+    },
+    {
+      "case_id": "Q11x",
+      "note": "a malformed candidate rubric falls back to production and says so",
+      "passed": true,
+      "checks": [
+        {
+          "name": "score_matches_production",
+          "pass": true,
+          "expected": 69,
+          "actual": 69
+        },
+        {
+          "name": "fell_back_to_default",
+          "pass": true,
+          "expected": "default",
+          "actual": "default"
+        },
+        {
+          "name": "error_surfaced",
+          "pass": true,
+          "expected": "a rubric error",
+          "actual": "rubric_override is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)"
+        }
+      ],
+      "latency_ms": 326
+    }
+  ],
+  "rubric_version": "1.2.0"
+}

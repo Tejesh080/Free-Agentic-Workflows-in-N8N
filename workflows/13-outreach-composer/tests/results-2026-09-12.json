@@ -1,0 +1,549 @@
+{
+  "suite": "13-outreach-composer",
+  "generated_at": "2026-09-11T15:55:29.097Z",
+  "n8n_execution_id": "585",
+  "workflow": "Outreach Composer",
+  "how_to_reproduce": "Open the workflow in n8n and run the 'Test Suite Trigger' manual trigger.",
+  "note": "Every case runs with dry_run=true and asserts sent=false. O01-O09 supply the draft; O10 drafts with the real model. Governance decisions for HIGH and CRITICAL cases use simulate_decision in place of the Telegram round trip.",
+  "total": 10,
+  "passed": 10,
+  "failed": 0,
+  "all_passed": true,
+  "latency_ms_p50_measured": 398,
+  "latency_ms_max_measured": 5488,
+  "cases": [
+    {
+      "case_id": "O01",
+      "note": "a clean draft is approved and simulated, not sent",
+      "passed": true,
+      "checks": [
+        {
+          "name": "delivery_status",
+          "pass": true,
+          "expected": "simulated",
+          "actual": "simulated"
+        },
+        {
+          "name": "blocked_stage",
+          "pass": true,
+          "expected": null,
+          "actual": null
+        },
+        {
+          "name": "governance_decision",
+          "pass": true,
+          "expected": "approved",
+          "actual": "approved"
+        },
+        {
+          "name": "risk_level",
+          "pass": true,
+          "expected": "HIGH",
+          "actual": "HIGH"
+        },
+        {
+          "name": "never_sent_in_dry_run",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-585-O01",
+          "actual": "trace-585-O01"
+        }
+      ],
+      "latency_ms": 715
+    },
+    {
+      "case_id": "O02",
+      "note": "a banned phrase never reaches a human",
+      "passed": true,
+      "checks": [
+        {
+          "name": "delivery_status",
+          "pass": true,
+          "expected": "blocked",
+          "actual": "blocked"
+        },
+        {
+          "name": "blocked_stage",
+          "pass": true,
+          "expected": "copy_and_verification",
+          "actual": "copy_and_verification"
+        },
+        {
+          "name": "governance_decision",
+          "pass": true,
+          "expected": "not_requested",
+          "actual": "not_requested"
+        },
+        {
+          "name": "risk_level",
+          "pass": true,
+          "expected": "not_assessed",
+          "actual": "not_assessed"
+        },
+        {
+          "name": "never_sent_in_dry_run",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "copy_rule_hit",
+          "pass": true,
+          "expected": "banned_phrase",
+          "actual": [
+            "banned_phrase",
+            "banned_phrase"
+          ]
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-585-O02",
+          "actual": "trace-585-O02"
+        }
+      ],
+      "latency_ms": 398
+    },
+    {
+      "case_id": "O03",
+      "note": "a figure that is not in the evidence blocks the send",
+      "passed": true,
+      "checks": [
+        {
+          "name": "delivery_status",
+          "pass": true,
+          "expected": "blocked",
+          "actual": "blocked"
+        },
+        {
+          "name": "blocked_stage",
+          "pass": true,
+          "expected": "copy_and_verification",
+          "actual": "copy_and_verification"
+        },
+        {
+          "name": "governance_decision",
+          "pass": true,
+          "expected": "not_requested",
+          "actual": "not_requested"
+        },
+        {
+          "name": "risk_level",
+          "pass": true,
+          "expected": "not_assessed",
+          "actual": "not_assessed"
+        },
+        {
+          "name": "never_sent_in_dry_run",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "copy_rule_hit",
+          "pass": true,
+          "expected": "ungrounded_figure",
+          "actual": [
+            "ungrounded_figure"
+          ]
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-585-O03",
+          "actual": "trace-585-O03"
+        }
+      ],
+      "latency_ms": 350
+    },
+    {
+      "case_id": "O04",
+      "note": "an unfilled placeholder blocks the send",
+      "passed": true,
+      "checks": [
+        {
+          "name": "delivery_status",
+          "pass": true,
+          "expected": "blocked",
+          "actual": "blocked"
+        },
+        {
+          "name": "blocked_stage",
+          "pass": true,
+          "expected": "copy_and_verification",
+          "actual": "copy_and_verification"
+        },
+        {
+          "name": "governance_decision",
+          "pass": true,
+          "expected": "not_requested",
+          "actual": "not_requested"
+        },
+        {
+          "name": "risk_level",
+          "pass": true,
+          "expected": "not_assessed",
+          "actual": "not_assessed"
+        },
+        {
+          "name": "never_sent_in_dry_run",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "copy_rule_hit",
+          "pass": true,
+          "expected": "placeholder_leak",
+          "actual": [
+            "placeholder_leak"
+          ]
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-585-O04",
+          "actual": "trace-585-O04"
+        }
+      ],
+      "latency_ms": 380
+    },
+    {
+      "case_id": "O05",
+      "note": "an email-length draft is too long for sms",
+      "passed": true,
+      "checks": [
+        {
+          "name": "delivery_status",
+          "pass": true,
+          "expected": "blocked",
+          "actual": "blocked"
+        },
+        {
+          "name": "blocked_stage",
+          "pass": true,
+          "expected": "copy_and_verification",
+          "actual": "copy_and_verification"
+        },
+        {
+          "name": "governance_decision",
+          "pass": true,
+          "expected": "not_requested",
+          "actual": "not_requested"
+        },
+        {
+          "name": "risk_level",
+          "pass": true,
+          "expected": "not_assessed",
+          "actual": "not_assessed"
+        },
+        {
+          "name": "never_sent_in_dry_run",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "copy_rule_hit",
+          "pass": true,
+          "expected": "too_long",
+          "actual": [
+            "too_long"
+          ]
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-585-O05",
+          "actual": "trace-585-O05"
+        }
+      ],
+      "latency_ms": 335
+    },
+    {
+      "case_id": "O06",
+      "note": "a lead qualification refused is never drafted for",
+      "passed": true,
+      "checks": [
+        {
+          "name": "delivery_status",
+          "pass": true,
+          "expected": "blocked",
+          "actual": "blocked"
+        },
+        {
+          "name": "blocked_stage",
+          "pass": true,
+          "expected": "qualification",
+          "actual": "qualification"
+        },
+        {
+          "name": "governance_decision",
+          "pass": true,
+          "expected": "not_requested",
+          "actual": "not_requested"
+        },
+        {
+          "name": "risk_level",
+          "pass": true,
+          "expected": "not_assessed",
+          "actual": "not_assessed"
+        },
+        {
+          "name": "never_sent_in_dry_run",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-585-O06",
+          "actual": "trace-585-O06"
+        }
+      ],
+      "latency_ms": 86
+    },
+    {
+      "case_id": "O07",
+      "note": "a human rejection stops a clean draft",
+      "passed": true,
+      "checks": [
+        {
+          "name": "delivery_status",
+          "pass": true,
+          "expected": "blocked",
+          "actual": "blocked"
+        },
+        {
+          "name": "blocked_stage",
+          "pass": true,
+          "expected": "governance",
+          "actual": "governance"
+        },
+        {
+          "name": "governance_decision",
+          "pass": true,
+          "expected": "rejected",
+          "actual": "rejected"
+        },
+        {
+          "name": "risk_level",
+          "pass": true,
+          "expected": "HIGH",
+          "actual": "HIGH"
+        },
+        {
+          "name": "never_sent_in_dry_run",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-585-O07",
+          "actual": "trace-585-O07"
+        }
+      ],
+      "latency_ms": 561
+    },
+    {
+      "case_id": "O08",
+      "note": "telegram without a chat id is refused before drafting",
+      "passed": true,
+      "checks": [
+        {
+          "name": "delivery_status",
+          "pass": true,
+          "expected": "blocked",
+          "actual": "blocked"
+        },
+        {
+          "name": "blocked_stage",
+          "pass": true,
+          "expected": "qualification",
+          "actual": "qualification"
+        },
+        {
+          "name": "governance_decision",
+          "pass": true,
+          "expected": "not_requested",
+          "actual": "not_requested"
+        },
+        {
+          "name": "risk_level",
+          "pass": true,
+          "expected": "not_assessed",
+          "actual": "not_assessed"
+        },
+        {
+          "name": "never_sent_in_dry_run",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-585-O08",
+          "actual": "trace-585-O08"
+        }
+      ],
+      "latency_ms": 89
+    },
+    {
+      "case_id": "O09",
+      "note": "a destructive verb in the copy is escalated to CRITICAL and denied",
+      "passed": true,
+      "checks": [
+        {
+          "name": "delivery_status",
+          "pass": true,
+          "expected": "blocked",
+          "actual": "blocked"
+        },
+        {
+          "name": "blocked_stage",
+          "pass": true,
+          "expected": "governance",
+          "actual": "governance"
+        },
+        {
+          "name": "governance_decision",
+          "pass": true,
+          "expected": "denied",
+          "actual": "denied"
+        },
+        {
+          "name": "risk_level",
+          "pass": true,
+          "expected": "CRITICAL",
+          "actual": "CRITICAL"
+        },
+        {
+          "name": "never_sent_in_dry_run",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-585-O09",
+          "actual": "trace-585-O09"
+        }
+      ],
+      "latency_ms": 537
+    },
+    {
+      "case_id": "O10",
+      "note": "live: the real model drafts, structure only is asserted",
+      "passed": true,
+      "checks": [
+        {
+          "name": "draft_written",
+          "pass": true,
+          "expected": "a non-empty draft",
+          "actual": "208 chars"
+        },
+        {
+          "name": "drafted_by_model",
+          "pass": true,
+          "expected": "model",
+          "actual": "model"
+        },
+        {
+          "name": "provider_recorded",
+          "pass": true,
+          "expected": "a provider name",
+          "actual": "google"
+        },
+        {
+          "name": "never_sent_in_dry_run",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "within_word_limit",
+          "pass": true,
+          "expected": "1..90 words",
+          "actual": 40
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-585-O10",
+          "actual": "trace-585-O10"
+        }
+      ],
+      "latency_ms": 5488
+    }
+  ]
+}

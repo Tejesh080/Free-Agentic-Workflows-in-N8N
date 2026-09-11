@@ -1,0 +1,372 @@
+{
+  "suite": "11-crm-sync-service",
+  "generated_at": "2026-09-11T15:49:21.860Z",
+  "n8n_execution_id": "551",
+  "workflow": "CRM Sync Service",
+  "how_to_reproduce": "Open the workflow in n8n and run the 'Test Suite Trigger' manual trigger.",
+  "note": "Every case runs with dry_run=true, so no HubSpot call is made. C01/C02 share a run-scoped idempotency key; C08 sends the identical lead as a second tenant and C08x asserts the two are not conflated.",
+  "total": 10,
+  "passed": 10,
+  "failed": 0,
+  "all_passed": true,
+  "latency_ms_p50_measured": 23,
+  "latency_ms_max_measured": 30,
+  "cases": [
+    {
+      "case_id": "C01",
+      "note": "valid contact upsert, dry run",
+      "passed": true,
+      "checks": [
+        {
+          "name": "status",
+          "pass": true,
+          "expected": "simulated",
+          "actual": "simulated"
+        },
+        {
+          "name": "object_type",
+          "pass": true,
+          "expected": "contact",
+          "actual": "contact"
+        },
+        {
+          "name": "ok",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "simulated_id_prefix",
+          "pass": true,
+          "expected": "sim-*",
+          "actual": "sim-contact-4ab4d7021fb7"
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-*",
+          "actual": "trace-551-mtx4t5ej-C01"
+        }
+      ],
+      "latency_ms": 24
+    },
+    {
+      "case_id": "C02",
+      "note": "same payload again must replay, not write twice",
+      "passed": true,
+      "checks": [
+        {
+          "name": "status",
+          "pass": true,
+          "expected": "replayed",
+          "actual": "replayed"
+        },
+        {
+          "name": "object_type",
+          "pass": true,
+          "expected": "contact",
+          "actual": "contact"
+        },
+        {
+          "name": "ok",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-*",
+          "actual": "trace-551-mtx4t5ej-C02"
+        }
+      ],
+      "latency_ms": 30
+    },
+    {
+      "case_id": "C03",
+      "note": "contact without email is rejected before any CRM call",
+      "passed": true,
+      "checks": [
+        {
+          "name": "status",
+          "pass": true,
+          "expected": "rejected",
+          "actual": "rejected"
+        },
+        {
+          "name": "object_type",
+          "pass": true,
+          "expected": "none",
+          "actual": "none"
+        },
+        {
+          "name": "ok",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "rejection_explained",
+          "pass": true,
+          "expected": ">0 errors",
+          "actual": 1
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-*",
+          "actual": "trace-551-mtx4t5ej-C03"
+        }
+      ],
+      "latency_ms": 14
+    },
+    {
+      "case_id": "C04",
+      "note": "valid deal, dry run",
+      "passed": true,
+      "checks": [
+        {
+          "name": "status",
+          "pass": true,
+          "expected": "simulated",
+          "actual": "simulated"
+        },
+        {
+          "name": "object_type",
+          "pass": true,
+          "expected": "deal",
+          "actual": "deal"
+        },
+        {
+          "name": "ok",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "simulated_id_prefix",
+          "pass": true,
+          "expected": "sim-*",
+          "actual": "sim-deal-a169b5731607"
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-*",
+          "actual": "trace-551-mtx4t5ej-C04"
+        }
+      ],
+      "latency_ms": 30
+    },
+    {
+      "case_id": "C05",
+      "note": "deal without stage is rejected",
+      "passed": true,
+      "checks": [
+        {
+          "name": "status",
+          "pass": true,
+          "expected": "rejected",
+          "actual": "rejected"
+        },
+        {
+          "name": "object_type",
+          "pass": true,
+          "expected": "none",
+          "actual": "none"
+        },
+        {
+          "name": "ok",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "rejection_explained",
+          "pass": true,
+          "expected": ">0 errors",
+          "actual": 1
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-*",
+          "actual": "trace-551-mtx4t5ej-C05"
+        }
+      ],
+      "latency_ms": 12
+    },
+    {
+      "case_id": "C06",
+      "note": "valid follow-up task, dry run",
+      "passed": true,
+      "checks": [
+        {
+          "name": "status",
+          "pass": true,
+          "expected": "simulated",
+          "actual": "simulated"
+        },
+        {
+          "name": "object_type",
+          "pass": true,
+          "expected": "task",
+          "actual": "task"
+        },
+        {
+          "name": "ok",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "simulated_id_prefix",
+          "pass": true,
+          "expected": "sim-*",
+          "actual": "sim-task-b07b6a33b032"
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-*",
+          "actual": "trace-551-mtx4t5ej-C06"
+        }
+      ],
+      "latency_ms": 25
+    },
+    {
+      "case_id": "C07",
+      "note": "unknown op never reaches HubSpot",
+      "passed": true,
+      "checks": [
+        {
+          "name": "status",
+          "pass": true,
+          "expected": "rejected",
+          "actual": "rejected"
+        },
+        {
+          "name": "object_type",
+          "pass": true,
+          "expected": "none",
+          "actual": "none"
+        },
+        {
+          "name": "ok",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "rejection_explained",
+          "pass": true,
+          "expected": ">0 errors",
+          "actual": 1
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-*",
+          "actual": "trace-551-mtx4t5ej-C07"
+        }
+      ],
+      "latency_ms": 10
+    },
+    {
+      "case_id": "C08",
+      "note": "a second tenant sending the identical lead must not be suppressed by the first",
+      "passed": true,
+      "checks": [
+        {
+          "name": "status",
+          "pass": true,
+          "expected": "simulated",
+          "actual": "simulated"
+        },
+        {
+          "name": "object_type",
+          "pass": true,
+          "expected": "contact",
+          "actual": "contact"
+        },
+        {
+          "name": "ok",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "simulated_id_prefix",
+          "pass": true,
+          "expected": "sim-*",
+          "actual": "sim-contact-4ab4d7021fb7"
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-*",
+          "actual": "trace-551-mtx4t5ej-C08"
+        }
+      ],
+      "latency_ms": 23
+    },
+    {
+      "case_id": "C09",
+      "note": "a malformed tenant id is refused rather than escaped into a key",
+      "passed": true,
+      "checks": [
+        {
+          "name": "status",
+          "pass": true,
+          "expected": "rejected",
+          "actual": "rejected"
+        },
+        {
+          "name": "object_type",
+          "pass": true,
+          "expected": "none",
+          "actual": "none"
+        },
+        {
+          "name": "ok",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "rejection_explained",
+          "pass": true,
+          "expected": ">0 errors",
+          "actual": 1
+        },
+        {
+          "name": "trace_echoed",
+          "pass": true,
+          "expected": "trace-*",
+          "actual": "trace-551-mtx4t5ej-C09"
+        }
+      ],
+      "latency_ms": 9
+    },
+    {
+      "case_id": "C08x",
+      "note": "cross-tenant isolation: identical leads in two tenants must not share a write",
+      "passed": true,
+      "checks": [
+        {
+          "name": "second_tenant_not_replayed",
+          "pass": true,
+          "expected": "simulated",
+          "actual": "simulated"
+        },
+        {
+          "name": "tenants_distinct",
+          "pass": true,
+          "expected": "acme != globex",
+          "actual": "acme vs globex"
+        }
+      ],
+      "latency_ms": 23
+    }
+  ]
+}

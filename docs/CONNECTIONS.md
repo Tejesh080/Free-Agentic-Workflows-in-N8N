@@ -10,9 +10,10 @@ One checklist. Work top to bottom; everything marked optional can wait.
 | **Google Gemini** | Fast/cheap tier in the Model Router; fallback tier | 02 → all | **Required** (one provider minimum) | Covered by n8n AI Gateway credits. Otherwise create a *Google Gemini (PaLM) API* credential |
 | **OpenAI** | Balanced tier in the router; embeddings for RAG; Whisper and TTS for voice | 02, 03, 10 | **Required** for 03 and 10 | Covered by Gateway credits. Otherwise an *OpenAI* credential |
 | **Anthropic** | Quality tier in the router | 02 | Optional but recommended | Covered by Gateway credits. Otherwise an *Anthropic* credential |
-| **Firecrawl** | Live web search and scrape | 04 | **Required** for 04 | Covered by Gateway credits. Otherwise a *Firecrawl* credential |
-| **GitHub** | Fetches versioned prompts at run time | 08 → 01, 03, 04, 06, 07, 10 | No credential for a public repo | Anonymous. Add a token only for a private prompt repo or to raise the rate limit |
-| **Telegram** | Human approval channel | 05 | **Optional** | Create a bot with @BotFather, add a *Telegram* credential, then set the chat id (below) |
+| **Firecrawl** | Live web search and scrape; company enrichment | 04, 12 | **Required** for 04 | Covered by Gateway credits. Otherwise a *Firecrawl* credential |
+| **GitHub** | Fetches versioned prompts at run time | 08 → 01, 03, 04, 06, 07, 10, 12, 13 | No credential for a public repo | Anonymous. Add a token only for a private prompt repo or to raise the rate limit |
+| **Telegram** | Human approval channel; the one wired outreach channel | 05, 13 | **Optional** | Create a bot with @BotFather, add a *Telegram* credential, then set the chat id (below) |
+| **HubSpot** | CRM writes: contact upsert, deal create, follow-up task | 11 → 14 | **Optional** — the swarm runs end to end in dry run without it | Create a private app in HubSpot, add a *HubSpot App Token* credential to the three nodes in 11, then enable them |
 | **Qdrant** | Persistent vector store | 03 | **Optional** | Demo uses the in-memory store. For production swap the two vector store nodes and add a *Qdrant* credential |
 | **Postgres** | Real analytics warehouse | 07 | **Optional** | Demo uses an n8n Data Table. For production swap *Read Analytics Rows* for a Postgres node on a **read-only role** |
 | **Google Search Console** | Real analytics source | 07 | **Optional** | Not wired by default; the query compiler emits portable SQL you can adapt |
@@ -90,6 +91,59 @@ Nodes will import and validate without them; they fail at run time if missing.
 `country` string, `device` string, `clicks` number, `impressions` number,
 `position` number
 
+### `swarm_crm_writes` — used by 11
+
+`idempotency_key` string, `tenant_id` string, `trace_id` string, `op` string,
+`object_type` string, `object_id` string, `lead_key` string, `dry_run` boolean,
+`status` string, `payload_digest` string, `written_at` string,
+`execution_id` string
+
+This is the table that makes a replayed webhook harmless. It is read before the
+CRM is called, not after.
+
+### `swarm_lead_ledger` — used by 14
+
+`lead_key` string, `tenant_id` string, `trace_id` string, `email` string,
+`company_domain` string, `score` number, `tier` string, `contact_id` string,
+`deal_id` string, `status` string, `reasons_json` string, `source` string,
+`first_seen_at` string, `execution_id` string
+
+### `swarm_outreach_log` — used by 13
+
+`lead_key` string, `tenant_id` string, `trace_id` string, `channel` string, `tier` string, `governance_decision` string,
+`risk_level` string, `verified` boolean, `copy_score` number,
+`message_digest` string, `delivery_status` string, `blocked_reasons` string,
+`sent_at` string, `execution_id` string
+
+Every outreach attempt lands here, including the ones that were blocked, with
+the stage that stopped them.
+
+### `swarm_decision_receipts` — used by 14
+
+`trace_id` string, `tenant_id` string, `lead_key` string, `email` string,
+`company_domain` string, `outcome` string, `score` number, `tier` string,
+`confidence` number, `recommended_action` string, `requires_human_review` boolean,
+`contact_id` string, `deal_id` string, `task_id` string, `outreach_status` string,
+`outreach_sent` boolean, `governance_decision` string, `risk_level` string,
+`verified` boolean, `unsupported_evidence` number, `model_providers` string,
+`rubric_version` string, `steps_json` string, `scoring_json` string,
+`dry_run` boolean, `entry` string, `latency_ms` number, `created_at` string,
+`execution_id` string
+
+One row per lead decision: the score with its full breakdown, the CRM objects
+created, the outreach outcome and the governance verdict. This is the table a
+dashboard reads; it is not a log, it is the record.
+
+### `swarm_eval_runs` — used by 15
+
+`run_id` string, `golden_set` string, `golden_version` string,
+`total_cases` number, `rubric_a` string, `rubric_b` string, `accuracy_a` number,
+`accuracy_b` number, `hot_precision_a` number, `hot_precision_b` number,
+`hot_recall_a` number, `hot_recall_b` number, `hot_conversion_a` number,
+`hot_conversion_b` number, `promote` boolean, `promote_reason` string,
+`disagreements_json` string, `metrics_json` string, `created_at` string,
+`execution_id` string
+
 > **Do not create a column called `caller` on a table a Set node writes to.**
 > n8n's Set node blocks assignments named `caller` as a reserved property and
 > fails the node at run time. `agentic_verification_log` keeps the name only
@@ -157,12 +211,35 @@ auditable.
 
 ---
 
+## 6. Revenue swarm ingest key (required for 14's webhook)
+
+Workflow 14 exposes a public lead-intake webhook. Before publishing it, create an
+n8n variable so inbound leads can be authenticated:
+
+1. **n8n → Settings → Variables → Add variable**
+2. Name it `SWARM_INGEST_KEY` and give it a long random value.
+3. Have whatever posts leads send that value as an `x-swarm-key` header.
+
+Until the variable exists the workflow refuses every inbound lead and says so in
+the response. An unset secret is treated as "refuse everything", never as "no
+secret required", so an unfinished setup cannot quietly become an open endpoint.
+
+The `Swarm Request` trigger on the same workflow is the internal entry point and
+skips the check, because a caller reaching it is already inside n8n.
+
+---
+
 ## What is not wired
 
 - **Google Search Console** as a live source for 07. The compiler emits portable
   SQL, but no GSC node is present.
 - **ElevenLabs** for voice. 10 uses OpenAI TTS because it is covered by Gateway
   credits; swapping in ElevenLabs is one node.
+- **Email and SMS sending** in 13. Both channels are drafted, copy-checked,
+  verified and sent to Governance, then recorded as `channel_not_configured`.
+  Wiring one is a single node on the approved branch.
+- **A nurture sweep.** 14 handles one lead per request; nothing re-engages a
+  COLD lead later.
 - **A local model** (Ollama, vLLM) in the router. The candidate registry has a
   commented example and the privacy gate already refuses `privacy=local_only`
   rather than silently using a cloud provider — but no local branch is wired.

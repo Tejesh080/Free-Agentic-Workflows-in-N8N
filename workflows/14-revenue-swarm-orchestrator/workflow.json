@@ -1,0 +1,1294 @@
+{
+  "name": "14 Revenue Swarm Orchestrator",
+  "nodes": [
+    {
+      "id": "d67016c1-8710-455c-9a9e-0dc0666d0d17",
+      "name": "Normalise Intake",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const raw = $input.first().json || {};\n\nfunction parseJson(value, fallback) {\n  if (value && typeof value === \"object\") { return value; }\n  if (typeof value === \"string\" && value.trim()) {\n    try { return JSON.parse(value); } catch (e) { return fallback; }\n  }\n  return fallback;\n}\n\n// Three shapes reach this node: a webhook POST (fields under body), a\n// sub-workflow call (a JSON string in lead), and a direct manual run.\nconst fromSubWorkflow = raw.lead !== undefined;\nconst body = raw.body && typeof raw.body === \"object\" ? raw.body : null;\nconst headers = raw.headers || {};\nconst lead = fromSubWorkflow ? parseJson(raw.lead, {}) : (body || raw);\nconst options = fromSubWorkflow\n  ? parseJson(raw.options, {})\n  : parseJson((body && body.options) || raw.options, {});\n\nconst email = String(lead.email || \"\").trim().toLowerCase();\nconst leadKey = email || \"anonymous\";\n\nconst dryRun = options.dry_run === undefined ? true : String(options.dry_run).toLowerCase() !== \"false\";\n\n// Tenant comes from the caller, and on the public path from a header rather\n// than the body, so a lead payload cannot choose which workspace it lands in.\nconst rawTenant = String(\n  options.tenant_id || headers[\"x-tenant-id\"] || headers[\"X-Tenant-Id\"] || \"default\"\n).trim().toLowerCase();\nconst tenantId = /^[a-z0-9][a-z0-9_-]{0,62}$/.test(rawTenant) ? rawTenant : \"\";\n\n// One trace id per lead, generated here if the caller did not supply one, and\n// threaded through every service so a run can be reassembled after the fact.\nfunction rand() { return Math.random().toString(36).slice(2, 10); }\nconst traceId = String(options.trace_id || (\"t-\" + $execution.id + \"-\" + rand())).trim().slice(0, 64);\n\nreturn [{ json: {\n  lead: lead,\n  lead_json: JSON.stringify(lead),\n  lead_key: leadKey,\n  email: email,\n  tenant_id: tenantId,\n  tenant_valid: !!tenantId,\n  tenant_error: tenantId ? \"\" : (\"tenant_id must match ^[a-z0-9][a-z0-9_-]{0,62}$; got \" + JSON.stringify(rawTenant)),\n  trace_id: traceId,\n  entry: fromSubWorkflow ? \"sub_workflow\" : (body ? \"webhook\" : \"manual\"),\n  dry_run: dryRun,\n  enrich: options.enrich === undefined ? false : String(options.enrich).toLowerCase() === \"true\",\n  force: options.force === undefined ? false : String(options.force).toLowerCase() === \"true\",\n  channel: String(options.channel || \"email\").toLowerCase(),\n  deal_stage: String(options.deal_stage || \"qualifiedtobuy\"),\n  icp_json: options.icp ? JSON.stringify(options.icp) : \"\",\n  rubric_override: options.rubric_override\n    ? (typeof options.rubric_override === \"string\" ? options.rubric_override : JSON.stringify(options.rubric_override))\n    : \"\",\n  verification_mode: String(options.verification_mode || \"deterministic_only\"),\n  simulate_decision: String(options.simulate_decision || \"\"),\n  governance_action_type: String(options.governance_action_type || \"send\"),\n  chat_id: String(options.chat_id || \"\"),\n  signals_override: options.signals_override\n    ? (typeof options.signals_override === \"string\" ? options.signals_override : JSON.stringify(options.signals_override))\n    : \"\",\n  started_at_ms: Date.now()\n} }];\n"
+      }
+    },
+    {
+      "id": "a11b6e12-225e-4a8e-88da-abc0e0452945",
+      "name": "Swarm Request",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        192
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "lead",
+              "type": "string"
+            },
+            {
+              "name": "options",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "aed94bca-04d5-4c0b-8c55-698e6caafd40",
+      "name": "Check Lead Ledger",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        448,
+        96
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATA_TABLE_ID",
+          "cachedResultName": "swarm_lead_ledger"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lead_key",
+              "condition": "eq",
+              "keyValue": "={{ $json.lead_key }}"
+            },
+            {
+              "keyName": "tenant_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.tenant_id }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "eb733cf6-dbfa-4da3-8faf-182091262337",
+      "name": "Seen Before?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        672,
+        96
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "sb1",
+              "leftValue": "={{ $json.lead_key }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "sb2",
+              "leftValue": "={{ $(\"Normalise Intake\").first().json.force }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "09d643dd-6bfc-49cf-b170-70acb9f9bc1e",
+      "name": "Return Duplicate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise Intake\").first().json;\nconst row = $input.first().json || {};\nreturn [{ json: {\n  ok: true,\n  outcome: \"duplicate\",\n  trace_id: req.trace_id,\n  tenant_id: req.tenant_id,\n  lead_key: req.lead_key,\n  email: req.email,\n  message: \"This lead was already processed on \" + String(row.first_seen_at || \"an earlier run\") + \". Nothing was re-qualified and no CRM object was created. Pass options.force=true to run it again.\",\n  previous: {\n    score: row.score === undefined ? null : row.score,\n    tier: row.tier || null,\n    contact_id: row.contact_id || null,\n    deal_id: row.deal_id || null,\n    status: row.status || null,\n    trace_id: row.trace_id || null,\n    first_seen_at: row.first_seen_at || null\n  },\n  latency_ms: Date.now() - Number(req.started_at_ms)\n} }];\n"
+      }
+    },
+    {
+      "id": "77312788-aed5-493a-ae9a-c312550d9d54",
+      "name": "Qualify Lead (12)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        896,
+        192
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 12 Lead Qualification Agent"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead": "={{ $(\"Normalise Intake\").first().json.lead_json }}",
+            "icp": "={{ $(\"Normalise Intake\").first().json.icp_json }}",
+            "enrich": "={{ String($(\"Normalise Intake\").first().json.enrich) }}",
+            "signals_override": "={{ $(\"Normalise Intake\").first().json.signals_override }}",
+            "rubric_override": "={{ $(\"Normalise Intake\").first().json.rubric_override }}",
+            "verification_mode": "={{ $(\"Normalise Intake\").first().json.verification_mode }}",
+            "tenant_id": "={{ $(\"Normalise Intake\").first().json.tenant_id }}",
+            "trace_id": "={{ $(\"Normalise Intake\").first().json.trace_id }}",
+            "source_workflow": "14-revenue-swarm"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "ffdb1430-b878-48d7-b561-8a84f7fbcc03",
+      "name": "Capture Qualification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const raw = $input.first().json;\nconst q = (raw && raw.json) ? raw.json : raw;\nconst req = $(\"Normalise Intake\").first().json;\n\nconst lines = (q.scoring && q.scoring.components ? q.scoring.components : []).map(function (c) {\n  return \"  \" + c.component + \": \" + c.points + \"/\" + c.max + \" (\" + c.detail + \")\";\n});\n(q.scoring && q.scoring.modifiers ? q.scoring.modifiers : []).forEach(function (m) {\n  lines.push(\"  \" + m.modifier + \": \" + (m.points > 0 ? \"+\" : \"\") + m.points + \" (\" + m.reason + \")\");\n});\n(q.scoring && q.scoring.caps_applied ? q.scoring.caps_applied : []).forEach(function (c) {\n  lines.push(\"  capped at \" + c.cap + \": \" + c.reason);\n});\n\n// The task body is the audit trail a salesperson actually reads.\nconst rationale = \"Lead score \" + q.score + \"/100 (\" + q.tier + \"), confidence \" + q.confidence + \".\\n\\n\" +\n  \"How the score was reached (rubric \" + ((q.scoring || {}).rubric_version || \"?\") + \"):\\n\" + lines.join(\"\\n\") +\n  \"\\n\\nRecommended action: \" + q.recommended_action +\n  (q.requires_human_review ? \"\\n\\nNeeds review: \" + (q.review_reasons || []).join(\"; \") : \"\") +\n  \"\\n\\nSignals were extracted by \" + (((q.provenance || {}).model_provider) || \"no model\") +\n  \" and verified \" + (((q.verification || {}).verified) ? \"clean\" : \"with issues\") + \".\";\n\nreturn [{ json: {\n  qualification: q,\n  qualification_json: JSON.stringify(q),\n  score: q.score,\n  tier: q.tier,\n  confidence: q.confidence,\n  recommended_action: q.recommended_action,\n  outreach_allowed: q.outreach_allowed === true,\n  requires_human_review: q.requires_human_review === true,\n  actionable: q.tier !== \"DISQUALIFIED\",\n  rationale: rationale,\n  lead_key: req.lead_key\n} }];\n"
+      }
+    },
+    {
+      "id": "07f8a0fb-f254-4fd2-b9cb-7d2ac4b2cf95",
+      "name": "Actionable?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1344,
+        192
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ac1",
+              "leftValue": "={{ $json.actionable }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "b072b84c-720e-4067-ac2f-9269c0a2f899",
+      "name": "Sync Contact (11)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1568,
+        96
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 11 CRM Sync Service"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "op": "upsert_contact",
+            "payload": "={{ JSON.stringify({ email: $(\"Normalise Intake\").first().json.email, first_name: $(\"Normalise Intake\").first().json.lead.first_name, last_name: $(\"Normalise Intake\").first().json.lead.last_name, company_name: $(\"Normalise Intake\").first().json.lead.company_name, job_title: $(\"Normalise Intake\").first().json.lead.job_title, phone: $(\"Normalise Intake\").first().json.lead.phone, website: $(\"Normalise Intake\").first().json.lead.website, lead_score: $json.score, lead_tier: $json.tier, lead_key: $json.lead_key }) }}",
+            "idempotency_key": "={{ \"swarm-\" + $json.lead_key + \"-contact\" }}",
+            "dry_run": "={{ String($(\"Normalise Intake\").first().json.dry_run) }}",
+            "lead_key": "={{ $json.lead_key }}",
+            "source_workflow": "14-revenue-swarm",
+            "tenant_id": "={{ $(\"Normalise Intake\").first().json.tenant_id }}",
+            "trace_id": "={{ $(\"Normalise Intake\").first().json.trace_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "825bb437-3716-4a1e-bdcb-458cba205fb3",
+      "name": "Capture Contact",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const raw = $input.first().json;\nconst r = (raw && raw.json) ? raw.json : raw;\nreturn [{ json: {\n  contact_id: String(r.object_id || \"\"),\n  contact_status: r.status || \"unknown\",\n  contact_ok: r.ok === true,\n  contact_errors: r.errors || []\n} }];\n"
+      }
+    },
+    {
+      "id": "d96bfdc1-7c05-49c3-b853-cb6a8bdf932d",
+      "name": "Deal Needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2016,
+        96
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "dn1",
+              "leftValue": "={{ $(\"Capture Qualification\").first().json.tier }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "HOT"
+            },
+            {
+              "id": "dn2",
+              "leftValue": "={{ $json.contact_ok }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "cc502e9c-9397-43d0-986d-dbbec9e650d7",
+      "name": "Create Deal (11)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2240,
+        0
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 11 CRM Sync Service"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "op": "create_deal",
+            "payload": "={{ JSON.stringify({ deal_name: ($(\"Normalise Intake\").first().json.lead.company_name || $(\"Normalise Intake\").first().json.email) + \" - inbound\", stage: $(\"Normalise Intake\").first().json.deal_stage, amount: String($(\"Normalise Intake\").first().json.lead.budget || \"\"), description: $(\"Capture Qualification\").first().json.rationale.slice(0, 900), contact_id: $json.contact_id, lead_key: $(\"Capture Qualification\").first().json.lead_key }) }}",
+            "idempotency_key": "={{ \"swarm-\" + $(\"Capture Qualification\").first().json.lead_key + \"-deal\" }}",
+            "dry_run": "={{ String($(\"Normalise Intake\").first().json.dry_run) }}",
+            "lead_key": "={{ $(\"Capture Qualification\").first().json.lead_key }}",
+            "source_workflow": "14-revenue-swarm",
+            "tenant_id": "={{ $(\"Normalise Intake\").first().json.tenant_id }}",
+            "trace_id": "={{ $(\"Normalise Intake\").first().json.trace_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "76d2bf73-72ce-4422-a72c-1c993cf4352f",
+      "name": "Capture Deal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2464,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const raw = $input.first().json;\nconst r = (raw && raw.json) ? raw.json : raw;\nreturn [{ json: {\n  deal_id: String(r.object_id || \"\"),\n  deal_status: r.status || \"unknown\",\n  deal_ok: r.ok === true,\n  deal_skipped_reason: \"\"\n} }];\n"
+      }
+    },
+    {
+      "id": "0ed213f9-595a-46ed-9e3b-7d7b9252898e",
+      "name": "Skip Deal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2464,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const q = $(\"Capture Qualification\").first().json;\nconst c = $(\"Capture Contact\").first().json;\nreturn [{ json: {\n  deal_id: \"\",\n  deal_status: \"not_created\",\n  deal_ok: false,\n  deal_skipped_reason: c.contact_ok\n    ? \"a deal is only opened for a HOT lead; this one is \" + q.tier\n    : \"the contact write did not return an id, so there is nothing to attach a deal to\"\n} }];\n"
+      }
+    },
+    {
+      "id": "a7f7f64c-9053-4f73-9df8-148116cc2975",
+      "name": "Record Disqualified",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        288
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise Intake\").first().json;\nconst q = $(\"Capture Qualification\").first().json;\nreturn [{ json: {\n  ok: true,\n  outcome: \"disqualified\",\n  lead_key: q.lead_key,\n  email: req.email,\n  dry_run: req.dry_run,\n  qualification: {\n    score: q.score,\n    tier: q.tier,\n    confidence: q.confidence,\n    recommended_action: q.recommended_action,\n    requires_human_review: q.requires_human_review,\n    review_reasons: (q.qualification || {}).review_reasons || [],\n    scoring: (q.qualification || {}).scoring || {},\n    verification: (q.qualification || {}).verification || {}\n  },\n  crm: { contact_id: \"\", contact_status: \"not_written\", deal_id: \"\", deal_status: \"not_written\", task_id: \"\", task_status: \"not_written\" },\n  outreach: { attempted: false, sent: false, status: \"not_attempted\", detail: \"the lead was disqualified\", blocked_stage: null, blocked_reasons: [], draft: \"\", governance: {} },\n  steps: [\n    { step: \"qualify\", done: true, detail: \"score \" + q.score + \" (\" + q.tier + \")\" },\n    { step: \"crm_contact\", done: false, detail: \"a disqualified lead is never written to the CRM\" },\n    { step: \"crm_deal\", done: false, detail: \"a disqualified lead is never written to the CRM\" },\n    { step: \"crm_task\", done: false, detail: \"a disqualified lead is never written to the CRM\" },\n    { step: \"outreach\", done: false, detail: \"a disqualified lead is never written to\" }\n  ],\n  entry: req.entry,\n  execution_id: $execution.id,\n  latency_ms: Date.now() - Number(req.started_at_ms)\n} }];\n"
+      }
+    },
+    {
+      "id": "53e19cb6-c030-4a2e-a9b0-5208c032d7a6",
+      "name": "Write Score to CRM (11)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2688,
+        96
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 11 CRM Sync Service"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "op": "create_task",
+            "payload": "={{ JSON.stringify({ subject: \"Lead score \" + $(\"Capture Qualification\").first().json.score + \" (\" + $(\"Capture Qualification\").first().json.tier + \"): \" + $(\"Normalise Intake\").first().json.email, body: $(\"Capture Qualification\").first().json.rationale, contact_id: $(\"Capture Contact\").first().json.contact_id, lead_key: $(\"Capture Qualification\").first().json.lead_key }) }}",
+            "idempotency_key": "={{ \"swarm-\" + $(\"Capture Qualification\").first().json.lead_key + \"-task\" }}",
+            "dry_run": "={{ String($(\"Normalise Intake\").first().json.dry_run) }}",
+            "lead_key": "={{ $(\"Capture Qualification\").first().json.lead_key }}",
+            "source_workflow": "14-revenue-swarm",
+            "tenant_id": "={{ $(\"Normalise Intake\").first().json.tenant_id }}",
+            "trace_id": "={{ $(\"Normalise Intake\").first().json.trace_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "40faf1ba-6f80-4fa6-95a9-c3bc7cbf2a12",
+      "name": "Capture Task",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2912,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const raw = $input.first().json;\nconst r = (raw && raw.json) ? raw.json : raw;\nreturn [{ json: {\n  task_id: String(r.object_id || \"\"),\n  task_status: r.status || \"unknown\",\n  task_ok: r.ok === true\n} }];\n"
+      }
+    },
+    {
+      "id": "653d72d4-9807-4099-a61e-590f154433ee",
+      "name": "Outreach Wanted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3136,
+        96
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ow1",
+              "leftValue": "={{ $(\"Capture Qualification\").first().json.outreach_allowed }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "60cd5e6f-2337-4776-95de-673b4928ded9",
+      "name": "Compose Outreach (13)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        3360,
+        0
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 13 Outreach Composer"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead": "={{ $(\"Normalise Intake\").first().json.lead_json }}",
+            "qualification": "={{ $(\"Capture Qualification\").first().json.qualification_json }}",
+            "channel": "={{ $(\"Normalise Intake\").first().json.channel }}",
+            "dry_run": "={{ String($(\"Normalise Intake\").first().json.dry_run) }}",
+            "draft_override": "",
+            "governance_action_type": "={{ $(\"Normalise Intake\").first().json.governance_action_type }}",
+            "simulate_decision": "={{ $(\"Normalise Intake\").first().json.simulate_decision }}",
+            "chat_id": "={{ $(\"Normalise Intake\").first().json.chat_id }}",
+            "source_workflow": "14-revenue-swarm",
+            "tenant_id": "={{ $(\"Normalise Intake\").first().json.tenant_id }}",
+            "trace_id": "={{ $(\"Normalise Intake\").first().json.trace_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "fff535c8-1720-456b-93aa-c858faa715ee",
+      "name": "Capture Outreach",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3584,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const raw = $input.first().json;\nconst r = (raw && raw.json) ? raw.json : raw;\nreturn [{ json: {\n  outreach_attempted: true,\n  outreach_sent: r.sent === true,\n  outreach_status: r.delivery_status || \"unknown\",\n  outreach_detail: r.delivery_detail || \"\",\n  outreach_blocked_stage: r.blocked_stage || null,\n  outreach_blocked_reasons: r.blocked_reasons || [],\n  outreach_draft: r.draft || \"\",\n  outreach_governance: r.governance || {},\n  outreach_skipped_reason: \"\"\n} }];\n"
+      }
+    },
+    {
+      "id": "9b94ffc4-8d96-4990-b4e4-0e74d049fa6a",
+      "name": "Skip Outreach",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3584,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const q = $(\"Capture Qualification\").first().json;\nreturn [{ json: {\n  outreach_attempted: false,\n  outreach_sent: false,\n  outreach_status: \"not_attempted\",\n  outreach_detail: \"\",\n  outreach_blocked_stage: null,\n  outreach_blocked_reasons: [],\n  outreach_draft: \"\",\n  outreach_governance: {},\n  outreach_skipped_reason: (q.qualification || {}).outreach_block_reason || \"qualification did not allow outreach\"\n} }];\n"
+      }
+    },
+    {
+      "id": "424ed85f-4401-40fb-8a19-7ab27d62d8bd",
+      "name": "Record Lead Ledger",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        3808,
+        96
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATA_TABLE_ID",
+          "cachedResultName": "swarm_lead_ledger"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead_key": "={{ $(\"Capture Qualification\").first().json.lead_key }}",
+            "email": "={{ $(\"Normalise Intake\").first().json.email }}",
+            "company_domain": "={{ ($(\"Capture Qualification\").first().json.qualification || {}).company_domain }}",
+            "score": "={{ $(\"Capture Qualification\").first().json.score }}",
+            "tier": "={{ $(\"Capture Qualification\").first().json.tier }}",
+            "contact_id": "={{ $(\"Capture Contact\").isExecuted ? $(\"Capture Contact\").first().json.contact_id : \"\" }}",
+            "deal_id": "={{ $(\"Capture Deal\").isExecuted ? $(\"Capture Deal\").first().json.deal_id : \"\" }}",
+            "status": "={{ $(\"Capture Qualification\").first().json.recommended_action }}",
+            "reasons_json": "={{ JSON.stringify(($(\"Capture Qualification\").first().json.qualification || {}).review_reasons || []).slice(0, 1500) }}",
+            "source": "={{ $(\"Normalise Intake\").first().json.entry }}",
+            "first_seen_at": "={{ $now.toISO() }}",
+            "execution_id": "={{ $execution.id }}",
+            "tenant_id": "={{ $(\"Normalise Intake\").first().json.tenant_id }}",
+            "trace_id": "={{ $(\"Normalise Intake\").first().json.trace_id }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "14518f37-8823-4ca0-a815-0d1c2c1d04b4",
+      "name": "Build Swarm Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4032,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise Intake\").first().json;\nconst q = $(\"Capture Qualification\").first().json;\n\nfunction safe(nodeName) {\n  try { return $(nodeName).first().json; } catch (e) { return {}; }\n}\nfunction ran(nodeName) {\n  try { return $(nodeName).isExecuted; } catch (e) { return false; }\n}\n\n// One builder for both outcomes. Two builders drift; this one cannot.\nconst disqualified = ran(\"Record Disqualified\");\n\nconst contact = disqualified ? {} : safe(\"Capture Contact\");\nconst deal = disqualified ? {} : (ran(\"Capture Deal\") ? safe(\"Capture Deal\") : safe(\"Skip Deal\"));\nconst task = disqualified ? {} : safe(\"Capture Task\");\nconst outreach = disqualified ? {} : (ran(\"Capture Outreach\") ? safe(\"Capture Outreach\") : safe(\"Skip Outreach\"));\n\nconst NO_CRM = \"a disqualified lead is never written to the CRM\";\nconst steps = [];\nsteps.push({ step: \"qualify\", done: true, detail: \"score \" + q.score + \" (\" + q.tier + \"), confidence \" + q.confidence });\nsteps.push({ step: \"crm_contact\", done: contact.contact_ok === true, detail: disqualified ? NO_CRM : (contact.contact_status + (contact.contact_id ? \" as \" + contact.contact_id : \"\")) });\nsteps.push({ step: \"crm_deal\", done: deal.deal_ok === true, detail: disqualified ? NO_CRM : (deal.deal_ok ? deal.deal_status + \" as \" + deal.deal_id : deal.deal_skipped_reason) });\nsteps.push({ step: \"crm_task\", done: task.task_ok === true, detail: disqualified ? NO_CRM : ((task.task_status || \"not_run\") + (task.task_id ? \" as \" + task.task_id : \"\")) });\nsteps.push({ step: \"outreach\", done: outreach.outreach_attempted === true, detail: disqualified ? \"a disqualified lead is never written to\" : (outreach.outreach_attempted ? (outreach.outreach_status + \": \" + outreach.outreach_detail) : outreach.outreach_skipped_reason) });\n\nconst full = q.qualification || {};\nconst providers = [];\nif ((full.provenance || {}).model_provider) { providers.push(\"qualify:\" + full.provenance.model_provider); }\nif ((outreach.outreach_governance || {}).decided_by) { providers.push(\"govern:\" + outreach.outreach_governance.decided_by); }\n\nreturn [{ json: {\n  ok: true,\n  outcome: disqualified ? \"disqualified\" : \"processed\",\n  trace_id: req.trace_id,\n  tenant_id: req.tenant_id,\n  lead_key: q.lead_key,\n  email: req.email,\n  company_domain: full.company_domain || \"\",\n  dry_run: req.dry_run,\n  tenant_error: req.tenant_error || \"\",\n  qualification: {\n    score: q.score,\n    tier: q.tier,\n    confidence: q.confidence,\n    recommended_action: q.recommended_action,\n    requires_human_review: q.requires_human_review,\n    review_reasons: full.review_reasons || [],\n    scoring: full.scoring || {},\n    grounding: full.grounding || {},\n    verification: full.verification || {}\n  },\n  crm: {\n    contact_id: contact.contact_id || \"\",\n    contact_status: disqualified ? \"not_written\" : (contact.contact_status || \"not_run\"),\n    deal_id: deal.deal_id || \"\",\n    deal_status: disqualified ? \"not_written\" : (deal.deal_status || \"not_run\"),\n    task_id: task.task_id || \"\",\n    task_status: disqualified ? \"not_written\" : (task.task_status || \"not_run\")\n  },\n  outreach: {\n    attempted: outreach.outreach_attempted === true,\n    sent: outreach.outreach_sent === true,\n    status: disqualified ? \"not_attempted\" : (outreach.outreach_status || \"not_attempted\"),\n    detail: disqualified ? \"the lead was disqualified\" : (outreach.outreach_detail || outreach.outreach_skipped_reason || \"\"),\n    blocked_stage: outreach.outreach_blocked_stage || null,\n    blocked_reasons: outreach.outreach_blocked_reasons || [],\n    draft: outreach.outreach_draft || \"\",\n    governance: outreach.outreach_governance || {}\n  },\n  model_providers: providers.join(\", \"),\n  steps: steps,\n  entry: req.entry,\n  execution_id: $execution.id,\n  latency_ms: Date.now() - Number(req.started_at_ms)\n} }];\n"
+      }
+    },
+    {
+      "id": "efee7395-0c58-4bce-a148-6f8106da617f",
+      "name": "Sticky Note 13c74a46",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1952,
+        288
+      ],
+      "parameters": {
+        "content": "## One lead, one decision record\n\nThe orchestrator owns sequence and nothing else. Qualification, every CRM write\nand the outreach draft each live in their own service, so this workflow is a\nreadable list of steps rather than a place where logic hides.\n\nA disqualified lead is never written to the CRM at all. A lead already in the\nledger is not re-qualified, so a retried webhook costs nothing and creates\nnothing.",
+        "color": 4
+      }
+    },
+    {
+      "id": "e7745895-0ba0-4179-8b51-6c7cbb2bf77f",
+      "name": "Check Ingest Key",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -680,
+        180
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// A public lead endpoint needs a shared secret, and the safe failure is to\n// refuse. If SWARM_INGEST_KEY is not set on the instance, nothing is accepted:\n// an unset secret must never read as \"no secret required\".\nconst item = $input.first().json || {};\nconst headers = item.headers || {};\n\nlet expected = \"\";\ntry { expected = String(($vars && $vars.SWARM_INGEST_KEY) || \"\"); } catch (e) { expected = \"\"; }\n\nconst supplied = String(headers[\"x-swarm-key\"] || headers[\"X-Swarm-Key\"] || \"\");\n\nlet authorised = false;\nlet reason = \"\";\nif (!expected) {\n  reason = \"the SWARM_INGEST_KEY variable is not set on this n8n instance, so no inbound lead can be authenticated\";\n} else if (!supplied) {\n  reason = \"the request did not carry an x-swarm-key header\";\n} else if (supplied.length !== expected.length) {\n  reason = \"the x-swarm-key header did not match\";\n} else {\n  // Constant-time-ish compare: same length, every byte examined.\n  let diff = 0;\n  for (let i = 0; i < expected.length; i++) { diff |= expected.charCodeAt(i) ^ supplied.charCodeAt(i); }\n  authorised = diff === 0;\n  if (!authorised) { reason = \"the x-swarm-key header did not match\"; }\n}\n\nitem.ingest_authorised = authorised;\nitem.ingest_reason = reason;\nreturn [{ json: item }];\n"
+      }
+    },
+    {
+      "id": "76bbcaa9-dea5-4e43-b15b-47311a673714",
+      "name": "Ingest Authorised?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -460,
+        180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ia1",
+              "leftValue": "={{ $json.ingest_authorised }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "b1ffda8e-87e0-4a66-b43f-7a6432a4aa81",
+      "name": "Reject Unauthorised",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: {\n  ok: false,\n  outcome: \"unauthorised\",\n  message: \"Lead rejected: \" + String($json.ingest_reason || \"no reason recorded\") + \".\",\n  hint: \"Set an n8n variable named SWARM_INGEST_KEY and send it as the x-swarm-key header.\"\n} }];\n"
+      }
+    },
+    {
+      "id": "7424204e-4e61-49c2-a436-506d326831f4",
+      "name": "Sticky Ingest Key",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -940,
+        60
+      ],
+      "parameters": {
+        "color": 3,
+        "width": 400,
+        "height": 320,
+        "content": "## Ingest key\n\nThe webhook is public, so the first thing it does is check an `x-swarm-key`\nheader against the `SWARM_INGEST_KEY` n8n variable.\n\nIf that variable is not set, every inbound lead is refused. An unset secret\nreads as \"refuse everything\", never as \"no secret required\".\n\nThe Swarm Request trigger below is the internal entry point and skips this\ncheck, because a caller is already inside n8n."
+      }
+    },
+    {
+      "id": "0450e1a3-ba85-4fb9-9797-6a26cc115f35",
+      "name": "Test Suite Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -680,
+        1400
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "380cb598-122e-4678-b606-0b8bdad906d6",
+      "name": "Build Swarm Fixtures",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -460,
+        1400
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// A run nonce keeps the ledger dedupe honest: S01 is always a fresh lead and\n// S02 is always the same lead a second time.\nconst nonce = String($execution.id) + Date.now().toString(36);\n\nfunction sig(o) {\n  const base = { seniority: \"unknown\", decision_authority: \"unknown\", company_size_band: \"unknown\", budget_signal: \"unknown\", timeline: \"unknown\", pain_specificity: \"unknown\", use_case_fit: \"unknown\", competitor_mentioned: false, evidence: [], notes: \"fixture\" };\n  return JSON.stringify(Object.assign(base, o));\n}\n\nconst HOT = { seniority: \"executive\", decision_authority: \"decision_maker\", company_size_band: \"201-1000\", budget_signal: \"explicit\", timeline: \"immediate\", pain_specificity: \"specific\", use_case_fit: \"core\", evidence: [{ signal: \"budget_signal\", quote: \"We have 30k set aside\" }] };\nconst WARM = { seniority: \"manager\", decision_authority: \"influencer\", company_size_band: \"51-200\", budget_signal: \"implied\", timeline: \"this_quarter\", pain_specificity: \"general\", use_case_fit: \"adjacent\" };\nconst COLD = { seniority: \"ic\", decision_authority: \"end_user\", company_size_band: \"11-50\", budget_signal: \"none\", timeline: \"this_year\", pain_specificity: \"general\", use_case_fit: \"adjacent\" };\nconst OUT = { seniority: \"executive\", decision_authority: \"decision_maker\", company_size_band: \"201-1000\", budget_signal: \"explicit\", timeline: \"immediate\", pain_specificity: \"specific\", use_case_fit: \"out_of_scope\" };\n\nfunction lead(prefix, extra) {\n  return Object.assign({\n    email: prefix + \"-\" + nonce + \"@analytical.io\",\n    first_name: \"Ada\",\n    last_name: \"Lovelace\",\n    job_title: \"VP of Engineering\",\n    company_name: \"Analytical Engines\",\n    message: \"We have 30k set aside and need this live this month.\"\n  }, extra || {});\n}\n\nconst hotLead = lead(\"s01\");\n\nconst fixtures = [\n  { case_id: \"S01\", note: \"a HOT lead gets a contact, a deal, a scored task and a drafted message\", lead: hotLead, tenant: \"acme\", signals: sig(HOT), expect_outcome: \"processed\", expect_tier: \"HOT\", expect_deal: true, expect_outreach: true, expect_contact: true },\n  { case_id: \"S02\", note: \"the same lead a second time is not re-qualified\", lead: hotLead, tenant: \"acme\", signals: sig(HOT), expect_outcome: \"duplicate\", expect_tier: null, expect_deal: false, expect_outreach: false, expect_contact: false },\n  { case_id: \"S03\", note: \"a WARM lead gets a contact and a task but no deal\", lead: lead(\"s03\"), tenant: \"acme\", signals: sig(WARM), expect_outcome: \"processed\", expect_tier: \"WARM\", expect_deal: false, expect_outreach: true, expect_contact: true },\n  { case_id: \"S04\", note: \"a disqualified lead is never written to the CRM\", lead: lead(\"s04\"), tenant: \"acme\", signals: sig(OUT), expect_outcome: \"disqualified\", expect_tier: \"DISQUALIFIED\", expect_deal: false, expect_outreach: false, expect_contact: false },\n  { case_id: \"S05\", note: \"a COLD lead is recorded but not written to\", lead: lead(\"s05\"), tenant: \"acme\", signals: sig(COLD), expect_outcome: \"processed\", expect_tier: \"COLD\", expect_deal: false, expect_outreach: false, expect_contact: true },\n  { case_id: \"S06\", note: \"live: the whole pipeline with the real model, structure only\", lead: lead(\"s06\"), tenant: \"acme\", signals: \"\", expect_outcome: null, expect_tier: null, expect_deal: null, expect_outreach: null, expect_contact: true },\n  { case_id: \"S07\", note: \"a second workspace sending the identical lead is processed, not deduplicated\", lead: hotLead, tenant: \"globex\", signals: sig(HOT), expect_outcome: \"processed\", expect_tier: \"HOT\", expect_deal: true, expect_outreach: true, expect_contact: true }\n];\n\nreturn fixtures.map(function (f) {\n  return { json: {\n    case_id: f.case_id,\n    note: f.note,\n    tenant_id: f.tenant,\n    trace_id: \"trace-\" + nonce + \"-\" + f.case_id,\n    lead: JSON.stringify(f.lead),\n    options: JSON.stringify({\n      dry_run: true,\n      enrich: false,\n      channel: \"email\",\n      simulate_decision: \"approve\",\n      signals_override: f.signals,\n      tenant_id: f.tenant,\n      trace_id: \"trace-\" + nonce + \"-\" + f.case_id\n    }),\n    expect_outcome: f.expect_outcome,\n    expect_tier: f.expect_tier,\n    expect_deal: f.expect_deal,\n    expect_outreach: f.expect_outreach,\n    expect_contact: f.expect_contact\n  } };\n});\n"
+      }
+    },
+    {
+      "id": "21c2c324-f73f-4d29-81f9-c254a89bdd66",
+      "name": "Swarm Fixture Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -240,
+        1400
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "a64ed8a6-f977-483b-928a-d9e4a68b30a4",
+      "name": "Run Swarm Fixture",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        1520
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "14 Revenue Swarm Orchestrator"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead": "={{ $json.lead }}",
+            "options": "={{ $json.options }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "841b6e61-7baf-4449-89c3-c3b3d5eb0437",
+      "name": "Slim Swarm Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        1520
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const raw = $input.first().json;\nconst r = (raw && raw.json) ? raw.json : raw;\nconst fx = $(\"Swarm Fixture Loop\").first().json;\nconst crm = r.crm || {};\nconst out = r.outreach || {};\nreturn [{ json: {\n  case_id: fx.case_id,\n  note: fx.note,\n  expect_outcome: fx.expect_outcome,\n  expect_tier: fx.expect_tier,\n  expect_deal: fx.expect_deal,\n  expect_outreach: fx.expect_outreach,\n  expect_contact: fx.expect_contact,\n  expect_tenant: fx.tenant_id,\n  expect_trace: fx.trace_id,\n  actual_outcome: r.outcome,\n  actual_tier: (r.qualification || {}).tier || null,\n  actual_score: (r.qualification || {}).score,\n  actual_tenant: r.tenant_id,\n  actual_trace: r.trace_id,\n  rubric_version: ((r.qualification || {}).scoring || {}).rubric_version,\n  has_contact: !!crm.contact_id,\n  has_deal: !!crm.deal_id,\n  has_task: !!crm.task_id,\n  outreach_attempted: out.attempted === true,\n  outreach_sent: out.sent === true,\n  outreach_status: out.status || null,\n  draft: String(out.draft || \"\").slice(0, 200),\n  steps: (r.steps || []).length,\n  latency_ms: r.latency_ms\n} }];\n"
+      }
+    },
+    {
+      "id": "fb1715e6-1221-4337-8fe4-91ba1ca4d69e",
+      "name": "Assert Swarm Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        1280
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map(function (i) { return i.json; });\nconst byCase = {};\nrows.forEach(function (r) { byCase[r.case_id] = r; });\n\nconst cases = rows.map(function (r) {\n  const checks = [];\n  const isDuplicate = r.expect_outcome === \"duplicate\";\n  if (r.expect_outcome === null) {\n    checks.push({ name: \"outcome_known\", pass: [\"processed\", \"disqualified\"].indexOf(r.actual_outcome) !== -1, expected: \"processed|disqualified\", actual: r.actual_outcome });\n    checks.push({ name: \"score_in_range\", pass: typeof r.actual_score === \"number\" && r.actual_score >= 0 && r.actual_score <= 100, expected: \"0..100\", actual: r.actual_score });\n    checks.push({ name: \"never_sent_in_dry_run\", pass: r.outreach_sent === false, expected: false, actual: r.outreach_sent });\n    checks.push({ name: \"decision_record_complete\", pass: r.steps === 5, expected: 5, actual: r.steps });\n  } else {\n    checks.push({ name: \"outcome\", pass: r.actual_outcome === r.expect_outcome, expected: r.expect_outcome, actual: r.actual_outcome });\n    if (r.expect_tier) {\n      checks.push({ name: \"tier\", pass: r.actual_tier === r.expect_tier, expected: r.expect_tier, actual: r.actual_tier });\n    }\n    checks.push({ name: \"contact_written\", pass: r.has_contact === r.expect_contact, expected: r.expect_contact, actual: r.has_contact });\n    checks.push({ name: \"deal_written\", pass: r.has_deal === r.expect_deal, expected: r.expect_deal, actual: r.has_deal });\n    checks.push({ name: \"outreach_attempted\", pass: r.outreach_attempted === r.expect_outreach, expected: r.expect_outreach, actual: r.outreach_attempted });\n    checks.push({ name: \"never_sent_in_dry_run\", pass: r.outreach_sent === false, expected: false, actual: r.outreach_sent });\n    if (!isDuplicate) {\n      checks.push({ name: \"decision_record_complete\", pass: r.steps === 5, expected: 5, actual: r.steps });\n      checks.push({ name: \"rubric_recorded\", pass: !!r.rubric_version, expected: \"a rubric version\", actual: r.rubric_version });\n    }\n  }\n  // Correlation: every response, duplicate included, must name its workspace.\n  checks.push({ name: \"tenant_echoed\", pass: r.actual_tenant === r.expect_tenant, expected: r.expect_tenant, actual: r.actual_tenant });\n  if (!isDuplicate) {\n    checks.push({ name: \"trace_echoed\", pass: r.actual_trace === r.expect_trace, expected: r.expect_trace, actual: r.actual_trace });\n  }\n  const failed = checks.filter(function (c) { return !c.pass; });\n  return { case_id: r.case_id, note: r.note, passed: failed.length === 0, checks: checks, latency_ms: r.latency_ms };\n});\n\n// Workspace isolation is a property of the pair, not of either case alone.\nconst s01 = byCase[\"S01\"];\nconst s07 = byCase[\"S07\"];\nif (s01 && s07) {\n  cases.push({\n    case_id: \"S07x\",\n    note: \"workspace isolation: an identical lead in a second workspace is not suppressed\",\n    passed: s01.actual_outcome === \"processed\" && s07.actual_outcome === \"processed\" && s01.actual_tenant !== s07.actual_tenant,\n    checks: [\n      { name: \"first_workspace_processed\", pass: s01.actual_outcome === \"processed\", expected: \"processed\", actual: s01.actual_outcome },\n      { name: \"second_workspace_processed\", pass: s07.actual_outcome === \"processed\", expected: \"processed\", actual: s07.actual_outcome },\n      { name: \"workspaces_distinct\", pass: s01.actual_tenant !== s07.actual_tenant, expected: \"acme != globex\", actual: s01.actual_tenant + \" vs \" + s07.actual_tenant }\n    ],\n    latency_ms: s07.latency_ms\n  });\n}\n\nconst passed = cases.filter(function (c) { return c.passed; }).length;\nreturn [{ json: {\n  suite: \"14-revenue-swarm\",\n  run_at: new Date().toISOString(),\n  execution_id: $execution.id,\n  total: cases.length,\n  passed: passed,\n  failed: cases.length - passed,\n  all_passed: passed === cases.length && cases.length === 8,\n  cases: cases\n} }];\n"
+      }
+    },
+    {
+      "id": "5318743a-a082-4e44-91e3-b4909dd2b8f0",
+      "name": "Sticky Swarm Suite",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -700,
+        1220
+      ],
+      "parameters": {
+        "color": 6,
+        "width": 800,
+        "height": 460,
+        "content": "## End-to-end suite\n\nSix leads through the whole swarm: qualification, CRM writes and outreach, all\nin dry run. The tiers are fixed by supplying signals, so each case asserts\nexactly which CRM objects should exist.\n\nS02 re-sends S01. It must come back as a duplicate with nothing created, which\nis the property that makes a retried webhook safe.\n\nS06 supplies no signals and runs the real model end to end."
+      }
+    },
+    {
+      "id": "de45baf3-c5ce-4308-bb53-fd1d30ffb96c",
+      "name": "Lead Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -900,
+        180
+      ],
+      "parameters": {
+        "path": "revenue-swarm",
+        "httpMethod": "POST",
+        "authentication": "none",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "1fc72d8e-e792-4ce3-952f-ed39d1946008",
+      "name": "Record Decision Receipt",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        460
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATA_TABLE_ID",
+          "cachedResultName": "swarm_decision_receipts"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "trace_id": "={{ $json.trace_id }}",
+            "tenant_id": "={{ $json.tenant_id }}",
+            "lead_key": "={{ $json.lead_key }}",
+            "email": "={{ $json.email }}",
+            "company_domain": "={{ $json.company_domain }}",
+            "outcome": "={{ $json.outcome }}",
+            "score": "={{ $json.qualification.score }}",
+            "tier": "={{ $json.qualification.tier }}",
+            "confidence": "={{ $json.qualification.confidence }}",
+            "recommended_action": "={{ $json.qualification.recommended_action }}",
+            "requires_human_review": "={{ $json.qualification.requires_human_review === true }}",
+            "contact_id": "={{ $json.crm.contact_id }}",
+            "deal_id": "={{ $json.crm.deal_id }}",
+            "task_id": "={{ $json.crm.task_id }}",
+            "outreach_status": "={{ $json.outreach.status }}",
+            "outreach_sent": "={{ $json.outreach.sent === true }}",
+            "governance_decision": "={{ $json.outreach.governance.decision || \"not_requested\" }}",
+            "risk_level": "={{ $json.outreach.governance.risk_level || \"not_assessed\" }}",
+            "verified": "={{ $json.qualification.verification.verified === true }}",
+            "unsupported_evidence": "={{ ($json.qualification.grounding.unsupported_evidence || []).length }}",
+            "model_providers": "={{ $json.model_providers }}",
+            "rubric_version": "={{ $json.qualification.scoring.rubric_version || \"unknown\" }}",
+            "steps_json": "={{ JSON.stringify($json.steps).slice(0, 4000) }}",
+            "scoring_json": "={{ JSON.stringify($json.qualification.scoring).slice(0, 6000) }}",
+            "dry_run": "={{ $json.dry_run === true }}",
+            "entry": "={{ $json.entry }}",
+            "latency_ms": "={{ $json.latency_ms }}",
+            "created_at": "={{ $now.toISO() }}",
+            "execution_id": "={{ $execution.id }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "5ec915d2-1acd-458c-a414-471d260ab262",
+      "name": "Return Swarm Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        460
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// The receipt write emits a database row. Re-emit the response so the webhook\n// and any sub-workflow caller receive the decision, not the row id.\nreturn $(\"Build Swarm Response\").all();\n"
+      }
+    }
+  ],
+  "connections": {
+    "Normalise Intake": {
+      "main": [
+        [
+          {
+            "node": "Check Lead Ledger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Swarm Request": {
+      "main": [
+        [
+          {
+            "node": "Normalise Intake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Lead Ledger": {
+      "main": [
+        [
+          {
+            "node": "Seen Before?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Seen Before?": {
+      "main": [
+        [
+          {
+            "node": "Return Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Qualify Lead (12)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qualify Lead (12)": {
+      "main": [
+        [
+          {
+            "node": "Capture Qualification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Qualification": {
+      "main": [
+        [
+          {
+            "node": "Actionable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Actionable?": {
+      "main": [
+        [
+          {
+            "node": "Sync Contact (11)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Disqualified",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Contact (11)": {
+      "main": [
+        [
+          {
+            "node": "Capture Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Contact": {
+      "main": [
+        [
+          {
+            "node": "Deal Needed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deal Needed?": {
+      "main": [
+        [
+          {
+            "node": "Create Deal (11)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip Deal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Deal (11)": {
+      "main": [
+        [
+          {
+            "node": "Capture Deal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Deal": {
+      "main": [
+        [
+          {
+            "node": "Write Score to CRM (11)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Deal": {
+      "main": [
+        [
+          {
+            "node": "Write Score to CRM (11)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Score to CRM (11)": {
+      "main": [
+        [
+          {
+            "node": "Capture Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Task": {
+      "main": [
+        [
+          {
+            "node": "Outreach Wanted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outreach Wanted?": {
+      "main": [
+        [
+          {
+            "node": "Compose Outreach (13)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip Outreach",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Outreach (13)": {
+      "main": [
+        [
+          {
+            "node": "Capture Outreach",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Outreach": {
+      "main": [
+        [
+          {
+            "node": "Record Lead Ledger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Outreach": {
+      "main": [
+        [
+          {
+            "node": "Record Lead Ledger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Lead Ledger": {
+      "main": [
+        [
+          {
+            "node": "Build Swarm Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Ingest Key": {
+      "main": [
+        [
+          {
+            "node": "Ingest Authorised?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ingest Authorised?": {
+      "main": [
+        [
+          {
+            "node": "Normalise Intake",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject Unauthorised",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Suite Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build Swarm Fixtures",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Swarm Fixtures": {
+      "main": [
+        [
+          {
+            "node": "Swarm Fixture Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Swarm Fixture Loop": {
+      "main": [
+        [
+          {
+            "node": "Assert Swarm Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run Swarm Fixture",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Swarm Fixture": {
+      "main": [
+        [
+          {
+            "node": "Slim Swarm Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slim Swarm Result": {
+      "main": [
+        [
+          {
+            "node": "Swarm Fixture Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Webhook": {
+      "main": [
+        [
+          {
+            "node": "Check Ingest Key",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Disqualified": {
+      "main": [
+        [
+          {
+            "node": "Record Lead Ledger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Swarm Response": {
+      "main": [
+        [
+          {
+            "node": "Record Decision Receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Decision Receipt": {
+      "main": [
+        [
+          {
+            "node": "Return Swarm Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "description": "Inbound lead to decision record. Deduplicates, qualifies through 12, writes contact, deal and the scoring rationale through 11, composes governed outreach through 13, and returns one auditable record of every step taken and every step skipped.",
+  "nodeGroups": []
+}

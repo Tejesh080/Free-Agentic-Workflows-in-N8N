@@ -1,0 +1,1051 @@
+{
+  "name": "[Platform] 13 Outreach Composer",
+  "nodes": [
+    {
+      "id": "ffb2a402-aaa5-42da-aab5-61679c0be1c7",
+      "name": "Outreach Request",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        288
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "lead",
+              "type": "string"
+            },
+            {
+              "name": "qualification",
+              "type": "string"
+            },
+            {
+              "name": "channel",
+              "type": "string"
+            },
+            {
+              "name": "dry_run",
+              "type": "string"
+            },
+            {
+              "name": "draft_override",
+              "type": "string"
+            },
+            {
+              "name": "governance_action_type",
+              "type": "string"
+            },
+            {
+              "name": "simulate_decision",
+              "type": "string"
+            },
+            {
+              "name": "chat_id",
+              "type": "string"
+            },
+            {
+              "name": "tenant_id",
+              "type": "string"
+            },
+            {
+              "name": "trace_id",
+              "type": "string"
+            },
+            {
+              "name": "source_workflow",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fcc14512-17e5-49bf-8d29-571799fb934a",
+      "name": "Normalise Outreach Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        288
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $input.first().json;\nconst CHANNELS = { email: 90, sms: 30, telegram: 60 };\n\nfunction parseJson(raw, fallback) {\n  if (raw && typeof raw === \"object\") { return raw; }\n  if (typeof raw === \"string\" && raw.trim()) {\n    try { return JSON.parse(raw); } catch (e) { return fallback; }\n  }\n  return fallback;\n}\nfunction fnv(s) {\n  let h = 2166136261;\n  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }\n  return (h >>> 0).toString(16).padStart(8, \"0\");\n}\n\nconst lead = parseJson(req.lead, {});\nconst qual = parseJson(req.qualification, {});\nconst channel = String(req.channel || \"email\").trim().toLowerCase();\nconst maxWords = CHANNELS[channel] === undefined ? 90 : CHANNELS[channel];\nconst dryRun = String(req.dry_run === undefined || req.dry_run === null || req.dry_run === \"\" ? \"true\" : req.dry_run).toLowerCase() !== \"false\";\n\nconst rawTenant = String(req.tenant_id || qual.tenant_id || \"default\").trim().toLowerCase();\nconst tenantId = /^[a-z0-9][a-z0-9_-]{0,62}$/.test(rawTenant) ? rawTenant : \"\";\nconst traceId = String(req.trace_id || qual.trace_id || \"\").trim().slice(0, 64);\n\nconst leadKey = String(qual.lead_key || lead.email || \"\").trim().toLowerCase();\nconst tier = String(qual.tier || \"UNKNOWN\");\nconst score = Number(qual.score === undefined ? 0 : qual.score);\n\nconst leadLines = [];\n[\"first_name\", \"last_name\", \"job_title\", \"company_name\", \"message\", \"use_case\"].forEach(function (f) {\n  if (lead[f] !== undefined && lead[f] !== null && String(lead[f]).trim()) { leadLines.push(f + \": \" + String(lead[f]).trim()); }\n});\nif (lead.email) { leadLines.push(\"email: \" + String(lead.email).trim()); }\nconst leadBlock = leadLines.join(\"\\n\");\n\nconst evidence = Array.isArray((qual.signals || {}).evidence) ? qual.signals.evidence : [];\nconst evidenceLines = evidence.map(function (e) { return \"- \" + String((e && e.signal) || \"signal\") + \": \\\"\" + String((e && e.quote) || \"\") + \"\\\"\"; });\nconst evidenceBlock = evidenceLines.length ? evidenceLines.join(\"\\n\") : \"(no quoted evidence was collected during qualification)\";\n\nconst groundTruth = (leadBlock + \"\\n\" + evidenceLines.join(\"\\n\")).toLowerCase();\n\nconst blockers = [];\nif (!tenantId) { blockers.push(\"tenant_id must match ^[a-z0-9][a-z0-9_-]{0,62}$; got \" + JSON.stringify(rawTenant)); }\nif (!leadKey) { blockers.push(\"the request carries no lead key or email, so there is nobody to write to\"); }\nif (qual.outreach_allowed !== true) { blockers.push(\"qualification did not allow outreach: \" + (qual.outreach_block_reason || \"no reason given\")); }\nif (CHANNELS[channel] === undefined) { blockers.push(\"channel \\\"\" + channel + \"\\\" is not one of email, sms, telegram\"); }\nif (channel === \"telegram\" && !String(req.chat_id || \"\").trim()) { blockers.push(\"the telegram channel needs a chat_id\"); }\n\nreturn [{ json: {\n  lead: lead,\n  lead_key: leadKey,\n  email: String(lead.email || \"\").trim().toLowerCase(),\n  tenant_id: tenantId,\n  trace_id: traceId,\n  tier: tier,\n  score: score,\n  channel: channel,\n  chat_id: String(req.chat_id || \"\").trim(),\n  max_words: maxWords,\n  dry_run: dryRun,\n  lead_block: leadBlock,\n  evidence_block: evidenceBlock,\n  ground_truth: groundTruth,\n  sender_block: \"Tejesh, n8n automation engineer. Writing because the lead came in through the site form.\",\n  draft_override: String(req.draft_override || \"\"),\n  governance_action_type: String(req.governance_action_type || \"send\").trim().toLowerCase(),\n  simulate_decision: String(req.simulate_decision || \"\"),\n  source_workflow: String(req.source_workflow || \"unknown\"),\n  request_digest: fnv(tenantId + \"|\" + leadKey + \"|\" + channel + \"|\" + tier),\n  allowed: blockers.length === 0,\n  blockers: blockers,\n  started_at_ms: Date.now()\n} }];\n"
+      }
+    },
+    {
+      "id": "42c31adb-d54a-47db-8a06-97dd83faf149",
+      "name": "Outreach Allowed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        288
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "oa1",
+              "leftValue": "={{ $json.allowed }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "93568d00-0ea2-4cd8-bc95-e6d9c1f375cb",
+      "name": "Draft Supplied?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        672,
+        224
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ds1",
+              "leftValue": "={{ $json.draft_override }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "6345a977-d906-4adc-95ba-b6ba11231a20",
+      "name": "Use Supplied Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        128
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise Outreach Request\").first().json;\nreturn [{ json: {\n  draft: req.draft_override,\n  draft_source: \"supplied\",\n  model_provider: null,\n  model_latency_ms: 0,\n  prompt_sha: null\n} }];\n"
+      }
+    },
+    {
+      "id": "f910dda2-6797-4df3-b7b9-f2b6791e70de",
+      "name": "Check Copy Rules",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        224
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise Outreach Request\").first().json;\nconst incoming = $input.first().json;\nconst draft = String(incoming.draft || \"\").trim();\n\nconst BANNED = [\"hope this email finds you well\", \"hope this finds you well\", \"i hope you are well\", \"quick question\", \"just circling back\", \"circling back\", \"touching base\", \"reaching out to see\", \"game-changing\", \"game changing\", \"revolutionary\", \"world-class\", \"best-in-class\", \"cutting-edge\", \"10x\", \"synergy\", \"low-hanging fruit\", \"no-brainer\", \"guarantee\", \"guaranteed\", \"skyrocket\", \"supercharge\"];\n\nconst issues = [];\nconst warnings = [];\n\nconst words = draft.split(/\\s+/).filter(function (w) { return w.length > 0; });\nif (!draft) { issues.push({ rule: \"empty_draft\", detail: \"the draft is empty\" }); }\nif (words.length > req.max_words) { issues.push({ rule: \"too_long\", detail: words.length + \" words exceeds the \" + req.max_words + \"-word limit for \" + req.channel }); }\n\nif (/\\{\\{|\\}\\}|\\[\\[|\\]\\]|<[A-Z_]{3,}>|\\bFIRST_?NAME\\b|\\bCOMPANY_?NAME\\b/i.test(draft)) {\n  issues.push({ rule: \"placeholder_leak\", detail: \"an unfilled template placeholder survived into the draft\" });\n}\n\nconst lower = draft.toLowerCase();\nBANNED.forEach(function (phrase) {\n  if (lower.indexOf(phrase) !== -1) { issues.push({ rule: \"banned_phrase\", detail: \"contains \\\"\" + phrase + \"\\\"\" }); }\n});\n\nconst withoutDurations = lower.replace(/\\b(5|10|15|20|25|30|45|60|90)\\s*(-|\\s)?(min|mins|minute|minutes)\\b/g, \" \");\nconst figures = withoutDurations.match(/\\b\\d[\\d,.]*\\s?[%kmb]?\\b/g) || [];\nconst ungrounded = [];\nfigures.forEach(function (f) {\n  const needle = f.trim();\n  if (needle.length < 1) { return; }\n  if (req.ground_truth.indexOf(needle) === -1) { ungrounded.push(needle); }\n});\nif (ungrounded.length) {\n  issues.push({ rule: \"ungrounded_figure\", detail: \"figure(s) not present in the lead or the evidence: \" + ungrounded.join(\", \") });\n}\n\nif (/https?:\\/\\/|www\\./i.test(draft)) { issues.push({ rule: \"link_present\", detail: \"the draft contains a link; links are added by the sending channel, not the model\" }); }\n\nconst exclamations = (draft.match(/!/g) || []).length;\nif (exclamations > 1) { warnings.push({ rule: \"exclamations\", detail: exclamations + \" exclamation marks\" }); }\nconst shouty = (draft.match(/\\b[A-Z]{4,}\\b/g) || []).filter(function (w) { return w !== \"ASAP\"; });\nif (shouty.length) { warnings.push({ rule: \"shouting\", detail: \"all-caps word(s): \" + shouty.join(\", \") }); }\nif (draft.indexOf(\"?\") === -1) { warnings.push({ rule: \"no_ask\", detail: \"the draft does not ask anything\" }); }\n\nconst copyScore = Math.max(0, Math.min(1, 1 - (issues.length * 0.25) - (warnings.length * 0.1)));\n\nfunction fnv(s) {\n  let h = 2166136261;\n  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }\n  return (h >>> 0).toString(16).padStart(8, \"0\");\n}\n\nreturn [{ json: {\n  draft: draft,\n  draft_source: incoming.draft_source,\n  model_provider: incoming.model_provider,\n  model_latency_ms: incoming.model_latency_ms,\n  prompt_sha: incoming.prompt_sha,\n  word_count: words.length,\n  copy_ok: issues.length === 0,\n  copy_score: Math.round(copyScore * 100) / 100,\n  copy_issues: issues,\n  copy_warnings: warnings,\n  message_digest: fnv(draft)\n} }];\n"
+      }
+    },
+    {
+      "id": "6006176a-d5f2-4153-931e-6f50091e9ac9",
+      "name": "Get Outreach Prompt (08)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        896,
+        368
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 08 GitOps Prompt Management"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "prompt_id": "revenue/outreach-writer",
+            "variables": "={{ JSON.stringify({ lead_block: $json.lead_block, evidence_block: $json.evidence_block, tier: $json.tier, channel: $json.channel, sender_block: $json.sender_block, max_words: String($json.max_words) }) }}",
+            "ref": "",
+            "owner": "",
+            "repo": "",
+            "strict": "true",
+            "source_workflow": "13-outreach-composer"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "03df5171-580e-4ca9-a4cc-f137f35455a5",
+      "name": "Draft Message (02 Router)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1120,
+        368
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 02 Intelligent Model Router"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "task_type": "generation",
+            "objective": "balanced",
+            "privacy": "sensitive",
+            "input": "={{ ($json.json ? $json.json.prompt : $json.prompt) || (\"Write one short outreach message to this lead.\\n\\nLEAD\\n\" + $(\"Normalise Outreach Request\").first().json.lead_block + \"\\n\\nEVIDENCE\\n\" + $(\"Normalise Outreach Request\").first().json.evidence_block + \"\\n\\nRules: every factual statement about the lead must trace to a quote in EVIDENCE. Make no claims about your own product, its results, pricing or customers. At most \" + $(\"Normalise Outreach Request\").first().json.max_words + \" words. One ask, phrased as a question. No subject line, no signature, no links. Plain text only, message body alone.\") }}",
+            "system_prompt": "You write short, plain outreach. You never invent facts about the recipient and you never make claims about the sender product.",
+            "force_provider": "",
+            "source_workflow": "13-outreach-composer",
+            "run_label": "={{ $(\"Normalise Outreach Request\").first().json.lead_key }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "22ddc379-cccd-4454-a5a8-03ee269bcc08",
+      "name": "Capture Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        368
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const raw = $input.first().json;\nconst res = (raw && raw.json) ? raw.json : raw;\nlet promptSha = null;\ntry { const p = $(\"Get Outreach Prompt (08)\").first().json; promptSha = (p.json ? p.json.sha : p.sha) || null; } catch (e) { }\nconst text = String(res.output || \"\").trim().replace(/^[\"\\u201c]|[\"\\u201d]$/g, \"\").trim();\nreturn [{ json: {\n  draft: text,\n  draft_source: \"model\",\n  model_provider: res.selected_provider || null,\n  model_latency_ms: Number(res.latency_ms || 0),\n  prompt_sha: promptSha\n} }];\n"
+      }
+    },
+    {
+      "id": "cb1dfa69-ac33-4791-a81b-3fce9cb9b63f",
+      "name": "Capture Blocked Send",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2912,
+        416
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise Outreach Request\").first().json;\n\nlet decided = null;\ntry { decided = $(\"Decide Send Request\").first().json; } catch (e) { }\nlet gov = null;\ntry { const g = $(\"Governance Gate (05)\").first().json; gov = (g.json ? g.json : g); } catch (e) { }\n\nlet stage = \"qualification\";\nlet reasons = req.blockers || [];\nif (gov && gov.approved === false) {\n  stage = \"governance\";\n  reasons = [String(gov.decision || \"rejected\") + \" at risk level \" + String(gov.risk_level || \"unknown\") + \": \" + String(gov.decision_reason || \"no reason given\")];\n} else if (decided && decided.ask_governance === false) {\n  stage = \"copy_and_verification\";\n  reasons = decided.blockers;\n}\n\nreturn [{ json: {\n  sent: false,\n  delivery_status: \"blocked\",\n  delivery_detail: \"blocked at the \" + stage + \" stage\",\n  blocked_stage: stage,\n  channel: req.channel,\n  blocked_reasons: reasons,\n  governance_decision: gov ? (gov.decision || \"rejected\") : \"not_requested\",\n  risk_level: gov ? (gov.risk_level || \"unknown\") : \"not_assessed\",\n  decided_by: gov ? (gov.decided_by || \"unknown\") : \"system\",\n  draft: decided ? decided.draft : \"\",\n  message_digest: decided ? decided.message_digest : \"\"\n} }];\n"
+      }
+    },
+    {
+      "id": "e3fcfd9e-e234-4780-ab49-0ec7ddd37970",
+      "name": "Verify Draft (09)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1792,
+        224
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 09 AI Output Verification Layer"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ai_output": "={{ $json.draft }}",
+            "sources": "={{ JSON.stringify([{ id: \"LEAD\", text: $(\"Normalise Outreach Request\").first().json.lead_block }, { id: \"EVIDENCE\", text: $(\"Normalise Outreach Request\").first().json.evidence_block }]) }}",
+            "json_schema": "",
+            "required_fields": "",
+            "business_rules": "[]",
+            "mode": "={{ $(\"Normalise Outreach Request\").first().json.dry_run ? \"deterministic_only\" : \"full\" }}",
+            "confidence_threshold": "0.7",
+            "source_workflow": "13-outreach-composer"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "ba56dc5d-082a-420a-a9a4-b6e95c47aed7",
+      "name": "Decide Send Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2016,
+        224
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise Outreach Request\").first().json;\nconst copy = $(\"Check Copy Rules\").first().json;\nconst raw = $input.first().json;\nconst v = (raw && raw.json) ? raw.json : raw;\n\nconst blockers = [];\ncopy.copy_issues.forEach(function (i) { blockers.push(i.rule + \": \" + i.detail); });\nif (v.verified === false) { blockers.push(\"verification: the draft was not verified against the evidence (\" + ((v.issues || []).length) + \" issue(s))\"); }\n\nreturn [{ json: {\n  ask_governance: blockers.length === 0,\n  blockers: blockers,\n  draft: copy.draft,\n  word_count: copy.word_count,\n  copy_score: copy.copy_score,\n  copy_issues: copy.copy_issues,\n  copy_warnings: copy.copy_warnings,\n  message_digest: copy.message_digest,\n  draft_source: copy.draft_source,\n  model_provider: copy.model_provider,\n  prompt_sha: copy.prompt_sha,\n  verified: v.verified === true,\n  verification_score: v.score === undefined ? null : v.score,\n  verification_issues: v.issues || [],\n  verification_mode: v.mode || \"unknown\"\n} }];\n"
+      }
+    },
+    {
+      "id": "4151db63-0ac4-488f-80de-f9635dbc0a78",
+      "name": "Ask Governance?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2240,
+        224
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ag1",
+              "leftValue": "={{ $json.ask_governance }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "9fa92f27-fd7d-4670-8a58-bdbb45d668e5",
+      "name": "Governance Gate (05)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2464,
+        144
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 05 Agent Governance and HITL"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "requesting_workflow": "13-outreach-composer",
+            "proposed_action": "={{ \"Send a \" + $(\"Normalise Outreach Request\").first().json.channel + \" message to \" + $(\"Normalise Outreach Request\").first().json.email + \" (\" + $(\"Normalise Outreach Request\").first().json.tier + \", score \" + $(\"Normalise Outreach Request\").first().json.score + \")\" }}",
+            "action_type": "={{ $(\"Normalise Outreach Request\").first().json.governance_action_type }}",
+            "affected_system": "prospect-inbox",
+            "parameters": "={{ JSON.stringify({ channel: $(\"Normalise Outreach Request\").first().json.channel, recipient: $(\"Normalise Outreach Request\").first().json.email, tier: $(\"Normalise Outreach Request\").first().json.tier, score: $(\"Normalise Outreach Request\").first().json.score, word_count: $json.word_count, message_digest: $json.message_digest, draft: $json.draft }).slice(0, 4000) }}",
+            "agent_reasoning": "={{ \"Copy checks scored \" + $json.copy_score + \" with \" + $json.copy_issues.length + \" blocking issue(s) and \" + $json.copy_warnings.length + \" warning(s). Verification returned verified=\" + $json.verified + \".\" }}",
+            "agent_confidence": "={{ String($json.copy_score) }}",
+            "idempotency_key": "={{ \"outreach-\" + $(\"Normalise Outreach Request\").first().json.tenant_id + \"-\" + $(\"Normalise Outreach Request\").first().json.lead_key + \"-\" + $json.message_digest }}",
+            "override_token": "",
+            "simulate_decision": "={{ $(\"Normalise Outreach Request\").first().json.simulate_decision }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "508ce08d-227b-44fc-a065-e8f21abb83d5",
+      "name": "Approved to Send?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2688,
+        144
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "as1",
+              "leftValue": "={{ ($json.json ? $json.json.approved : $json.approved) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "e5a672e2-c8a4-469d-8b87-05f8cfea5429",
+      "name": "Really Send?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2912,
+        96
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "rs1",
+              "leftValue": "={{ $(\"Normalise Outreach Request\").first().json.dry_run }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "rs2",
+              "leftValue": "={{ $(\"Normalise Outreach Request\").first().json.channel }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "telegram"
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "1721e8df-bded-48e0-8b64-f08a203e2d4a",
+      "name": "Send via Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3136,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $(\"Normalise Outreach Request\").first().json.chat_id }}",
+        "text": "={{ $(\"Decide Send Request\").first().json.draft }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "8ca9b471-7dca-4020-9123-8974c1251e21",
+      "name": "Capture Send",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise Outreach Request\").first().json;\nconst decided = $(\"Decide Send Request\").first().json;\nconst raw = $input.first().json || {};\nconst messageId = (raw.result && raw.result.message_id) || raw.message_id || \"\";\nconst failed = !!raw.error || !messageId;\nlet gov = {};\ntry { const g = $(\"Governance Gate (05)\").first().json; gov = (g.json ? g.json : g); } catch (e) { }\nreturn [{ json: {\n  sent: !failed,\n  delivery_status: failed ? \"send_failed\" : \"sent\",\n  delivery_detail: failed ? String((raw.error && (raw.error.message || raw.error)) || \"the channel returned no message id\") : (\"telegram message \" + messageId),\n  channel: req.channel,\n  blocked_reasons: [],\n  governance_decision: gov.decision || \"approved\",\n  risk_level: gov.risk_level || \"unknown\",\n  decided_by: gov.decided_by || \"unknown\",\n  draft: decided.draft,\n  message_digest: decided.message_digest\n} }];\n"
+      }
+    },
+    {
+      "id": "23a5f08f-1dc0-4271-bf95-1b26287d03d6",
+      "name": "Simulate Channel Send",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise Outreach Request\").first().json;\nconst decided = $(\"Decide Send Request\").first().json;\nlet gov = {};\ntry { const g = $(\"Governance Gate (05)\").first().json; gov = (g.json ? g.json : g); } catch (e) { }\n\nconst reason = req.dry_run\n  ? \"dry_run=true: the message was drafted, checked, verified and approved, but not sent\"\n  : \"the \" + req.channel + \" channel has no sending credential configured in this instance\";\n\nreturn [{ json: {\n  sent: false,\n  delivery_status: req.dry_run ? \"simulated\" : \"channel_not_configured\",\n  delivery_detail: reason,\n  channel: req.channel,\n  blocked_reasons: [],\n  governance_decision: gov.decision || \"approved\",\n  risk_level: gov.risk_level || \"unknown\",\n  decided_by: gov.decided_by || \"unknown\",\n  draft: decided.draft,\n  message_digest: decided.message_digest\n} }];\n"
+      }
+    },
+    {
+      "id": "e4e8b6df-18f4-44ac-8102-dbb5fa6f753a",
+      "name": "Log Outreach",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        3584,
+        192
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATA_TABLE_ID",
+          "cachedResultName": "swarm_outreach_log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead_key": "={{ $(\"Normalise Outreach Request\").first().json.lead_key }}",
+            "channel": "={{ $json.channel }}",
+            "tier": "={{ $(\"Normalise Outreach Request\").first().json.tier }}",
+            "governance_decision": "={{ $json.governance_decision }}",
+            "risk_level": "={{ $json.risk_level }}",
+            "verified": "={{ $(\"Decide Send Request\").isExecuted ? $(\"Decide Send Request\").first().json.verified : false }}",
+            "copy_score": "={{ $(\"Decide Send Request\").isExecuted ? $(\"Decide Send Request\").first().json.copy_score : 0 }}",
+            "message_digest": "={{ $json.message_digest }}",
+            "delivery_status": "={{ $json.delivery_status }}",
+            "blocked_reasons": "={{ JSON.stringify($json.blocked_reasons).slice(0, 2000) }}",
+            "sent_at": "={{ $now.toISO() }}",
+            "execution_id": "={{ $execution.id }}",
+            "tenant_id": "={{ $(\"Normalise Outreach Request\").first().json.tenant_id }}",
+            "trace_id": "={{ $(\"Normalise Outreach Request\").first().json.trace_id }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "8c9aae23-7ded-4419-ac50-c15302a47255",
+      "name": "Return Outreach Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3808,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise Outreach Request\").first().json;\n\nconst OUTCOMES = [\"Capture Send\", \"Simulate Channel Send\", \"Capture Blocked Send\"];\nlet outcome = null;\nfor (const name of OUTCOMES) {\n  try {\n    const items = $(name).all();\n    if (items && items.length) { outcome = items[0].json; break; }\n  } catch (e) { }\n}\nif (!outcome) {\n  outcome = { sent: false, delivery_status: \"no_branch_ran\", delivery_detail: \"no outcome node produced a result; this is a wiring bug\", channel: req.channel, blocked_reasons: [], governance_decision: \"unknown\", risk_level: \"unknown\", decided_by: \"unknown\", draft: \"\", message_digest: \"\" };\n}\n\nlet decided = {};\ntry { decided = $(\"Decide Send Request\").first().json; } catch (e) { }\n\nreturn [{ json: {\n  lead_key: req.lead_key,\n  email: req.email,\n  tenant_id: req.tenant_id,\n  trace_id: req.trace_id,\n  tier: req.tier,\n  channel: outcome.channel,\n  sent: outcome.sent === true,\n  delivery_status: outcome.delivery_status,\n  delivery_detail: outcome.delivery_detail,\n  blocked_stage: outcome.blocked_stage || null,\n  blocked_reasons: outcome.blocked_reasons || [],\n  draft: outcome.draft || \"\",\n  word_count: decided.word_count === undefined ? 0 : decided.word_count,\n  message_digest: outcome.message_digest || \"\",\n  copy: {\n    score: decided.copy_score === undefined ? null : decided.copy_score,\n    issues: decided.copy_issues || [],\n    warnings: decided.copy_warnings || []\n  },\n  verification: {\n    verified: decided.verified === true,\n    score: decided.verification_score === undefined ? null : decided.verification_score,\n    mode: decided.verification_mode || \"not_run\",\n    issues: decided.verification_issues || []\n  },\n  governance: {\n    decision: outcome.governance_decision,\n    risk_level: outcome.risk_level,\n    decided_by: outcome.decided_by,\n    action_type: req.governance_action_type\n  },\n  provenance: {\n    draft_source: decided.draft_source || \"none\",\n    model_provider: decided.model_provider || null,\n    prompt_sha: decided.prompt_sha || null,\n    source_workflow: req.source_workflow,\n    execution_id: $execution.id\n  },\n  dry_run: req.dry_run,\n  latency_ms: Date.now() - Number(req.started_at_ms)\n} }];\n"
+      }
+    },
+    {
+      "id": "5a9577dd-7d6f-4549-b7c3-4d4ecfd05761",
+      "name": "Sticky Note 1f29f63f",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1840,
+        416
+      ],
+      "parameters": {
+        "content": "## A message to a real person is a HIGH-risk action\n\nThe governance service classifies `action_type: send` as HIGH, which means a\nhuman approves every outreach before it leaves. That is the default on purpose.\nAn operator who wants unattended sending lowers it to `write` by passing a\ndifferent `governance_action_type`, and that choice is recorded on every row of\nthe outreach log.\n\nNothing reaches the gate until the deterministic copy rules and the verifier\nhave both passed. A draft with a fabricated figure is refused locally and never\nbecomes a question for a human.",
+        "color": 3
+      }
+    },
+    {
+      "id": "d15101f0-3883-475a-9f70-6a1bb43c9113",
+      "name": "Test Suite Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -460,
+        1300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "6ce8dd36-8760-49a6-aedf-459dccb59b43",
+      "name": "Build Outreach Fixtures",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        1300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Nine fixtures supply the draft, so the copy rules and the gate are the only\n// things under test. O10 drafts with the real model.\nconst LEAD = { email: \"ada@analytical.io\", first_name: \"Ada\", last_name: \"Lovelace\", job_title: \"VP of Engineering\", company_name: \"Analytical Engines\", message: \"We have 30k set aside and need this live this month.\" };\n\nfunction qual(o) {\n  const base = {\n    lead_key: \"ada@analytical.io\",\n    tenant_id: \"acme\",\n    tier: \"HOT\",\n    score: 92,\n    outreach_allowed: true,\n    outreach_block_reason: \"\",\n    signals: { evidence: [{ signal: \"budget_signal\", quote: \"We have 30k set aside\" }] }\n  };\n  return JSON.stringify(Object.assign(base, o));\n}\n\nconst CLEAN = \"Hi Ada, you mentioned 30k set aside and wanting this live this month. Worth 15 minutes this week to see whether the timeline is realistic?\";\n\nconst fixtures = [\n  { case_id: \"O01\", note: \"a clean draft is approved and simulated, not sent\", channel: \"email\", qualification: qual({}), draft: CLEAN, simulate: \"approve\", expect_status: \"simulated\", expect_stage: null, expect_decision: \"approved\", expect_risk: \"HIGH\", expect_rule: \"\" },\n  { case_id: \"O02\", note: \"a banned phrase never reaches a human\", channel: \"email\", qualification: qual({}), draft: \"Hi Ada, quick question: we guarantee results. Worth 15 minutes?\", simulate: \"approve\", expect_status: \"blocked\", expect_stage: \"copy_and_verification\", expect_decision: \"not_requested\", expect_risk: \"not_assessed\", expect_rule: \"banned_phrase\" },\n  { case_id: \"O03\", note: \"a figure that is not in the evidence blocks the send\", channel: \"email\", qualification: qual({}), draft: \"Hi Ada, teams like yours cut onboarding time by 40% after switching. Worth 15 minutes?\", simulate: \"approve\", expect_status: \"blocked\", expect_stage: \"copy_and_verification\", expect_decision: \"not_requested\", expect_risk: \"not_assessed\", expect_rule: \"ungrounded_figure\" },\n  { case_id: \"O04\", note: \"an unfilled placeholder blocks the send\", channel: \"email\", qualification: qual({}), draft: \"Hi {{first_name}}, saw your note about 30k. Worth 15 minutes?\", simulate: \"approve\", expect_status: \"blocked\", expect_stage: \"copy_and_verification\", expect_decision: \"not_requested\", expect_risk: \"not_assessed\", expect_rule: \"placeholder_leak\" },\n  { case_id: \"O05\", note: \"an email-length draft is too long for sms\", channel: \"sms\", qualification: qual({}), draft: CLEAN + \" I can share how other operations teams sequenced the same rollout, and what they would do differently a second time around, if that is useful to you.\", simulate: \"approve\", expect_status: \"blocked\", expect_stage: \"copy_and_verification\", expect_decision: \"not_requested\", expect_risk: \"not_assessed\", expect_rule: \"too_long\" },\n  { case_id: \"O06\", note: \"a lead qualification refused is never drafted for\", channel: \"email\", qualification: qual({ outreach_allowed: false, outreach_block_reason: \"score 36 is below the ICP outreach floor of 50\" }), draft: CLEAN, simulate: \"approve\", expect_status: \"blocked\", expect_stage: \"qualification\", expect_decision: \"not_requested\", expect_risk: \"not_assessed\", expect_rule: \"\" },\n  { case_id: \"O07\", note: \"a human rejection stops a clean draft\", channel: \"email\", qualification: qual({}), draft: CLEAN, simulate: \"reject\", expect_status: \"blocked\", expect_stage: \"governance\", expect_decision: \"rejected\", expect_risk: \"HIGH\", expect_rule: \"\" },\n  { case_id: \"O08\", note: \"telegram without a chat id is refused before drafting\", channel: \"telegram\", qualification: qual({}), draft: CLEAN, simulate: \"approve\", expect_status: \"blocked\", expect_stage: \"qualification\", expect_decision: \"not_requested\", expect_risk: \"not_assessed\", expect_rule: \"\" },\n  { case_id: \"O09\", note: \"a destructive verb in the copy is escalated to CRITICAL and denied\", channel: \"email\", qualification: qual({}), draft: \"Hi Ada, happy to help you delete the manual steps you mentioned. Worth 15 minutes?\", simulate: \"approve\", expect_status: \"blocked\", expect_stage: \"governance\", expect_decision: \"denied\", expect_risk: \"CRITICAL\", expect_rule: \"\" },\n  { case_id: \"O10\", note: \"live: the real model drafts, structure only is asserted\", channel: \"email\", qualification: qual({}), draft: \"\", simulate: \"approve\", expect_status: null, expect_stage: null, expect_decision: null, expect_risk: null, expect_rule: \"\" }\n];\n\nreturn fixtures.map(function (f) {\n  return { json: {\n    case_id: f.case_id,\n    note: f.note,\n    lead: JSON.stringify(LEAD),\n    qualification: f.qualification,\n    channel: f.channel,\n    dry_run: \"true\",\n    draft_override: f.draft,\n    governance_action_type: \"send\",\n    simulate_decision: f.simulate,\n    chat_id: \"\",\n    tenant_id: \"acme\",\n    trace_id: \"trace-\" + $execution.id + \"-\" + f.case_id,\n    source_workflow: \"13-test-suite\",\n    expect_status: f.expect_status,\n    expect_stage: f.expect_stage,\n    expect_decision: f.expect_decision,\n    expect_risk: f.expect_risk,\n    expect_rule: f.expect_rule\n  } };\n});\n"
+      }
+    },
+    {
+      "id": "14300e25-b012-46f3-9d79-251e01126152",
+      "name": "Outreach Fixture Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -20,
+        1300
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "89fc0654-165f-4d97-988a-e51866602c9d",
+      "name": "Run Outreach Fixture",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        220,
+        1420
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 13 Outreach Composer"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead": "={{ $json.lead }}",
+            "qualification": "={{ $json.qualification }}",
+            "channel": "={{ $json.channel }}",
+            "dry_run": "={{ $json.dry_run }}",
+            "draft_override": "={{ $json.draft_override }}",
+            "governance_action_type": "={{ $json.governance_action_type }}",
+            "simulate_decision": "={{ $json.simulate_decision }}",
+            "chat_id": "={{ $json.chat_id }}",
+            "tenant_id": "={{ $json.tenant_id }}",
+            "trace_id": "={{ $json.trace_id }}",
+            "source_workflow": "={{ $json.source_workflow }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "06941b32-f66a-4e13-a3e2-3a84ff88a6a1",
+      "name": "Slim Outreach Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        1420
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const raw = $input.first().json;\nconst r = (raw && raw.json) ? raw.json : raw;\nconst fx = $(\"Outreach Fixture Loop\").first().json;\nconst ruleNames = ((r.copy || {}).issues || []).map(function (i) { return i.rule; });\nreturn [{ json: {\n  case_id: fx.case_id,\n  note: fx.note,\n  expect_status: fx.expect_status,\n  expect_stage: fx.expect_stage,\n  expect_decision: fx.expect_decision,\n  expect_risk: fx.expect_risk,\n  expect_rule: fx.expect_rule,\n  expect_trace: fx.trace_id,\n  actual_status: r.delivery_status,\n  actual_stage: r.blocked_stage,\n  actual_decision: (r.governance || {}).decision,\n  actual_risk: (r.governance || {}).risk_level,\n  tenant_id: r.tenant_id,\n  trace_id: r.trace_id,\n  copy_rules_hit: ruleNames,\n  sent: r.sent,\n  draft: String(r.draft || \"\").slice(0, 300),\n  word_count: r.word_count,\n  copy_score: (r.copy || {}).score,\n  verified: (r.verification || {}).verified,\n  draft_source: (r.provenance || {}).draft_source,\n  model_provider: (r.provenance || {}).model_provider,\n  latency_ms: r.latency_ms\n} }];\n"
+      }
+    },
+    {
+      "id": "7c6bcdce-5dc3-4781-8a04-f3ff66e9f25d",
+      "name": "Assert Outreach Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        1180
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map(function (i) { return i.json; });\n\nconst cases = rows.map(function (r) {\n  const checks = [];\n  if (r.expect_status === null) {\n    checks.push({ name: \"draft_written\", pass: String(r.draft || \"\").length > 0, expected: \"a non-empty draft\", actual: String(r.draft || \"\").length + \" chars\" });\n    checks.push({ name: \"drafted_by_model\", pass: r.draft_source === \"model\", expected: \"model\", actual: r.draft_source });\n    checks.push({ name: \"provider_recorded\", pass: !!r.model_provider, expected: \"a provider name\", actual: r.model_provider });\n    checks.push({ name: \"never_sent_in_dry_run\", pass: r.sent === false, expected: false, actual: r.sent });\n    checks.push({ name: \"within_word_limit\", pass: typeof r.word_count === \"number\" && r.word_count > 0 && r.word_count <= 90, expected: \"1..90 words\", actual: r.word_count });\n  } else {\n    checks.push({ name: \"delivery_status\", pass: r.actual_status === r.expect_status, expected: r.expect_status, actual: r.actual_status });\n    checks.push({ name: \"blocked_stage\", pass: (r.actual_stage || null) === r.expect_stage, expected: r.expect_stage, actual: r.actual_stage });\n    checks.push({ name: \"governance_decision\", pass: r.actual_decision === r.expect_decision, expected: r.expect_decision, actual: r.actual_decision });\n    checks.push({ name: \"risk_level\", pass: r.actual_risk === r.expect_risk, expected: r.expect_risk, actual: r.actual_risk });\n    checks.push({ name: \"never_sent_in_dry_run\", pass: r.sent === false, expected: false, actual: r.sent });\n    if (r.expect_rule) {\n      checks.push({ name: \"copy_rule_hit\", pass: (r.copy_rules_hit || []).indexOf(r.expect_rule) !== -1, expected: r.expect_rule, actual: r.copy_rules_hit });\n    }\n  }\n  // Correlation must survive every path, including the ones that produce no draft.\n  checks.push({ name: \"tenant_echoed\", pass: r.tenant_id === \"acme\", expected: \"acme\", actual: r.tenant_id });\n  checks.push({ name: \"trace_echoed\", pass: r.trace_id === r.expect_trace, expected: r.expect_trace, actual: r.trace_id });\n  const failed = checks.filter(function (c) { return !c.pass; });\n  return { case_id: r.case_id, note: r.note, passed: failed.length === 0, checks: checks, latency_ms: r.latency_ms };\n});\n\nconst passed = cases.filter(function (c) { return c.passed; }).length;\nreturn [{ json: {\n  suite: \"13-outreach-composer\",\n  run_at: new Date().toISOString(),\n  execution_id: $execution.id,\n  total: cases.length,\n  passed: passed,\n  failed: cases.length - passed,\n  all_passed: passed === cases.length && cases.length === 10,\n  cases: cases\n} }];\n"
+      }
+    },
+    {
+      "id": "b1050648-6812-44d7-83bd-e5f8d4f27ba3",
+      "name": "Sticky Outreach Suite",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        1120
+      ],
+      "parameters": {
+        "color": 6,
+        "width": 780,
+        "height": 480,
+        "content": "## Outreach suite\n\nTen fixtures, one for each place a send can be stopped: the qualification refused\nit, the copy rules caught it, verification could not support it, or a human said\nno. Every case asserts `sent: false`, because the suite runs with `dry_run=true`\nand nothing it does can reach a real inbox.\n\nO09 is deliberate. A draft offering to \"delete the manual steps\" is escalated to\nCRITICAL by the governance service and denied, because the risk scan reads the\ndraft as well as the operation. That is a false positive, and the system prefers\nit to the alternative."
+      }
+    }
+  ],
+  "connections": {
+    "Outreach Request": {
+      "main": [
+        [
+          {
+            "node": "Normalise Outreach Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise Outreach Request": {
+      "main": [
+        [
+          {
+            "node": "Outreach Allowed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outreach Allowed?": {
+      "main": [
+        [
+          {
+            "node": "Draft Supplied?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Capture Blocked Send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Supplied?": {
+      "main": [
+        [
+          {
+            "node": "Use Supplied Draft",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Outreach Prompt (08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Supplied Draft": {
+      "main": [
+        [
+          {
+            "node": "Check Copy Rules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Copy Rules": {
+      "main": [
+        [
+          {
+            "node": "Verify Draft (09)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Outreach Prompt (08)": {
+      "main": [
+        [
+          {
+            "node": "Draft Message (02 Router)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Message (02 Router)": {
+      "main": [
+        [
+          {
+            "node": "Capture Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Draft": {
+      "main": [
+        [
+          {
+            "node": "Check Copy Rules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Blocked Send": {
+      "main": [
+        [
+          {
+            "node": "Log Outreach",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Draft (09)": {
+      "main": [
+        [
+          {
+            "node": "Decide Send Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide Send Request": {
+      "main": [
+        [
+          {
+            "node": "Ask Governance?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask Governance?": {
+      "main": [
+        [
+          {
+            "node": "Governance Gate (05)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Capture Blocked Send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Governance Gate (05)": {
+      "main": [
+        [
+          {
+            "node": "Approved to Send?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved to Send?": {
+      "main": [
+        [
+          {
+            "node": "Really Send?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Capture Blocked Send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Really Send?": {
+      "main": [
+        [
+          {
+            "node": "Send via Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Simulate Channel Send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send via Telegram": {
+      "main": [
+        [
+          {
+            "node": "Capture Send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Send": {
+      "main": [
+        [
+          {
+            "node": "Log Outreach",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simulate Channel Send": {
+      "main": [
+        [
+          {
+            "node": "Log Outreach",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Outreach": {
+      "main": [
+        [
+          {
+            "node": "Return Outreach Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Suite Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build Outreach Fixtures",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Outreach Fixtures": {
+      "main": [
+        [
+          {
+            "node": "Outreach Fixture Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outreach Fixture Loop": {
+      "main": [
+        [
+          {
+            "node": "Assert Outreach Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run Outreach Fixture",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Outreach Fixture": {
+      "main": [
+        [
+          {
+            "node": "Slim Outreach Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slim Outreach Result": {
+      "main": [
+        [
+          {
+            "node": "Outreach Fixture Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "description": "Drafts one outreach message, checks it deterministically against copy rules and the evidence, verifies it, and only then asks Governance. action_type send is HIGH risk, so a human approves every real send by default.",
+  "nodeGroups": []
+}

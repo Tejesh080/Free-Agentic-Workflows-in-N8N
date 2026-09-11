@@ -1,0 +1,970 @@
+{
+  "name": "[Platform] 11 CRM Sync Service",
+  "nodes": [
+    {
+      "id": "87d25ff8-557f-4188-8c79-d7bd1e47268e",
+      "name": "CRM Request",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        464
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "op",
+              "type": "string"
+            },
+            {
+              "name": "payload",
+              "type": "string"
+            },
+            {
+              "name": "idempotency_key",
+              "type": "string"
+            },
+            {
+              "name": "dry_run",
+              "type": "string"
+            },
+            {
+              "name": "lead_key",
+              "type": "string"
+            },
+            {
+              "name": "tenant_id",
+              "type": "string"
+            },
+            {
+              "name": "trace_id",
+              "type": "string"
+            },
+            {
+              "name": "source_workflow",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d178fa16-e762-4c87-a703-fabf8bc8aa69",
+      "name": "Normalise CRM Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        464
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $input.first().json;\nconst SUPPORTED = [\"upsert_contact\", \"create_deal\", \"create_task\"];\nconst rawOp = String(req.op == null ? \"\" : req.op).trim().toLowerCase();\n\nlet payload = {};\nlet payloadError = \"\";\nconst rawPayload = req.payload;\nif (rawPayload && typeof rawPayload === \"object\") {\n  payload = rawPayload;\n} else if (typeof rawPayload === \"string\" && rawPayload.trim()) {\n  try { payload = JSON.parse(rawPayload); }\n  catch (e) { payloadError = \"payload is not valid JSON: \" + e.message; }\n}\nif (!payload || typeof payload !== \"object\") { payload = {}; }\n\nfunction fnv(s) {\n  let h = 2166136261;\n  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }\n  return (h >>> 0).toString(16).padStart(8, \"0\");\n}\nconst canonical = JSON.stringify(payload);\nconst payloadDigest = fnv(rawOp + \"|\" + canonical) + fnv(canonical + \"|\" + rawOp);\n\n// Tenant is part of every key in this service. A tenant id that could smuggle a\n// separator into a composite key would let one tenant address another's rows,\n// so the character set is restricted rather than escaped.\nconst rawTenant = String(req.tenant_id || \"default\").trim().toLowerCase();\nconst tenantId = /^[a-z0-9][a-z0-9_-]{0,62}$/.test(rawTenant) ? rawTenant : \"\";\nconst traceId = String(req.trace_id || \"\").trim().slice(0, 64);\n\nconst rawDry = req.dry_run;\nconst dryRun = String(rawDry === undefined || rawDry === null || rawDry === \"\" ? \"true\" : rawDry).toLowerCase() !== \"false\";\nconst leadKey = String(req.lead_key || payload.lead_key || \"\").trim().toLowerCase();\n\n// Tenant-scoped. Without the prefix, two tenants sending the same lead collide\n// in the write ledger and the second one silently receives the first one's id.\nconst suppliedKey = String(req.idempotency_key || \"\").trim();\nconst idem = tenantId + \":\" + (suppliedKey || (rawOp + \"-\" + (leadKey || \"anon\") + \"-\" + payloadDigest));\n\nconst errors = [];\nif (!tenantId) { errors.push(\"tenant_id must match ^[a-z0-9][a-z0-9_-]{0,62}$; got \" + JSON.stringify(rawTenant)); }\nif (payloadError) { errors.push(payloadError); }\nif (SUPPORTED.indexOf(rawOp) === -1) { errors.push(\"op must be one of \" + SUPPORTED.join(\", \")); }\nif (rawOp === \"upsert_contact\" && !payload.email) { errors.push(\"payload.email is required for upsert_contact\"); }\nif (rawOp === \"create_deal\" && !payload.deal_name) { errors.push(\"payload.deal_name is required for create_deal\"); }\nif (rawOp === \"create_deal\" && !payload.stage) { errors.push(\"payload.stage is required for create_deal\"); }\nif (rawOp === \"create_task\" && !payload.body) { errors.push(\"payload.body is required for create_task\"); }\n\nconst contactIds = Array.isArray(payload.associated_contact_ids)\n  ? payload.associated_contact_ids.map(function (v) { return String(v); })\n  : (payload.contact_id ? [String(payload.contact_id)] : []);\n\nreturn [{ json: {\n  op: rawOp,\n  payload: payload,\n  payload_digest: payloadDigest,\n  dry_run: dryRun,\n  lead_key: leadKey,\n  tenant_id: tenantId,\n  trace_id: traceId,\n  idempotency_key: idem,\n  source_workflow: String(req.source_workflow || \"unknown\"),\n  associated_contact_ids: contactIds,\n  associated_contact_csv: contactIds.join(\",\"),\n  valid: errors.length === 0,\n  validation_errors: errors,\n  started_at_ms: Date.now()\n} }];\n"
+      }
+    },
+    {
+      "id": "e3942e2c-0d21-4040-972a-71a94546e333",
+      "name": "Request Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        464
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "rv1",
+              "leftValue": "={{ $json.valid }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "3d92cef2-ebd4-4805-ab1e-5aca8e0ea727",
+      "name": "Check Write Ledger",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        672,
+        368
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATA_TABLE_ID",
+          "cachedResultName": "swarm_crm_writes"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "idempotency_key",
+              "condition": "eq",
+              "keyValue": "={{ $json.idempotency_key }}"
+            },
+            {
+              "keyName": "tenant_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.tenant_id }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "efebd77a-a91b-493f-9a73-1494abbcc690",
+      "name": "Already Written?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        368
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "aw1",
+              "leftValue": "={{ $json.object_id }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "c9710abf-cc65-43ae-bed8-4704234f16be",
+      "name": "Capture Replay",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2016,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise CRM Request\").first().json;\nconst row = $input.first().json || {};\nreturn [{ json: {\n  ok: true,\n  op: req.op,\n  object_type: row.object_type || \"unknown\",\n  object_id: String(row.object_id || \"\"),\n  is_new: false,\n  status: \"replayed\",\n  replayed: true,\n  simulated: row.dry_run === true,\n  crm: row.dry_run === true ? \"none\" : \"hubspot\",\n  idempotency_key: req.idempotency_key,\n  lead_key: req.lead_key,\n  payload_digest: req.payload_digest,\n  dry_run: req.dry_run,\n  errors: [],\n  note: \"This idempotency key was already written at \" + String(row.written_at || \"an earlier run\") + \". No second CRM object was created.\",\n  latency_ms: Date.now() - Number(req.started_at_ms)\n} }];\n"
+      }
+    },
+    {
+      "id": "f8b97538-91ae-43b0-818f-e05723ea5d08",
+      "name": "Return CRM Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        400
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const CAPTURES = [\"Capture Contact Write\", \"Capture Deal Write\", \"Capture Task Write\", \"Simulate CRM Write\", \"Capture Replay\", \"Capture Rejected Write\"];\nlet verdict = null;\nfor (const name of CAPTURES) {\n  try {\n    const items = $(name).all();\n    if (items && items.length) { verdict = items[0].json; break; }\n  } catch (e) { }\n}\nif (!verdict) {\n  verdict = { ok: false, status: \"no_branch_ran\", object_type: \"none\", object_id: \"\", errors: [\"No capture node produced a verdict. This is a wiring bug, not a CRM failure.\"] };\n}\n\n// Tenant and trace come from the request, never from the branch that ran, so a\n// caller can always correlate the answer it gets back.\nconst req = $(\"Normalise CRM Request\").first().json;\nverdict.tenant_id = req.tenant_id;\nverdict.trace_id = req.trace_id;\nreturn [{ json: verdict }];\n"
+      }
+    },
+    {
+      "id": "ffbec538-2089-4501-bc87-1723cbafa8df",
+      "name": "Dry Run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        464
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "dr1",
+              "leftValue": "={{ $(\"Normalise CRM Request\").first().json.dry_run }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "64c97430-8644-453d-988d-0869d9a47a7b",
+      "name": "Simulate CRM Write",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        144
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise CRM Request\").first().json;\nconst TYPES = { upsert_contact: \"contact\", create_deal: \"deal\", create_task: \"task\" };\nconst objectType = TYPES[req.op] || \"unknown\";\n\nconst simulatedId = \"sim-\" + objectType + \"-\" + req.payload_digest.slice(0, 12);\nreturn [{ json: {\n  ok: true,\n  op: req.op,\n  object_type: objectType,\n  object_id: simulatedId,\n  is_new: true,\n  status: \"simulated\",\n  replayed: false,\n  simulated: true,\n  crm: \"none\",\n  idempotency_key: req.idempotency_key,\n  lead_key: req.lead_key,\n  payload_digest: req.payload_digest,\n  dry_run: true,\n  errors: [],\n  note: \"dry_run=true: no HubSpot call was made. The id is derived from the payload digest, so the same payload always simulates to the same id.\",\n  latency_ms: Date.now() - Number(req.started_at_ms)\n} }];\n"
+      }
+    },
+    {
+      "id": "03565b24-1ad9-434e-80dd-92b752dc75a3",
+      "name": "Record CRM Write",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        2016,
+        400
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATA_TABLE_ID",
+          "cachedResultName": "swarm_crm_writes"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "idempotency_key": "={{ $json.idempotency_key }}",
+            "op": "={{ $json.op }}",
+            "object_type": "={{ $json.object_type }}",
+            "object_id": "={{ $json.object_id }}",
+            "lead_key": "={{ $json.lead_key }}",
+            "dry_run": "={{ $json.dry_run }}",
+            "status": "={{ $json.status }}",
+            "payload_digest": "={{ $json.payload_digest }}",
+            "written_at": "={{ $now.toISO() }}",
+            "execution_id": "={{ $execution.id }}",
+            "tenant_id": "={{ $(\"Normalise CRM Request\").first().json.tenant_id }}",
+            "trace_id": "={{ $(\"Normalise CRM Request\").first().json.trace_id }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "38530ce9-41ea-4f0d-83ad-6b2b3178692f",
+      "name": "Route CRM Operation",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1344,
+        624
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "upsert_contact",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "rc1",
+                    "leftValue": "={{ $(\"Normalise CRM Request\").first().json.op }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "upsert_contact"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "create_deal",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "rc2",
+                    "leftValue": "={{ $(\"Normalise CRM Request\").first().json.op }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "create_deal"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "create_task",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "rc3",
+                    "leftValue": "={{ $(\"Normalise CRM Request\").first().json.op }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "create_task"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "unsupported"
+        }
+      }
+    },
+    {
+      "id": "0086823d-a279-4e73-ba14-a73fc800022c",
+      "name": "HubSpot Upsert Contact",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.2,
+      "position": [
+        1568,
+        336
+      ],
+      "parameters": {
+        "authentication": "appToken",
+        "resource": "contact",
+        "operation": "upsert",
+        "email": "={{ $(\"Normalise CRM Request\").first().json.payload.email }}",
+        "additionalFields": {
+          "firstName": "={{ $(\"Normalise CRM Request\").first().json.payload.first_name }}",
+          "lastName": "={{ $(\"Normalise CRM Request\").first().json.payload.last_name }}",
+          "companyName": "={{ $(\"Normalise CRM Request\").first().json.payload.company_name }}",
+          "jobTitle": "={{ $(\"Normalise CRM Request\").first().json.payload.job_title }}",
+          "phoneNumber": "={{ $(\"Normalise CRM Request\").first().json.payload.phone }}",
+          "websiteUrl": "={{ $(\"Normalise CRM Request\").first().json.payload.website }}",
+          "customPropertiesUi": {
+            "customPropertiesValues": [
+              {
+                "property": "swarm_lead_score",
+                "value": "={{ $(\"Normalise CRM Request\").first().json.payload.lead_score }}"
+              },
+              {
+                "property": "swarm_lead_tier",
+                "value": "={{ $(\"Normalise CRM Request\").first().json.payload.lead_tier }}"
+              }
+            ]
+          }
+        },
+        "options": {
+          "resolveData": false
+        }
+      },
+      "disabled": true
+    },
+    {
+      "id": "f93ae988-9521-4ce0-a0e1-0f3eeb495cab",
+      "name": "Capture Contact Write",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        336
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise CRM Request\").first().json;\nconst res = $input.first().json || {};\nconst id = res.vid || res.id || (res.properties && res.properties.hs_object_id) || \"\";\nreturn [{ json: {\n  ok: !!id,\n  op: req.op,\n  object_type: \"contact\",\n  object_id: String(id),\n  is_new: res.isNew === undefined ? null : !!res.isNew,\n  status: id ? \"written\" : \"write_returned_no_id\",\n  replayed: false,\n  simulated: false,\n  crm: \"hubspot\",\n  idempotency_key: req.idempotency_key,\n  lead_key: req.lead_key,\n  payload_digest: req.payload_digest,\n  dry_run: false,\n  errors: [],\n  latency_ms: Date.now() - Number(req.started_at_ms)\n} }];\n"
+      }
+    },
+    {
+      "id": "90671aa0-2cbe-4d02-a3fe-95eb4c0b6eed",
+      "name": "HubSpot Create Deal",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.2,
+      "position": [
+        1568,
+        528
+      ],
+      "parameters": {
+        "authentication": "appToken",
+        "resource": "deal",
+        "operation": "create",
+        "stage": "={{ $(\"Normalise CRM Request\").first().json.payload.stage }}",
+        "additionalFields": {
+          "dealName": "={{ $(\"Normalise CRM Request\").first().json.payload.deal_name }}",
+          "amount": "={{ $(\"Normalise CRM Request\").first().json.payload.amount }}",
+          "description": "={{ $(\"Normalise CRM Request\").first().json.payload.description }}",
+          "associatedVids": [
+            "={{ $(\"Normalise CRM Request\").first().json.payload.contact_id }}"
+          ]
+        }
+      },
+      "disabled": true
+    },
+    {
+      "id": "c7c3bcde-9be2-4d0d-8139-cb5cc20aa627",
+      "name": "Capture Deal Write",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        528
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise CRM Request\").first().json;\nconst res = $input.first().json || {};\nconst id = res.dealId || res.id || (res.properties && res.properties.hs_object_id) || \"\";\nreturn [{ json: {\n  ok: !!id,\n  op: req.op,\n  object_type: \"deal\",\n  object_id: String(id),\n  is_new: true,\n  status: id ? \"written\" : \"write_returned_no_id\",\n  replayed: false,\n  simulated: false,\n  crm: \"hubspot\",\n  idempotency_key: req.idempotency_key,\n  lead_key: req.lead_key,\n  payload_digest: req.payload_digest,\n  dry_run: false,\n  errors: [],\n  latency_ms: Date.now() - Number(req.started_at_ms)\n} }];\n"
+      }
+    },
+    {
+      "id": "0a22b73c-c987-45a5-b099-6b02e5fea38f",
+      "name": "HubSpot Create Task",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.2,
+      "position": [
+        1568,
+        720
+      ],
+      "parameters": {
+        "authentication": "appToken",
+        "resource": "engagement",
+        "operation": "create",
+        "type": "task",
+        "dueDate": "={{ $(\"Normalise CRM Request\").first().json.payload.due_date || $now.plus(1, \"days\").toFormat(\"yyyy-MM-dd HH:mm:ss\") }}",
+        "metadata": {
+          "subject": "={{ $(\"Normalise CRM Request\").first().json.payload.subject }}",
+          "body": "={{ $(\"Normalise CRM Request\").first().json.payload.body }}",
+          "status": "NOT_STARTED",
+          "forObjectType": "CONTACT"
+        },
+        "additionalFields": {
+          "associations": {
+            "contactIds": "={{ $(\"Normalise CRM Request\").first().json.associated_contact_csv }}"
+          }
+        }
+      },
+      "disabled": true
+    },
+    {
+      "id": "d4d51d7e-3658-48dd-94d8-e25af251ba5e",
+      "name": "Capture Task Write",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        720
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise CRM Request\").first().json;\nconst res = $input.first().json || {};\nconst id = (res.engagement && res.engagement.id) || res.id || \"\";\nreturn [{ json: {\n  ok: !!id,\n  op: req.op,\n  object_type: \"task\",\n  object_id: String(id),\n  is_new: true,\n  status: id ? \"written\" : \"write_returned_no_id\",\n  replayed: false,\n  simulated: false,\n  crm: \"hubspot\",\n  idempotency_key: req.idempotency_key,\n  lead_key: req.lead_key,\n  payload_digest: req.payload_digest,\n  dry_run: false,\n  errors: [],\n  latency_ms: Date.now() - Number(req.started_at_ms)\n} }];\n"
+      }
+    },
+    {
+      "id": "b1a43abc-c78a-4b5b-ab99-b058f9df7b49",
+      "name": "Capture Rejected Write",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        912
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise CRM Request\").first().json;\nconst errors = req.validation_errors && req.validation_errors.length\n  ? req.validation_errors\n  : [\"op \\\"\" + req.op + \"\\\" reached the switch fallback, which means it is not one of the three supported operations\"];\nreturn [{ json: {\n  ok: false,\n  op: req.op,\n  object_type: \"none\",\n  object_id: \"\",\n  is_new: false,\n  status: \"rejected\",\n  replayed: false,\n  simulated: false,\n  crm: \"none\",\n  idempotency_key: req.idempotency_key,\n  lead_key: req.lead_key,\n  payload_digest: req.payload_digest,\n  dry_run: req.dry_run,\n  errors: errors,\n  note: \"The request was rejected before any CRM call. Nothing was written.\",\n  latency_ms: Date.now() - Number(req.started_at_ms)\n} }];\n"
+      }
+    },
+    {
+      "id": "11a595e7-4afa-4aba-b96a-21eb75edd484",
+      "name": "Sticky Note 88f36355",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1056,
+        912
+      ],
+      "parameters": {
+        "content": "## The only HubSpot seam\n\nEvery HubSpot call in the whole swarm happens in these three nodes. Add one\n`HubSpot App Token` credential here and the entire system writes to a real\nportal; leave it empty and `dry_run=true` keeps every other workflow testable.\n\nContact upsert writes two custom properties, `swarm_lead_score` and\n`swarm_lead_tier`. Create them in HubSpot (Settings > Properties) before the\nfirst live run, or remove them from the node.",
+        "color": 3
+      }
+    },
+    {
+      "id": "234b0162-1288-4830-815a-220d898c11dc",
+      "name": "Sticky Note a40a32ff",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1056,
+        1168
+      ],
+      "parameters": {
+        "content": "## Idempotency\n\nThe write ledger is checked before the CRM, not after. A replayed webhook, a\nretried orchestrator run and a duplicate lead all resolve to the same\n`idempotency_key`, so the second call returns the object id from the first\ninstead of creating a second contact or a duplicate deal.",
+        "color": 4
+      }
+    },
+    {
+      "id": "bc881d17-4391-415a-a034-f603d860e9fa",
+      "name": "Test Suite Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -460,
+        1080
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b90a653a-bb2b-4690-97c1-16d4b99071ce",
+      "name": "Build CRM Fixtures",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        1080
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// A run nonce keeps the suite deterministic across repeat runs: C01 is always a\n// fresh key so it simulates, and C02 reuses that same key so it must replay.\nconst nonce = String($execution.id) + \"-\" + Date.now().toString(36);\nconst leadKey = \"suite-\" + nonce + \"@example.com\";\n\nconst contactPayload = JSON.stringify({\n  email: leadKey,\n  first_name: \"Ada\",\n  last_name: \"Lovelace\",\n  company_name: \"Analytical Engines\",\n  job_title: \"VP Engineering\",\n  lead_score: 87,\n  lead_tier: \"HOT\"\n});\n\nconst fixtures = [\n  { case_id: \"C01\", note: \"valid contact upsert, dry run\", op: \"upsert_contact\", payload: contactPayload, lead_key: leadKey, tenant_id: \"acme\", dry_run: \"true\", idempotency_key: \"\", expect_status: \"simulated\", expect_type: \"contact\", expect_ok: true },\n  { case_id: \"C02\", note: \"same payload again must replay, not write twice\", op: \"upsert_contact\", payload: contactPayload, lead_key: leadKey, tenant_id: \"acme\", dry_run: \"true\", idempotency_key: \"\", expect_status: \"replayed\", expect_type: \"contact\", expect_ok: true },\n  { case_id: \"C03\", note: \"contact without email is rejected before any CRM call\", op: \"upsert_contact\", payload: JSON.stringify({ first_name: \"NoEmail\" }), lead_key: \"c03-\" + nonce, tenant_id: \"acme\", dry_run: \"true\", idempotency_key: \"\", expect_status: \"rejected\", expect_type: \"none\", expect_ok: false },\n  { case_id: \"C04\", note: \"valid deal, dry run\", op: \"create_deal\", payload: JSON.stringify({ deal_name: \"Analytical Engines - pilot\", stage: \"qualifiedtobuy\", amount: \"24000\", contact_id: \"1201\" }), lead_key: \"c04-\" + nonce, tenant_id: \"acme\", dry_run: \"true\", idempotency_key: \"\", expect_status: \"simulated\", expect_type: \"deal\", expect_ok: true },\n  { case_id: \"C05\", note: \"deal without stage is rejected\", op: \"create_deal\", payload: JSON.stringify({ deal_name: \"No stage\" }), lead_key: \"c05-\" + nonce, tenant_id: \"acme\", dry_run: \"true\", idempotency_key: \"\", expect_status: \"rejected\", expect_type: \"none\", expect_ok: false },\n  { case_id: \"C06\", note: \"valid follow-up task, dry run\", op: \"create_task\", payload: JSON.stringify({ subject: \"Call Ada\", body: \"Score 87 (HOT). Budget signal explicit.\", contact_id: \"1201\" }), lead_key: \"c06-\" + nonce, tenant_id: \"acme\", dry_run: \"true\", idempotency_key: \"\", expect_status: \"simulated\", expect_type: \"task\", expect_ok: true },\n  { case_id: \"C07\", note: \"unknown op never reaches HubSpot\", op: \"delete_everything\", payload: JSON.stringify({ email: \"x@example.com\" }), lead_key: \"c07-\" + nonce, tenant_id: \"acme\", dry_run: \"false\", idempotency_key: \"\", expect_status: \"rejected\", expect_type: \"none\", expect_ok: false },\n  { case_id: \"C08\", note: \"a second tenant sending the identical lead must not be suppressed by the first\", op: \"upsert_contact\", payload: contactPayload, lead_key: leadKey, tenant_id: \"globex\", dry_run: \"true\", idempotency_key: \"\", expect_status: \"simulated\", expect_type: \"contact\", expect_ok: true },\n  { case_id: \"C09\", note: \"a malformed tenant id is refused rather than escaped into a key\", op: \"upsert_contact\", payload: contactPayload, lead_key: leadKey, tenant_id: \"acme:globex\", dry_run: \"true\", idempotency_key: \"\", expect_status: \"rejected\", expect_type: \"none\", expect_ok: false }\n];\n\nreturn fixtures.map(function (f) {\n  f.source_workflow = \"11-test-suite\";\n  f.trace_id = \"trace-\" + nonce + \"-\" + f.case_id;\n  return { json: f };\n});\n"
+      }
+    },
+    {
+      "id": "7b8bb279-9221-4d1d-bfee-a431a6ea53a1",
+      "name": "CRM Fixture Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -20,
+        1080
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "76a1e735-d171-481f-8c17-d8744f8f4760",
+      "name": "Run CRM Fixture",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        220,
+        1200
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 11 CRM Sync Service"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "op": "={{ $json.op }}",
+            "payload": "={{ $json.payload }}",
+            "idempotency_key": "={{ $json.idempotency_key }}",
+            "dry_run": "={{ $json.dry_run }}",
+            "lead_key": "={{ $json.lead_key }}",
+            "tenant_id": "={{ $json.tenant_id }}",
+            "trace_id": "={{ $json.trace_id }}",
+            "source_workflow": "={{ $json.source_workflow }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "a724a167-4998-4bac-9d6a-7365957ac028",
+      "name": "Slim CRM Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        1200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Execute Sub-workflow double-wraps its output. Slimming here also keeps the\n// loop's contextData small enough to read back from the execution log.\nconst raw = $input.first().json;\nconst res = (raw && raw.json) ? raw.json : raw;\nconst fixture = $(\"CRM Fixture Loop\").first().json;\nreturn [{ json: {\n  case_id: fixture.case_id,\n  note: fixture.note,\n  op: fixture.op,\n  tenant_id: fixture.tenant_id,\n  expect_status: fixture.expect_status,\n  expect_type: fixture.expect_type,\n  expect_ok: fixture.expect_ok,\n  actual_status: res.status,\n  actual_type: res.object_type,\n  actual_ok: res.ok === true,\n  actual_tenant: res.tenant_id,\n  actual_trace: res.trace_id,\n  object_id: res.object_id,\n  errors: res.errors || [],\n  latency_ms: res.latency_ms\n} }];\n"
+      }
+    },
+    {
+      "id": "3d11a4ac-da2c-4c5b-ad8f-492d1436074e",
+      "name": "Assert CRM Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        960
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// The done branch of splitInBatches carries every processed item.\n// $('Slim CRM Result').all() would only return the final loop run.\nconst rows = $input.all().map(function (i) { return i.json; });\nconst byCase = {};\nrows.forEach(function (r) { byCase[r.case_id] = r; });\n\nconst cases = rows.map(function (r) {\n  const checks = [];\n  checks.push({ name: \"status\", pass: r.actual_status === r.expect_status, expected: r.expect_status, actual: r.actual_status });\n  checks.push({ name: \"object_type\", pass: r.actual_type === r.expect_type, expected: r.expect_type, actual: r.actual_type });\n  checks.push({ name: \"ok\", pass: r.actual_ok === r.expect_ok, expected: r.expect_ok, actual: r.actual_ok });\n  if (r.expect_status === \"simulated\") {\n    checks.push({ name: \"simulated_id_prefix\", pass: String(r.object_id || \"\").indexOf(\"sim-\") === 0, expected: \"sim-*\", actual: r.object_id });\n  }\n  if (r.expect_status === \"rejected\") {\n    checks.push({ name: \"rejection_explained\", pass: (r.errors || []).length > 0, expected: \">0 errors\", actual: (r.errors || []).length });\n  }\n  // Trace id must survive every path, including the rejected ones.\n  checks.push({ name: \"trace_echoed\", pass: String(r.actual_trace || \"\").indexOf(\"trace-\") === 0, expected: \"trace-*\", actual: r.actual_trace });\n  const failed = checks.filter(function (c) { return !c.pass; });\n  return { case_id: r.case_id, note: r.note, passed: failed.length === 0, checks: checks, latency_ms: r.latency_ms };\n});\n\n// Cross-tenant isolation is a property of the pair, not of either case alone.\nconst c01 = byCase[\"C01\"];\nconst c08 = byCase[\"C08\"];\nif (c01 && c08) {\n  const distinct = c01.object_id !== c08.object_id || c01.actual_tenant !== c08.actual_tenant;\n  cases.push({\n    case_id: \"C08x\",\n    note: \"cross-tenant isolation: identical leads in two tenants must not share a write\",\n    passed: c08.actual_status === \"simulated\" && distinct,\n    checks: [\n      { name: \"second_tenant_not_replayed\", pass: c08.actual_status === \"simulated\", expected: \"simulated\", actual: c08.actual_status },\n      { name: \"tenants_distinct\", pass: c01.actual_tenant !== c08.actual_tenant, expected: \"acme != globex\", actual: c01.actual_tenant + \" vs \" + c08.actual_tenant }\n    ],\n    latency_ms: c08.latency_ms\n  });\n}\n\nconst passed = cases.filter(function (c) { return c.passed; }).length;\nreturn [{ json: {\n  suite: \"11-crm-sync-service\",\n  run_at: new Date().toISOString(),\n  execution_id: $execution.id,\n  total: cases.length,\n  passed: passed,\n  failed: cases.length - passed,\n  all_passed: passed === cases.length && cases.length === 10,\n  cases: cases\n} }];\n"
+      }
+    },
+    {
+      "id": "cd486322-e3c7-4a0c-807e-03375d5e0235",
+      "name": "Sticky Test Harness",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        900
+      ],
+      "parameters": {
+        "color": 6,
+        "width": 760,
+        "height": 460,
+        "content": "## Self-test suite\n\nSeven fixtures run through this same service, one at a time. They prove the\nparts that do not need a HubSpot credential: deterministic simulation, replay\non a repeated idempotency key, validation rejection before any CRM call, and\nthe switch fallback for an unknown operation.\n\nC01 and C02 share a run-scoped key, so the suite gives the same verdict however\nmany times it is run."
+      }
+    }
+  ],
+  "connections": {
+    "CRM Request": {
+      "main": [
+        [
+          {
+            "node": "Normalise CRM Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise CRM Request": {
+      "main": [
+        [
+          {
+            "node": "Request Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request Valid?": {
+      "main": [
+        [
+          {
+            "node": "Check Write Ledger",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Capture Rejected Write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Write Ledger": {
+      "main": [
+        [
+          {
+            "node": "Already Written?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already Written?": {
+      "main": [
+        [
+          {
+            "node": "Capture Replay",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Dry Run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Replay": {
+      "main": [
+        [
+          {
+            "node": "Return CRM Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dry Run?": {
+      "main": [
+        [
+          {
+            "node": "Simulate CRM Write",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Route CRM Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simulate CRM Write": {
+      "main": [
+        [
+          {
+            "node": "Record CRM Write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record CRM Write": {
+      "main": [
+        [
+          {
+            "node": "Return CRM Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route CRM Operation": {
+      "main": [
+        [
+          {
+            "node": "HubSpot Upsert Contact",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HubSpot Create Deal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HubSpot Create Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Capture Rejected Write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot Upsert Contact": {
+      "main": [
+        [
+          {
+            "node": "Capture Contact Write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Contact Write": {
+      "main": [
+        [
+          {
+            "node": "Record CRM Write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot Create Deal": {
+      "main": [
+        [
+          {
+            "node": "Capture Deal Write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Deal Write": {
+      "main": [
+        [
+          {
+            "node": "Record CRM Write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot Create Task": {
+      "main": [
+        [
+          {
+            "node": "Capture Task Write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Task Write": {
+      "main": [
+        [
+          {
+            "node": "Record CRM Write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Rejected Write": {
+      "main": [
+        [
+          {
+            "node": "Return CRM Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Suite Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build CRM Fixtures",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build CRM Fixtures": {
+      "main": [
+        [
+          {
+            "node": "CRM Fixture Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CRM Fixture Loop": {
+      "main": [
+        [
+          {
+            "node": "Assert CRM Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run CRM Fixture",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run CRM Fixture": {
+      "main": [
+        [
+          {
+            "node": "Slim CRM Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slim CRM Result": {
+      "main": [
+        [
+          {
+            "node": "CRM Fixture Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "description": "Reusable, idempotent CRM write service. The only workflow in the swarm that touches HubSpot: three supported operations, a write ledger checked before the CRM so replays never duplicate, and a dry_run branch that simulates deterministic ids with no creden",
+  "nodeGroups": []
+}

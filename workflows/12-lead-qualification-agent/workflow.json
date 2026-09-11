@@ -1,0 +1,790 @@
+{
+  "name": "[Platform] 12 Lead Qualification Agent",
+  "nodes": [
+    {
+      "id": "ecae1880-861b-4116-9ac3-31b458641648",
+      "name": "Qualification Request",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        272
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "lead",
+              "type": "string"
+            },
+            {
+              "name": "icp",
+              "type": "string"
+            },
+            {
+              "name": "enrich",
+              "type": "string"
+            },
+            {
+              "name": "signals_override",
+              "type": "string"
+            },
+            {
+              "name": "rubric_override",
+              "type": "string"
+            },
+            {
+              "name": "verification_mode",
+              "type": "string"
+            },
+            {
+              "name": "tenant_id",
+              "type": "string"
+            },
+            {
+              "name": "trace_id",
+              "type": "string"
+            },
+            {
+              "name": "source_workflow",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "50447cb0-4c85-4fe8-8607-b84e32317f92",
+      "name": "Normalise Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        272
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $input.first().json;\nconst FREE_EMAIL = [\"gmail.com\", \"yahoo.com\", \"outlook.com\", \"hotmail.com\", \"icloud.com\", \"proton.me\", \"protonmail.com\", \"aol.com\", \"live.com\", \"msn.com\", \"gmx.com\", \"mail.com\", \"yandex.com\", \"qq.com\", \"163.com\"];\n\nfunction parseJson(raw, fallback) {\n  if (raw && typeof raw === \"object\") { return raw; }\n  if (typeof raw === \"string\" && raw.trim()) {\n    try { return JSON.parse(raw); } catch (e) { return fallback; }\n  }\n  return fallback;\n}\nfunction fnv(s) {\n  let h = 2166136261;\n  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }\n  return (h >>> 0).toString(16).padStart(8, \"0\");\n}\n\nconst lead = parseJson(req.lead, {});\nconst ICP_DEFAULT = {\n  target_size_bands: [\"51-200\", \"201-1000\", \"1000+\"],\n  core_use_cases: [\"workflow automation\", \"ai agents\", \"internal tooling\"],\n  min_score_for_outreach: 50\n};\nconst icp = parseJson(req.icp, ICP_DEFAULT);\nif (!Array.isArray(icp.target_size_bands) || !icp.target_size_bands.length) { icp.target_size_bands = ICP_DEFAULT.target_size_bands; }\nif (!Array.isArray(icp.core_use_cases) || !icp.core_use_cases.length) { icp.core_use_cases = ICP_DEFAULT.core_use_cases; }\nif (typeof icp.min_score_for_outreach !== \"number\") { icp.min_score_for_outreach = ICP_DEFAULT.min_score_for_outreach; }\n\nconst email = String(lead.email || \"\").trim().toLowerCase();\nconst emailDomain = email.indexOf(\"@\") > 0 ? email.split(\"@\")[1] : \"\";\nconst freeEmail = FREE_EMAIL.indexOf(emailDomain) !== -1;\nconst rawSite = String(lead.website || lead.company_domain || \"\").trim();\nconst siteDomain = rawSite\n  ? rawSite.replace(/^https?:\\/\\//i, \"\").replace(/^www\\./i, \"\").split(\"/\")[0].toLowerCase()\n  : \"\";\nconst companyDomain = siteDomain || (freeEmail ? \"\" : emailDomain);\n\nconst FIELDS = [\"first_name\", \"last_name\", \"job_title\", \"company_name\", \"company_size\", \"phone\", \"country\", \"source\", \"message\", \"budget\", \"timeline\", \"use_case\"];\nconst lines = [];\nif (email) { lines.push(\"email: \" + email); }\nFIELDS.forEach(function (f) {\n  if (lead[f] !== undefined && lead[f] !== null && String(lead[f]).trim()) { lines.push(f + \": \" + String(lead[f]).trim()); }\n});\nif (companyDomain) { lines.push(\"company_domain: \" + companyDomain); }\nconst leadBlock = lines.join(\"\\n\");\n\nconst rawTenant = String(req.tenant_id || \"default\").trim().toLowerCase();\nconst tenantId = /^[a-z0-9][a-z0-9_-]{0,62}$/.test(rawTenant) ? rawTenant : \"\";\n\nconst errors = [];\nif (!tenantId) { errors.push(\"tenant_id must match ^[a-z0-9][a-z0-9_-]{0,62}$; got \" + JSON.stringify(rawTenant)); }\nif (!email) { errors.push(\"lead.email is required\"); }\nelse if (!/^[^@\\s]+@[^@\\s.]+\\.[^@\\s]+$/.test(email)) { errors.push(\"lead.email is not a valid address: \" + email); }\nif (!leadBlock) { errors.push(\"the lead carries no readable fields to qualify\"); }\n\nconst leadKey = email || (\"anon-\" + fnv(JSON.stringify(lead)));\nconst enrich = String(req.enrich === undefined || req.enrich === null || req.enrich === \"\" ? \"false\" : req.enrich).toLowerCase() === \"true\";\n\nreturn [{ json: {\n  lead: lead,\n  lead_key: leadKey,\n  email: email,\n  email_domain: emailDomain,\n  free_email: freeEmail,\n  company_domain: companyDomain,\n  company_url: companyDomain ? \"https://\" + companyDomain : \"\",\n  lead_block: leadBlock,\n  icp: icp,\n  icp_block: JSON.stringify(icp, null, 2),\n  enrich: enrich && !!companyDomain,\n  enrich_skipped_reason: enrich && !companyDomain ? \"no company domain could be derived from the lead\" : (enrich ? \"\" : \"enrichment not requested\"),\n  signals_override: String(req.signals_override || \"\"),\n  rubric_override: String(req.rubric_override || \"\"),\n  verification_mode: String(req.verification_mode || \"deterministic_only\"),\n  tenant_id: tenantId,\n  trace_id: String(req.trace_id || \"\").trim().slice(0, 64),\n  source_workflow: String(req.source_workflow || \"unknown\"),\n  valid: errors.length === 0,\n  validation_errors: errors,\n  started_at_ms: Date.now()\n} }];\n"
+      }
+    },
+    {
+      "id": "6c30c9af-414e-469e-8311-b3a88e167dd9",
+      "name": "Lead Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        272
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "lv1",
+              "leftValue": "={{ $json.valid }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "ff8f3474-281d-45cf-b4ba-d2eb5877c325",
+      "name": "Signals Supplied?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        672,
+        176
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ss1",
+              "leftValue": "={{ $json.signals_override }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "75e4e964-79e7-4592-bdf7-d8bfc25cda9b",
+      "name": "Use Supplied Signals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2016,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise Lead\").first().json;\nlet signals = {};\nlet error = \"\";\ntry { signals = JSON.parse(req.signals_override); }\ncatch (e) { error = \"signals_override is not valid JSON: \" + e.message; }\nreturn [{ json: {\n  signals: signals,\n  signals_source: \"supplied\",\n  signals_raw: req.signals_override,\n  model_provider: null,\n  model_latency_ms: 0,\n  prompt_sha: null,\n  parse_error: error\n} }];\n"
+      }
+    },
+    {
+      "id": "d2c402ff-48b5-419d-8ef1-93ff86d2d44d",
+      "name": "Score Against Rubric",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        176
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise Lead\").first().json;\nconst incoming = $input.first().json;\nconst icp = req.icp;\n\n// ---- The rubric is data, not code -----------------------------------------\n// Keeping it as a value means a candidate rubric can be backtested against the\n// same leads through this same workflow, and an offline evaluator never has to\n// reimplement the scoring and drift away from it.\nconst DEFAULT_RUBRIC = {\n  version: \"1.2.0\",\n  seniority: { executive: 12, vp: 11, director: 9, manager: 6, ic: 2, unknown: 0 },\n  authority: { decision_maker: 13, influencer: 8, end_user: 3, unknown: 0 },\n  budget: { explicit: 20, implied: 12, none: 2, unknown: 0 },\n  timeline: { immediate: 15, this_quarter: 12, this_year: 6, no_timeline: 2, unknown: 0 },\n  pain: { specific: 10, general: 5, none: 0, unknown: 0 },\n  fit: { core: 10, adjacent: 6, out_of_scope: 0, unknown: 0 },\n  size_points: { in_target: 20, adjacent: 12, outside: 4, unknown: 0 },\n  modifiers: { competitor_mentioned: 4, consumer_email_domain: -8, unsupported_evidence: -10, signal_parse_failure: -15 },\n  caps: { unknown_threshold: 4, unknown_cap: 45, out_of_scope_cap: 15, parse_error_cap: 40, unreadable_cap: 45 },\n  tiers: { hot: 75, warm: 50, cold: 25 }\n};\n\nlet R = DEFAULT_RUBRIC;\nlet rubricSource = \"default\";\nlet rubricError = \"\";\nif (req.rubric_override) {\n  try {\n    const candidate = JSON.parse(req.rubric_override);\n    const REQUIRED = [\"seniority\", \"authority\", \"budget\", \"timeline\", \"pain\", \"fit\", \"size_points\", \"modifiers\", \"caps\", \"tiers\"];\n    const missing = REQUIRED.filter(function (k) { return !candidate || typeof candidate[k] !== \"object\"; });\n    if (missing.length) {\n      rubricError = \"rubric_override is missing required section(s): \" + missing.join(\", \");\n    } else {\n      R = candidate;\n      R.version = String(candidate.version || \"candidate-unversioned\");\n      rubricSource = \"override\";\n    }\n  } catch (e) {\n    rubricError = \"rubric_override is not valid JSON: \" + e.message;\n  }\n}\n\n// ---- Canonicalise the model's labels ------------------------------------\nconst ALIASES = {\n  seniority: { c_level: \"executive\", c_suite: \"executive\", cxo: \"executive\", founder: \"executive\", owner: \"executive\", chief: \"executive\", vice_president: \"vp\", svp: \"vp\", evp: \"vp\", head: \"director\", head_of: \"director\", lead: \"manager\", individual_contributor: \"ic\", engineer: \"ic\", staff: \"ic\" },\n  decision_authority: { decision: \"decision_maker\", buyer: \"decision_maker\", economic_buyer: \"decision_maker\", evaluator: \"influencer\", recommender: \"influencer\", champion: \"influencer\", user: \"end_user\" },\n  budget_signal: { stated: \"explicit\", confirmed: \"explicit\", approved: \"explicit\", inferred: \"implied\", implicit: \"implied\", no_budget: \"none\" },\n  timeline: { asap: \"immediate\", urgent: \"immediate\", now: \"immediate\", next_quarter: \"this_quarter\", quarter: \"this_quarter\", year: \"this_year\", none: \"no_timeline\", no: \"no_timeline\" },\n  pain_specificity: { detailed: \"specific\", concrete: \"specific\", vague: \"general\", broad: \"general\" },\n  use_case_fit: { direct: \"core\", primary: \"core\", near: \"adjacent\", related: \"adjacent\", unrelated: \"out_of_scope\", off: \"out_of_scope\" }\n};\nconst BANDS = [\"1-10\", \"11-50\", \"51-200\", \"201-1000\", \"1000+\"];\n\nfunction slug(v) {\n  return String(v == null ? \"\" : v).trim().toLowerCase().replace(/[^a-z0-9+\\-]+/g, \"_\").replace(/^_+|_+$/g, \"\");\n}\nfunction bandFromCount(n) {\n  if (n <= 10) { return \"1-10\"; }\n  if (n <= 50) { return \"11-50\"; }\n  if (n <= 200) { return \"51-200\"; }\n  if (n <= 1000) { return \"201-1000\"; }\n  return \"1000+\";\n}\nfunction canonBand(raw) {\n  const t = String(raw == null ? \"\" : raw).trim().toLowerCase();\n  const compact = t.replace(/\\s+/g, \"\").replace(/employees?/g, \"\").replace(/people/g, \"\").replace(/staff/g, \"\").replace(/,/g, \"\");\n  if (BANDS.indexOf(compact) !== -1) { return compact; }\n  const range = compact.match(/^(\\d+)[-–](\\d+)$/);\n  if (range) { return bandFromCount(Number(range[2])); }\n  const plus = compact.match(/^(\\d+)\\+$/);\n  if (plus) { return bandFromCount(Number(plus[1]) + 1); }\n  const single = compact.match(/^(\\d+)$/);\n  if (single) { return bandFromCount(Number(single[1])); }\n  return compact ? compact : \"unknown\";\n}\n\nconst original = incoming.signals || {};\nconst s = JSON.parse(JSON.stringify(original));\nconst ENUM_FIELDS = [\"seniority\", \"decision_authority\", \"budget_signal\", \"timeline\", \"pain_specificity\", \"use_case_fit\"];\nconst renamed = [];\nENUM_FIELDS.forEach(function (f) {\n  const before = original[f];\n  if (before === undefined || before === null) { s[f] = \"unknown\"; return; }\n  const slugged = slug(before);\n  const mapped = (ALIASES[f] && ALIASES[f][slugged]) || slugged;\n  s[f] = mapped || \"unknown\";\n  if (s[f] !== String(before)) { renamed.push({ field: f, from: String(before), to: s[f] }); }\n});\nconst bandBefore = original.company_size_band;\ns.company_size_band = canonBand(bandBefore);\nif (bandBefore !== undefined && s.company_size_band !== String(bandBefore)) { renamed.push({ field: \"company_size_band\", from: String(bandBefore), to: s.company_size_band }); }\n\n// ---- Rubric ---------------------------------------------------------------\nfunction pick(map, value) {\n  const key = String(value || \"unknown\");\n  return (map && typeof map[key] === \"number\") ? map[key] : 0;\n}\n\nconst components = [];\nconst seniorityPts = pick(R.seniority, s.seniority);\nconst authorityPts = pick(R.authority, s.decision_authority);\nconst authorityMax = (R.seniority.executive || 0) + (R.authority.decision_maker || 0);\ncomponents.push({ component: \"authority\", points: seniorityPts + authorityPts, max: authorityMax, detail: \"seniority=\" + String(s.seniority || \"unknown\") + \" (\" + seniorityPts + \"), decision_authority=\" + String(s.decision_authority || \"unknown\") + \" (\" + authorityPts + \")\" });\n\nconst band = String(s.company_size_band || \"unknown\");\nconst bandIdx = BANDS.indexOf(band);\nlet sizePts = pick(R.size_points, \"unknown\");\nlet sizeDetail = \"company_size_band=\" + band + \" could not be read as a band\";\nif (bandIdx !== -1) {\n  const targets = icp.target_size_bands.map(function (b) { return BANDS.indexOf(b); }).filter(function (i) { return i !== -1; });\n  const inTarget = targets.indexOf(bandIdx) !== -1;\n  const adjacent = targets.some(function (t) { return Math.abs(t - bandIdx) === 1; });\n  sizePts = inTarget ? R.size_points.in_target : (adjacent ? R.size_points.adjacent : R.size_points.outside);\n  sizeDetail = \"company_size_band=\" + band + (inTarget ? \" is inside the ICP bands\" : (adjacent ? \" is one band outside the ICP\" : \" is well outside the ICP\"));\n}\ncomponents.push({ component: \"company_size_fit\", points: sizePts, max: R.size_points.in_target, detail: sizeDetail });\n\ncomponents.push({ component: \"budget\", points: pick(R.budget, s.budget_signal), max: R.budget.explicit, detail: \"budget_signal=\" + String(s.budget_signal || \"unknown\") });\ncomponents.push({ component: \"timeline\", points: pick(R.timeline, s.timeline), max: R.timeline.immediate, detail: \"timeline=\" + String(s.timeline || \"unknown\") });\ncomponents.push({ component: \"pain\", points: pick(R.pain, s.pain_specificity), max: R.pain.specific, detail: \"pain_specificity=\" + String(s.pain_specificity || \"unknown\") });\ncomponents.push({ component: \"use_case_fit\", points: pick(R.fit, s.use_case_fit), max: R.fit.core, detail: \"use_case_fit=\" + String(s.use_case_fit || \"unknown\") });\n\nconst base = components.reduce(function (a, c) { return a + c.points; }, 0);\nconst maxPossible = components.reduce(function (a, c) { return a + (c.max || 0); }, 0);\n\n// ---- Evidence grounding ---------------------------------------------------\nlet enrichmentText = \"\";\ntry { enrichmentText = String($(\"Capture Enrichment\").first().json.enrichment_text || \"\"); } catch (e) { }\nconst haystack = (req.lead_block + \"\\n\" + enrichmentText).toLowerCase();\nconst evidence = Array.isArray(s.evidence) ? s.evidence : [];\nconst unsupported = [];\nevidence.forEach(function (e) {\n  const quote = String((e && e.quote) || \"\").trim();\n  if (!quote) { return; }\n  if (haystack.indexOf(quote.toLowerCase()) === -1) { unsupported.push({ signal: (e && e.signal) || \"unknown\", quote: quote.slice(0, 200) }); }\n});\n\nconst ENUMS = [\"seniority\", \"decision_authority\", \"company_size_band\", \"budget_signal\", \"timeline\", \"use_case_fit\"];\nconst unknownCount = ENUMS.filter(function (k) { return String(s[k] || \"unknown\") === \"unknown\"; }).length;\nconst MAPS = { seniority: R.seniority, decision_authority: R.authority, budget_signal: R.budget, timeline: R.timeline, use_case_fit: R.fit };\nconst unreadable = ENUMS.filter(function (k) {\n  const v = String(s[k] || \"unknown\");\n  if (v === \"unknown\") { return false; }\n  if (k === \"company_size_band\") { return BANDS.indexOf(v) === -1; }\n  return typeof MAPS[k][v] !== \"number\";\n});\n\nconst modifiers = [];\nif (s.competitor_mentioned === true) { modifiers.push({ modifier: \"competitor_mentioned\", points: R.modifiers.competitor_mentioned, reason: \"an active evaluation is in progress\" }); }\nif (req.free_email) { modifiers.push({ modifier: \"consumer_email_domain\", points: R.modifiers.consumer_email_domain, reason: \"the lead used a free email provider rather than a company address\" }); }\nif (unsupported.length) { modifiers.push({ modifier: \"unsupported_evidence\", points: R.modifiers.unsupported_evidence, reason: unsupported.length + \" quoted piece(s) of evidence do not appear in the lead or the enrichment\" }); }\nif (incoming.parse_error) { modifiers.push({ modifier: \"signal_parse_failure\", points: R.modifiers.signal_parse_failure, reason: incoming.parse_error }); }\n\nconst modifierTotal = modifiers.reduce(function (a, m) { return a + m.points; }, 0);\n\n// Normalised to 100 so a candidate rubric with different weights stays\n// comparable against the production one.\nconst rawScore = base + modifierTotal;\nlet score = maxPossible > 0 ? Math.round((rawScore / maxPossible) * 100) : 0;\nscore = Math.max(0, Math.min(100, score));\n\nconst caps = [];\nif (unknownCount >= R.caps.unknown_threshold) { caps.push({ cap: R.caps.unknown_cap, reason: unknownCount + \" of \" + ENUMS.length + \" signals are unknown, so the lead is too thin to rank highly\" }); }\nif (String(s.use_case_fit) === \"out_of_scope\") { caps.push({ cap: R.caps.out_of_scope_cap, reason: \"the stated use case is outside the ICP\" }); }\nif (incoming.parse_error) { caps.push({ cap: R.caps.parse_error_cap, reason: \"the signals could not be parsed, so the score is not trustworthy\" }); }\nif (unreadable.length) { caps.push({ cap: R.caps.unreadable_cap, reason: unreadable.length + \" signal(s) came back outside the agreed value set: \" + unreadable.join(\", \") }); }\ncaps.forEach(function (c) { if (score > c.cap) { score = c.cap; } });\n\nconst disqualified = String(s.use_case_fit) === \"out_of_scope\";\nlet tier = \"DISQUALIFIED\";\nif (!disqualified) {\n  if (score >= R.tiers.hot) { tier = \"HOT\"; }\n  else if (score >= R.tiers.warm) { tier = \"WARM\"; }\n  else if (score >= R.tiers.cold) { tier = \"COLD\"; }\n}\n\nconst confidence = Math.round((1 - ((unknownCount + unreadable.length) / ENUMS.length)) * 100) / 100;\n\nreturn [{ json: {\n  signals: s,\n  signals_original: original,\n  canonicalised: renamed,\n  unreadable_signals: unreadable,\n  signals_source: incoming.signals_source,\n  signals_raw: incoming.signals_raw,\n  model_provider: incoming.model_provider,\n  model_latency_ms: incoming.model_latency_ms,\n  prompt_sha: incoming.prompt_sha,\n  parse_error: incoming.parse_error,\n  score: score,\n  base_score: base,\n  max_possible: maxPossible,\n  tier: tier,\n  confidence: Math.max(0, confidence),\n  unknown_signals: unknownCount,\n  components: components,\n  modifiers: modifiers,\n  caps_applied: caps,\n  unsupported_evidence: unsupported,\n  evidence_checked: evidence.length,\n  enrichment_used: enrichmentText.length > 0,\n  rubric_version: R.version,\n  rubric_source: rubricSource,\n  rubric_error: rubricError\n} }];\n"
+      }
+    },
+    {
+      "id": "4b51dbb8-2c27-454e-9e75-f23a744656f9",
+      "name": "Enrich Company?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        272
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "en1",
+              "leftValue": "={{ $(\"Normalise Lead\").first().json.enrich }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "0459cd2b-def6-4be4-bd27-23067b4ebf58",
+      "name": "Scrape Company Site",
+      "type": "@mendable/n8n-nodes-firecrawl.firecrawl",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        176
+      ],
+      "parameters": {
+        "resource": "Scraping",
+        "operation": "scrape",
+        "url": "={{ $(\"Normalise Lead\").first().json.company_url }}",
+        "timeout": 30000
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "firecrawlApi": {
+          "name": "Firecrawl API"
+        }
+      }
+    },
+    {
+      "id": "6f7d1cb5-4a93-491b-9529-511047d14f16",
+      "name": "Capture Enrichment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        176
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const raw = $input.first().json || {};\nconst data = raw.data || raw;\nconst text = String(data.markdown || data.summary || data.content || data.html || \"\").trim();\nconst failed = !!raw.error || !text;\nreturn [{ json: {\n  enrichment_text: failed ? \"\" : text.slice(0, 6000),\n  enrichment_source: failed ? \"none\" : \"firecrawl\",\n  enrichment_url: $(\"Normalise Lead\").first().json.company_url,\n  enrichment_error: raw.error ? String(raw.error.message || raw.error) : (text ? \"\" : \"the scrape returned no readable text\"),\n  enrichment_block: failed ? \"(no enrichment: \" + (raw.error ? String(raw.error.message || raw.error) : \"the scrape returned no readable text\") + \")\" : text.slice(0, 6000)\n} }];\n"
+      }
+    },
+    {
+      "id": "7b2a5552-c3ac-4054-a295-5279a8aff996",
+      "name": "Get Qualifier Prompt (08)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1568,
+        272
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 08 GitOps Prompt Management"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "prompt_id": "revenue/lead-qualifier",
+            "variables": "={{ JSON.stringify({ lead_block: $(\"Normalise Lead\").first().json.lead_block, enrichment_block: $json.enrichment_block, icp_block: $(\"Normalise Lead\").first().json.icp_block }) }}",
+            "ref": "",
+            "owner": "",
+            "repo": "",
+            "strict": "true",
+            "source_workflow": "12-lead-qualification"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "e604389e-2876-42d8-89dd-84c8b5cf7071",
+      "name": "Skip Enrichment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        368
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise Lead\").first().json;\nreturn [{ json: {\n  enrichment_text: \"\",\n  enrichment_source: \"none\",\n  enrichment_url: \"\",\n  enrichment_error: \"\",\n  enrichment_block: \"(no enrichment: \" + (req.enrich_skipped_reason || \"enrichment not requested\") + \")\"\n} }];\n"
+      }
+    },
+    {
+      "id": "7dcdcec1-2119-4ebc-8e71-0a5fa6255992",
+      "name": "Reject Unqualifiable Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        368
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise Lead\").first().json;\nreturn [{ json: {\n  lead_key: req.lead_key,\n  email: req.email,\n  company_domain: req.company_domain,\n  tenant_id: req.tenant_id,\n  trace_id: req.trace_id,\n  score: 0,\n  tier: \"DISQUALIFIED\",\n  confidence: 0,\n  recommended_action: \"discard\",\n  outreach_allowed: false,\n  outreach_block_reason: \"the lead could not be read\",\n  requires_human_review: false,\n  review_reasons: [],\n  signals: {},\n  scoring: { rubric_version: \"not_run\", rubric_source: \"none\", rubric_error: \"\", base_score: 0, max_possible: 0, components: [], modifiers: [], caps_applied: [], unknown_signals: 6, unreadable_signals: [], canonicalised: [] },\n  grounding: { evidence_checked: 0, unsupported_evidence: [], enrichment_used: false },\n  verification: { verified: false, score: null, mode: \"not_run\", issues: req.validation_errors },\n  provenance: { signals_source: \"none\", model_provider: null, prompt_sha: null, source_workflow: req.source_workflow, execution_id: $execution.id },\n  latency_ms: Date.now() - Number(req.started_at_ms)\n} }];\n"
+      }
+    },
+    {
+      "id": "c1784e36-2bfa-4d36-94af-951ff31875b9",
+      "name": "Extract Signals (02 Router)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1792,
+        272
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 02 Intelligent Model Router"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "task_type": "extraction",
+            "objective": "balanced",
+            "privacy": "sensitive",
+            "input": "={{ ($json.json ? $json.json.prompt : $json.prompt) || (\"Extract qualification signals from this lead as raw JSON.\\n\\nLEAD\\n\" + $(\"Normalise Lead\").first().json.lead_block + \"\\n\\nIDEAL CUSTOMER PROFILE\\n\" + $(\"Normalise Lead\").first().json.icp_block + \"\\n\\nReturn exactly these keys, using ONLY the listed values:\\n  seniority: executive | vp | director | manager | ic | unknown\\n  decision_authority: decision_maker | influencer | end_user | unknown\\n  company_size_band: 1-10 | 11-50 | 51-200 | 201-1000 | 1000+ | unknown\\n  budget_signal: explicit | implied | none | unknown\\n  timeline: immediate | this_quarter | this_year | no_timeline | unknown\\n  pain_specificity: specific | general | none\\n  use_case_fit: core | adjacent | out_of_scope | unknown\\n  competitor_mentioned: true | false\\n  evidence: array of {signal, quote} where quote is copied verbatim from LEAD\\n  notes: one sentence\\n\\nNever invent a value outside these sets and never paraphrase a quote. Use unknown when the lead does not say. A stated figure is explicit budget; intent without a figure is implied.\") }}",
+            "system_prompt": "You output raw JSON only. No markdown fences, no prose.",
+            "force_provider": "",
+            "source_workflow": "12-lead-qualification",
+            "run_label": "={{ $(\"Normalise Lead\").first().json.lead_key }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "3edb2aa5-c8f6-4f4b-856c-2143a5edbc8e",
+      "name": "Parse Signals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2016,
+        272
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const raw = $input.first().json;\nconst res = (raw && raw.json) ? raw.json : raw;\nlet promptSha = null;\ntry { const p = $(\"Get Qualifier Prompt (08)\").first().json; promptSha = (p.json ? p.json.sha : p.sha) || null; } catch (e) { }\n\nconst text = String(res.output || \"\").trim();\nlet signals = {};\nlet parseError = \"\";\n\nconst unfenced = text.replace(/^```[a-z]*\\s*/i, \"\").replace(/```\\s*$/, \"\").trim();\nconst start = unfenced.indexOf(\"{\");\nconst end = unfenced.lastIndexOf(\"}\");\nconst candidate = (start !== -1 && end > start) ? unfenced.slice(start, end + 1) : unfenced;\ntry { signals = JSON.parse(candidate); }\ncatch (e) { parseError = \"model output was not parseable JSON: \" + e.message; }\nif (!signals || typeof signals !== \"object\") { signals = {}; }\n\nreturn [{ json: {\n  signals: signals,\n  signals_source: \"model\",\n  signals_raw: text.slice(0, 4000),\n  model_provider: res.selected_provider || null,\n  model_latency_ms: Number(res.latency_ms || 0),\n  model_cost_usd: Number(res.estimated_cost_usd || 0),\n  prompt_sha: promptSha,\n  parse_error: parseError\n} }];\n"
+      }
+    },
+    {
+      "id": "704ba093-d846-4187-8b5d-4374f593dd28",
+      "name": "Verify Signals (09)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2464,
+        176
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 09 AI Output Verification Layer"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ai_output": "={{ JSON.stringify($json.signals) }}",
+            "sources": "={{ JSON.stringify([{ id: \"LEAD\", text: $(\"Normalise Lead\").first().json.lead_block }]) }}",
+            "json_schema": "{\"type\":\"object\",\"required\":[\"seniority\",\"decision_authority\",\"company_size_band\",\"budget_signal\",\"timeline\",\"pain_specificity\",\"use_case_fit\"],\"properties\":{\"seniority\":{\"type\":\"string\",\"pattern\":\"^(executive|vp|director|manager|ic|unknown)$\"},\"decision_authority\":{\"type\":\"string\",\"pattern\":\"^(decision_maker|influencer|end_user|unknown)$\"},\"company_size_band\":{\"type\":\"string\",\"pattern\":\"^(1-10|11-50|51-200|201-1000|1000\\\\+|unknown)$\"},\"budget_signal\":{\"type\":\"string\",\"pattern\":\"^(explicit|implied|none|unknown)$\"},\"timeline\":{\"type\":\"string\",\"pattern\":\"^(immediate|this_quarter|this_year|no_timeline|unknown)$\"},\"pain_specificity\":{\"type\":\"string\",\"pattern\":\"^(specific|general|none|unknown)$\"},\"use_case_fit\":{\"type\":\"string\",\"pattern\":\"^(core|adjacent|out_of_scope|unknown)$\"},\"competitor_mentioned\":{\"type\":[\"boolean\",\"null\"]},\"notes\":{\"type\":[\"string\",\"null\"]}}}",
+            "required_fields": "seniority,decision_authority,company_size_band,budget_signal,timeline,pain_specificity,use_case_fit",
+            "business_rules": "[]",
+            "mode": "={{ $(\"Normalise Lead\").first().json.verification_mode }}",
+            "confidence_threshold": "0.8",
+            "source_workflow": "12-lead-qualification"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "70ea6abc-16ad-461b-967b-a10f1abbb78a",
+      "name": "Assemble Qualification Verdict",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2688,
+        176
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise Lead\").first().json;\nconst scored = $(\"Score Against Rubric\").first().json;\nconst raw = $input.first().json;\nconst v = (raw && raw.json) ? raw.json : raw;\n\nconst schemaClean = v.verified === true;\nconst fabricated = (scored.unsupported_evidence || []).length > 0;\nconst unreadable = (scored.unreadable_signals || []).length > 0;\nconst thin = scored.confidence < 0.5;\n\nconst reviewReasons = [];\nif (!schemaClean) { reviewReasons.push(\"the extracted signals failed verification (\" + ((v.issues || []).length) + \" issue(s))\"); }\nif (fabricated) { reviewReasons.push(scored.unsupported_evidence.length + \" quoted piece(s) of evidence are not present in the source text\"); }\nif (unreadable) { reviewReasons.push(\"signals outside the agreed value set: \" + scored.unreadable_signals.join(\", \")); }\nif (scored.tier === \"HOT\" && thin) { reviewReasons.push(\"a HOT tier on confidence \" + scored.confidence + \" is not safe to act on unreviewed\"); }\nif (scored.parse_error) { reviewReasons.push(scored.parse_error); }\nif (scored.rubric_error) { reviewReasons.push(scored.rubric_error + \" - production rubric \" + scored.rubric_version + \" was used instead\"); }\n\nlet action = \"discard\";\nif (scored.tier === \"HOT\") { action = \"route_to_sales\"; }\nelse if (scored.tier === \"WARM\") { action = \"nurture\"; }\nelse if (scored.tier === \"COLD\") { action = \"hold\"; }\nif (reviewReasons.length && action === \"route_to_sales\") { action = \"route_to_sales_after_review\"; }\n\nconst outreachAllowed = scored.score >= req.icp.min_score_for_outreach && scored.tier !== \"DISQUALIFIED\" && !fabricated && !unreadable;\n\nreturn [{ json: {\n  lead_key: req.lead_key,\n  email: req.email,\n  company_domain: req.company_domain,\n  tenant_id: req.tenant_id,\n  trace_id: req.trace_id,\n  score: scored.score,\n  tier: scored.tier,\n  confidence: scored.confidence,\n  recommended_action: action,\n  outreach_allowed: outreachAllowed,\n  outreach_block_reason: outreachAllowed ? \"\" : (fabricated ? \"unsupported evidence\" : (unreadable ? \"signals outside the agreed value set\" : (scored.tier === \"DISQUALIFIED\" ? \"disqualified\" : \"score \" + scored.score + \" is below the ICP outreach floor of \" + req.icp.min_score_for_outreach))),\n  requires_human_review: reviewReasons.length > 0,\n  review_reasons: reviewReasons,\n  signals: scored.signals,\n  scoring: {\n    rubric_version: scored.rubric_version,\n    rubric_source: scored.rubric_source,\n    rubric_error: scored.rubric_error,\n    base_score: scored.base_score,\n    max_possible: scored.max_possible,\n    components: scored.components,\n    modifiers: scored.modifiers,\n    caps_applied: scored.caps_applied,\n    unknown_signals: scored.unknown_signals,\n    unreadable_signals: scored.unreadable_signals,\n    canonicalised: scored.canonicalised\n  },\n  grounding: {\n    evidence_checked: scored.evidence_checked,\n    unsupported_evidence: scored.unsupported_evidence,\n    enrichment_used: scored.enrichment_used\n  },\n  verification: {\n    verified: v.verified === true,\n    score: v.score === undefined ? null : v.score,\n    mode: v.mode || req.verification_mode,\n    issues: v.issues || []\n  },\n  provenance: {\n    signals_source: scored.signals_source,\n    model_provider: scored.model_provider,\n    prompt_sha: scored.prompt_sha,\n    source_workflow: req.source_workflow,\n    execution_id: $execution.id\n  },\n  latency_ms: Date.now() - Number(req.started_at_ms)\n} }];\n"
+      }
+    },
+    {
+      "id": "b8cd34a1-ccb2-4ed3-85f4-b14a2420ae0f",
+      "name": "Sticky Note cc725ba5",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1280,
+        368
+      ],
+      "parameters": {
+        "content": "## The model does not score the lead\n\nThe model returns labels from a closed enum set and a quote for each one. This\nnode turns labels into points with fixed weights, so the same lead always gets\nthe same number and every point is traceable to a named component.\n\nIt also checks each quote against the text the model was given. A quote that is\nnot there is a fabrication: it costs 10 points and forces human review, rather\nthan quietly passing through as supporting evidence.",
+        "color": 3
+      }
+    },
+    {
+      "id": "4c8c0da0-73a6-4203-b79b-8994b724df07",
+      "name": "Test Suite Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -460,
+        1120
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "2a25f76e-6844-4cef-a576-96f89f9b4ec1",
+      "name": "Build Lead Fixtures",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        1120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Q01-Q08 supply signals directly, so the rubric is the only thing under test\n// and every expected score is an exact number. Q09 runs the real model.\n// Q10-Q11 exercise rubric overrides.\nfunction sig(o) {\n  const base = { seniority: \"unknown\", decision_authority: \"unknown\", company_size_band: \"unknown\", budget_signal: \"unknown\", timeline: \"unknown\", pain_specificity: \"unknown\", use_case_fit: \"unknown\", competitor_mentioned: false, evidence: [], notes: \"fixture\" };\n  return JSON.stringify(Object.assign(base, o));\n}\n\nconst HOT_LEAD = { email: \"ada@analytical.io\", first_name: \"Ada\", last_name: \"Lovelace\", job_title: \"VP of Engineering\", company_name: \"Analytical Engines\", message: \"We have 30k set aside and need this live this month.\" };\nconst HOT_SIGNALS = { seniority: \"executive\", decision_authority: \"decision_maker\", company_size_band: \"201-1000\", budget_signal: \"explicit\", timeline: \"immediate\", pain_specificity: \"specific\", use_case_fit: \"core\", evidence: [{ signal: \"budget_signal\", quote: \"We have 30k set aside\" }] };\nconst WARM_LEAD = { email: \"sam@midco.io\", job_title: \"Ops Manager\", message: \"Looking to automate onboarding this quarter.\" };\nconst WARM_SIGNALS = { seniority: \"manager\", decision_authority: \"influencer\", company_size_band: \"51-200\", budget_signal: \"implied\", timeline: \"this_quarter\", pain_specificity: \"general\", use_case_fit: \"adjacent\" };\n\n// A candidate rubric that only moves the tier thresholds. The score must not\n// move; the tier must. That separation is the whole point of versioning it.\nconst CANDIDATE_RUBRIC = JSON.stringify({\n  version: \"2.0.0-candidate\",\n  seniority: { executive: 12, vp: 11, director: 9, manager: 6, ic: 2, unknown: 0 },\n  authority: { decision_maker: 13, influencer: 8, end_user: 3, unknown: 0 },\n  budget: { explicit: 20, implied: 12, none: 2, unknown: 0 },\n  timeline: { immediate: 15, this_quarter: 12, this_year: 6, no_timeline: 2, unknown: 0 },\n  pain: { specific: 10, general: 5, none: 0, unknown: 0 },\n  fit: { core: 10, adjacent: 6, out_of_scope: 0, unknown: 0 },\n  size_points: { in_target: 20, adjacent: 12, outside: 4, unknown: 0 },\n  modifiers: { competitor_mentioned: 4, consumer_email_domain: -8, unsupported_evidence: -10, signal_parse_failure: -15 },\n  caps: { unknown_threshold: 4, unknown_cap: 45, out_of_scope_cap: 15, parse_error_cap: 40, unreadable_cap: 45 },\n  tiers: { hot: 60, warm: 40, cold: 20 }\n});\n\nconst fixtures = [\n  { case_id: \"Q01\", note: \"every signal at its best: a perfect 100\", lead: HOT_LEAD, signals: sig(HOT_SIGNALS), rubric: \"\", expect_score: 100, expect_tier: \"HOT\", expect_action: \"route_to_sales\", expect_outreach: true, expect_review: false, expect_modifier: \"\", expect_rubric: \"1.2.0\" },\n  { case_id: \"Q02\", note: \"a mid-market manager with an implied budget scores WARM\", lead: WARM_LEAD, signals: sig(WARM_SIGNALS), rubric: \"\", expect_score: 69, expect_tier: \"WARM\", expect_action: \"nurture\", expect_outreach: true, expect_review: false, expect_modifier: \"\", expect_rubric: \"1.2.0\" },\n  { case_id: \"Q03\", note: \"an IC at a small company with no budget scores COLD\", lead: { email: \"jo@tinyco.dev\", job_title: \"Engineer\", message: \"Just having a look around.\" }, signals: sig({ seniority: \"ic\", decision_authority: \"end_user\", company_size_band: \"11-50\", budget_signal: \"none\", timeline: \"this_year\", pain_specificity: \"general\", use_case_fit: \"adjacent\" }), rubric: \"\", expect_score: 36, expect_tier: \"COLD\", expect_action: \"hold\", expect_outreach: false, expect_review: false, expect_modifier: \"\", expect_rubric: \"1.2.0\" },\n  { case_id: \"Q04\", note: \"a perfect lead for the wrong product is still disqualified\", lead: { email: \"rex@bigcorp.com\", job_title: \"CTO\", message: \"We need a payroll system for 400 staff, budget approved, starting now.\" }, signals: sig({ seniority: \"executive\", decision_authority: \"decision_maker\", company_size_band: \"201-1000\", budget_signal: \"explicit\", timeline: \"immediate\", pain_specificity: \"specific\", use_case_fit: \"out_of_scope\" }), rubric: \"\", expect_score: 15, expect_tier: \"DISQUALIFIED\", expect_action: \"discard\", expect_outreach: false, expect_review: false, expect_modifier: \"\", expect_rubric: \"1.2.0\" },\n  { case_id: \"Q05\", note: \"a lead that says nothing cannot score\", lead: { email: \"anon@unknownco.com\", message: \"hi\" }, signals: sig({}), rubric: \"\", expect_score: 0, expect_tier: \"DISQUALIFIED\", expect_action: \"discard\", expect_outreach: false, expect_review: false, expect_modifier: \"\", expect_rubric: \"1.2.0\" },\n  { case_id: \"Q06\", note: \"a quote that is not in the lead costs points and forces review\", lead: HOT_LEAD, signals: sig(Object.assign({}, HOT_SIGNALS, { evidence: [{ signal: \"budget_signal\", quote: \"we signed a 500k contract last week\" }] })), rubric: \"\", expect_score: 90, expect_tier: \"HOT\", expect_action: \"route_to_sales_after_review\", expect_outreach: false, expect_review: true, expect_modifier: \"unsupported_evidence\", expect_rubric: \"1.2.0\" },\n  { case_id: \"Q07\", note: \"a lead with no email is rejected before any model call\", lead: { first_name: \"Nobody\", message: \"call me\" }, signals: \"\", rubric: \"\", expect_score: 0, expect_tier: \"DISQUALIFIED\", expect_action: \"discard\", expect_outreach: false, expect_review: false, expect_modifier: \"\", expect_rubric: \"not_run\" },\n  { case_id: \"Q08\", note: \"a consumer email address costs the same lead 8 points\", lead: Object.assign({}, HOT_LEAD, { email: \"ada.lovelace@gmail.com\" }), signals: sig(HOT_SIGNALS), rubric: \"\", expect_score: 92, expect_tier: \"HOT\", expect_action: \"route_to_sales\", expect_outreach: true, expect_review: false, expect_modifier: \"consumer_email_domain\", expect_rubric: \"1.2.0\" },\n  { case_id: \"Q09\", note: \"live: the real model extracts signals, structure only is asserted\", lead: HOT_LEAD, signals: \"\", rubric: \"\", expect_score: null, expect_tier: null, expect_action: null, expect_outreach: null, expect_review: null, expect_modifier: \"\", expect_rubric: \"1.2.0\" },\n  { case_id: \"Q10\", note: \"candidate rubric moves the tier threshold: same score, different tier\", lead: WARM_LEAD, signals: sig(WARM_SIGNALS), rubric: CANDIDATE_RUBRIC, expect_score: 69, expect_tier: \"HOT\", expect_action: \"route_to_sales\", expect_outreach: true, expect_review: false, expect_modifier: \"\", expect_rubric: \"2.0.0-candidate\" },\n  { case_id: \"Q11\", note: \"a malformed candidate rubric cannot corrupt production scoring\", lead: WARM_LEAD, signals: sig(WARM_SIGNALS), rubric: \"{not valid json\", expect_score: 69, expect_tier: \"WARM\", expect_action: \"nurture\", expect_outreach: true, expect_review: true, expect_modifier: \"\", expect_rubric: \"1.2.0\" }\n];\n\nreturn fixtures.map(function (f) {\n  return { json: {\n    case_id: f.case_id,\n    note: f.note,\n    lead: JSON.stringify(f.lead),\n    icp: \"\",\n    enrich: \"false\",\n    signals_override: f.signals,\n    rubric_override: f.rubric,\n    verification_mode: \"deterministic_only\",\n    tenant_id: \"acme\",\n    trace_id: \"trace-\" + $execution.id + \"-\" + f.case_id,\n    source_workflow: \"12-test-suite\",\n    expect_score: f.expect_score,\n    expect_tier: f.expect_tier,\n    expect_action: f.expect_action,\n    expect_outreach: f.expect_outreach,\n    expect_review: f.expect_review,\n    expect_modifier: f.expect_modifier,\n    expect_rubric: f.expect_rubric\n  } };\n});\n"
+      }
+    },
+    {
+      "id": "e3710145-712a-43f4-80b4-b3ac335f0891",
+      "name": "Lead Fixture Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -20,
+        1120
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "e2b70348-496c-41c3-9afe-d8bb43362a21",
+      "name": "Run Lead Fixture",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        220,
+        1240
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 12 Lead Qualification Agent"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead": "={{ $json.lead }}",
+            "icp": "={{ $json.icp }}",
+            "enrich": "={{ $json.enrich }}",
+            "signals_override": "={{ $json.signals_override }}",
+            "rubric_override": "={{ $json.rubric_override }}",
+            "verification_mode": "={{ $json.verification_mode }}",
+            "tenant_id": "={{ $json.tenant_id }}",
+            "trace_id": "={{ $json.trace_id }}",
+            "source_workflow": "={{ $json.source_workflow }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "6b324255-e70c-49d0-abdd-66aa48678b48",
+      "name": "Slim Lead Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        1240
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const raw = $input.first().json;\nconst r = (raw && raw.json) ? raw.json : raw;\nconst fx = $(\"Lead Fixture Loop\").first().json;\nconst modifierNames = ((r.scoring || {}).modifiers || []).map(function (m) { return m.modifier; });\nreturn [{ json: {\n  case_id: fx.case_id,\n  note: fx.note,\n  expect_score: fx.expect_score,\n  expect_tier: fx.expect_tier,\n  expect_action: fx.expect_action,\n  expect_outreach: fx.expect_outreach,\n  expect_review: fx.expect_review,\n  expect_modifier: fx.expect_modifier,\n  expect_rubric: fx.expect_rubric,\n  actual_score: r.score,\n  actual_tier: r.tier,\n  actual_action: r.recommended_action,\n  actual_outreach: r.outreach_allowed,\n  actual_review: r.requires_human_review,\n  actual_rubric: (r.scoring || {}).rubric_version,\n  rubric_source: (r.scoring || {}).rubric_source,\n  rubric_error: (r.scoring || {}).rubric_error,\n  tenant_id: r.tenant_id,\n  trace_id: r.trace_id,\n  modifiers: modifierNames,\n  confidence: r.confidence,\n  signals_source: (r.provenance || {}).signals_source,\n  model_provider: (r.provenance || {}).model_provider,\n  verified: (r.verification || {}).verified,\n  unsupported_evidence: ((r.grounding || {}).unsupported_evidence || []).length,\n  unreadable_signals: (r.scoring || {}).unreadable_signals || [],\n  canonicalised: (r.scoring || {}).canonicalised || [],\n  latency_ms: r.latency_ms\n} }];\n"
+      }
+    },
+    {
+      "id": "579fbca0-8f70-4437-b11b-701ea06c60e9",
+      "name": "Assert Lead Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        1000
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map(function (i) { return i.json; });\nconst TIERS = [\"HOT\", \"WARM\", \"COLD\", \"DISQUALIFIED\"];\nconst byCase = {};\nrows.forEach(function (r) { byCase[r.case_id] = r; });\n\nconst cases = rows.map(function (r) {\n  const checks = [];\n  if (r.expect_score === null) {\n    checks.push({ name: \"score_in_range\", pass: typeof r.actual_score === \"number\" && r.actual_score >= 0 && r.actual_score <= 100, expected: \"0..100\", actual: r.actual_score });\n    checks.push({ name: \"tier_known\", pass: TIERS.indexOf(r.actual_tier) !== -1, expected: TIERS.join(\"|\"), actual: r.actual_tier });\n    checks.push({ name: \"signals_from_model\", pass: r.signals_source === \"model\", expected: \"model\", actual: r.signals_source });\n    checks.push({ name: \"provider_recorded\", pass: !!r.model_provider, expected: \"a provider name\", actual: r.model_provider });\n    checks.push({ name: \"labels_readable\", pass: (r.unreadable_signals || []).length === 0, expected: \"every label inside the agreed value set\", actual: r.unreadable_signals });\n  } else {\n    checks.push({ name: \"score\", pass: r.actual_score === r.expect_score, expected: r.expect_score, actual: r.actual_score });\n    checks.push({ name: \"tier\", pass: r.actual_tier === r.expect_tier, expected: r.expect_tier, actual: r.actual_tier });\n    checks.push({ name: \"recommended_action\", pass: r.actual_action === r.expect_action, expected: r.expect_action, actual: r.actual_action });\n    checks.push({ name: \"outreach_allowed\", pass: r.actual_outreach === r.expect_outreach, expected: r.expect_outreach, actual: r.actual_outreach });\n    checks.push({ name: \"requires_human_review\", pass: r.actual_review === r.expect_review, expected: r.expect_review, actual: r.actual_review });\n    if (r.expect_modifier) {\n      checks.push({ name: \"modifier_applied\", pass: (r.modifiers || []).indexOf(r.expect_modifier) !== -1, expected: r.expect_modifier, actual: r.modifiers });\n    }\n  }\n  if (r.expect_rubric) {\n    checks.push({ name: \"rubric_version\", pass: r.actual_rubric === r.expect_rubric, expected: r.expect_rubric, actual: r.actual_rubric });\n  }\n  checks.push({ name: \"tenant_echoed\", pass: r.tenant_id === \"acme\", expected: \"acme\", actual: r.tenant_id });\n  const failed = checks.filter(function (c) { return !c.pass; });\n  return { case_id: r.case_id, note: r.note, passed: failed.length === 0, checks: checks, latency_ms: r.latency_ms };\n});\n\n// The A/B property lives across a pair of cases, not inside either one.\nconst q02 = byCase[\"Q02\"];\nconst q10 = byCase[\"Q10\"];\nif (q02 && q10) {\n  cases.push({\n    case_id: \"Q10x\",\n    note: \"rubric A/B: the candidate changes the tier without changing the score\",\n    passed: q02.actual_score === q10.actual_score && q02.actual_tier !== q10.actual_tier,\n    checks: [\n      { name: \"score_unchanged\", pass: q02.actual_score === q10.actual_score, expected: q02.actual_score, actual: q10.actual_score },\n      { name: \"tier_changed\", pass: q02.actual_tier !== q10.actual_tier, expected: \"WARM -> HOT\", actual: q02.actual_tier + \" -> \" + q10.actual_tier }\n    ],\n    latency_ms: q10.latency_ms\n  });\n}\n\nconst q11 = byCase[\"Q11\"];\nif (q02 && q11) {\n  cases.push({\n    case_id: \"Q11x\",\n    note: \"a malformed candidate rubric falls back to production and says so\",\n    passed: q11.actual_score === q02.actual_score && q11.rubric_source === \"default\" && !!q11.rubric_error,\n    checks: [\n      { name: \"score_matches_production\", pass: q11.actual_score === q02.actual_score, expected: q02.actual_score, actual: q11.actual_score },\n      { name: \"fell_back_to_default\", pass: q11.rubric_source === \"default\", expected: \"default\", actual: q11.rubric_source },\n      { name: \"error_surfaced\", pass: !!q11.rubric_error, expected: \"a rubric error\", actual: q11.rubric_error }\n    ],\n    latency_ms: q11.latency_ms\n  });\n}\n\nconst passed = cases.filter(function (c) { return c.passed; }).length;\nreturn [{ json: {\n  suite: \"12-lead-qualification\",\n  rubric_version: \"1.2.0\",\n  run_at: new Date().toISOString(),\n  execution_id: $execution.id,\n  total: cases.length,\n  passed: passed,\n  failed: cases.length - passed,\n  all_passed: passed === cases.length && cases.length === 13,\n  cases: cases\n} }];\n"
+      }
+    },
+    {
+      "id": "fa83daed-8526-4900-8ca1-c0b6ce9f9408",
+      "name": "Sticky Lead Suite",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        940
+      ],
+      "parameters": {
+        "color": 6,
+        "width": 760,
+        "height": 460,
+        "content": "## Rubric suite\n\nEight fixtures hand the rubric its signals directly, so each one asserts an exact\nscore rather than a range. Q04 is the interesting one: a CTO with an approved\nbudget and an immediate timeline still scores 15, because the use case is\noutside the ICP and no amount of buying intent overrides that.\n\nQ09 runs the real model end to end. Its score is not predictable, so it asserts\nstructure only: a score in range, a known tier, and a recorded provider."
+      }
+    }
+  ],
+  "connections": {
+    "Qualification Request": {
+      "main": [
+        [
+          {
+            "node": "Normalise Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise Lead": {
+      "main": [
+        [
+          {
+            "node": "Lead Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Valid?": {
+      "main": [
+        [
+          {
+            "node": "Signals Supplied?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject Unqualifiable Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signals Supplied?": {
+      "main": [
+        [
+          {
+            "node": "Use Supplied Signals",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Enrich Company?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Supplied Signals": {
+      "main": [
+        [
+          {
+            "node": "Score Against Rubric",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score Against Rubric": {
+      "main": [
+        [
+          {
+            "node": "Verify Signals (09)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrich Company?": {
+      "main": [
+        [
+          {
+            "node": "Scrape Company Site",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape Company Site": {
+      "main": [
+        [
+          {
+            "node": "Capture Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Enrichment": {
+      "main": [
+        [
+          {
+            "node": "Get Qualifier Prompt (08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Qualifier Prompt (08)": {
+      "main": [
+        [
+          {
+            "node": "Extract Signals (02 Router)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Enrichment": {
+      "main": [
+        [
+          {
+            "node": "Get Qualifier Prompt (08)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Signals (02 Router)": {
+      "main": [
+        [
+          {
+            "node": "Parse Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Signals": {
+      "main": [
+        [
+          {
+            "node": "Score Against Rubric",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Signals (09)": {
+      "main": [
+        [
+          {
+            "node": "Assemble Qualification Verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Suite Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build Lead Fixtures",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Lead Fixtures": {
+      "main": [
+        [
+          {
+            "node": "Lead Fixture Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Fixture Loop": {
+      "main": [
+        [
+          {
+            "node": "Assert Lead Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run Lead Fixture",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Lead Fixture": {
+      "main": [
+        [
+          {
+            "node": "Slim Lead Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slim Lead Result": {
+      "main": [
+        [
+          {
+            "node": "Lead Fixture Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "description": "Scores an inbound lead against a deterministic rubric. The model only returns labels from a closed enum set plus a verbatim quote per label; fixed weights turn labels into points, and every quote is checked against the source text before it can earn any.",
+  "nodeGroups": []
+}
