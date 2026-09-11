@@ -1309,8 +1309,5 @@
   },
   "tags": [],
   "description": "Parses an OpenAPI specification deterministically, plans an integration for a stated goal via the Model Router, grounds the plan against the real operation list, verifies it, sends write steps to Governance, and safely probes read-only endpoints.",
-  "versionCounter": 6,
-  "sourceWorkflowId": null,
-  "nodeGroups": [],
-  "activeVersion": null
+  "nodeGroups": []
 }

@@ -2,7 +2,7 @@
 
 > Natural-language analytics where the model never writes SQL: it emits a query spec validated against a metric and dimension registry, which a deterministic compiler turns into a parameterised read-only query.
 
-**Status:** LIVE VERIFIED · **22 nodes** (19 executable) · n8n workflow `xTdqxbplj0oXmByi` on the instance it was built and tested on
+**Status:** LIVE VERIFIED · **22 nodes** (19 executable)
 
 ## The problem
 
@@ -39,9 +39,10 @@ No model text ever reaches a query string. The worst a prompt injection can achi
 
 ## Verification
 
-- No recorded run in this folder.
+- **1 recorded run** — [`sample-output.json`](sample-output.json) (n8n execution `334`)
+  - Verbatim output of execution 334 on 2026-09-08 against the synthetic demo warehouse.
 
-Every figure above came from an execution on a live n8n instance. See [docs/TESTING.md](../../docs/TESTING.md) for how to reproduce them.
+Every figure came from a run on a live n8n instance; the linked files are the raw results.
 
 ## Connections required
 

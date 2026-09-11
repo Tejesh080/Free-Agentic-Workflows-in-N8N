@@ -1131,8 +1131,5 @@
   },
   "tags": [],
   "description": "Natural-language analytics over a read-only warehouse. The model never writes SQL: it emits a query spec that is validated against a metric and dimension registry and compiled deterministically, so arbitrary queries are impossible by construction.",
-  "versionCounter": 2,
-  "sourceWorkflowId": null,
-  "nodeGroups": [],
-  "activeVersion": null
+  "nodeGroups": []
 }

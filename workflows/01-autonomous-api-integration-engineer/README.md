@@ -2,7 +2,7 @@
 
 > Parses an OpenAPI specification deterministically, plans an integration, grounds every step against the real operation list, verifies the plan, gates write steps through Governance and safely probes read-only endpoints.
 
-**Status:** LIVE VERIFIED · **25 nodes** (22 executable) · n8n workflow `VM0yQx7HzjTElxgg` on the instance it was built and tested on
+**Status:** LIVE VERIFIED · **25 nodes** (22 executable)
 
 ## The problem
 
@@ -44,7 +44,7 @@ Only GET and HEAD are probed, only against the specification's own base URL, and
 - **5 recorded run(s)** — [`benchmarks/demo-runs-2026-09-08.json`](benchmarks/demo-runs-2026-09-08.json)
   - latency_ms values are MEASURED wall clock. estimated_cost_usd comes from the Model Router and is an ESTIMATE from configured list prices.
 
-Every figure above came from an execution on a live n8n instance. See [docs/TESTING.md](../../docs/TESTING.md) for how to reproduce them.
+Every figure came from a run on a live n8n instance; the linked files are the raw results.
 
 ## Connections required
 

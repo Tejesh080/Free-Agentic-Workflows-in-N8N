@@ -2,7 +2,7 @@
 
 > Deterministic LLM routing across Gemini, OpenAI and Anthropic with privacy and capability gates, cross-vendor fallback and measured latency telemetry.
 
-**Status:** LIVE VERIFIED · **25 nodes** (22 executable) · n8n workflow `CICW1oBcK0DYWvUc` on the instance it was built and tested on
+**Status:** LIVE VERIFIED · **25 nodes** (22 executable)
 
 ## The problem
 
@@ -36,7 +36,7 @@ Called by: **01**, **03**, **04**, **06**, **07**, **09**, **10**
 - **9 recorded run(s)** — [`benchmarks/provider-matrix-2026-09-08.json`](benchmarks/provider-matrix-2026-09-08.json)
   - latency_ms_* are MEASURED wall-clock times inside n8n and include network, provider queueing and retry time. estimated_cost_usd values are ESTIMATES from configured list prices with tokens approximated as characters/4; the n8n LangChain chain nodes do not surface provider-reported token counts.
 
-Every figure above came from an execution on a live n8n instance. See [docs/TESTING.md](../../docs/TESTING.md) for how to reproduce them.
+Every figure came from a run on a live n8n instance; the linked files are the raw results.
 
 ## Connections required
 

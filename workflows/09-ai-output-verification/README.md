@@ -2,7 +2,7 @@
 
 > Deterministic-first verification: JSON Schema, required fields, arithmetic business rules, citation existence and safety markers, then optional claim-level entailment.
 
-**Status:** LIVE VERIFIED · **19 nodes** (16 executable) · n8n workflow `vCn6THeEhjhhhxsy` on the instance it was built and tested on
+**Status:** LIVE VERIFIED · **19 nodes** (16 executable)
 
 ## The problem
 
@@ -35,7 +35,7 @@ The judge can move at most **40%** of the score, and only when it actually ran. 
 - **10/10 passed** — [`tests/results-2026-09-08.json`](tests/results-2026-09-08.json) (n8n execution `174`)
   - latency_ms_measured is MEASURED wall-clock time per verification call. F06 and F07 make a real model call through the Model Router; the other eight cases are fully deterministic and make no model call at all.
 
-Every figure above came from an execution on a live n8n instance. See [docs/TESTING.md](../../docs/TESTING.md) for how to reproduce them.
+Every figure came from a run on a live n8n instance; the linked files are the raw results.
 
 ## Connections required
 

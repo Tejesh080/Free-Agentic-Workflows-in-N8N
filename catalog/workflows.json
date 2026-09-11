@@ -1,5 +1,5 @@
 {
-  "$comment": "Machine-readable index of the repository. scripts/generate-catalog.py regenerates the derived fields from the workflow folders; the identity fields (number, folder, n8n_workflow_id, role, calls) are maintained here by hand because they describe intent, not file contents.",
+  "$comment": "Machine-readable index of the repository, maintained by hand. scripts/validate-workflows.py checks it against the workflow folders, scripts/generate-workflow-readmes.py renders the per-workflow READMEs from it, and scripts/export-workflows.py uses n8n_workflow_id to pull each workflow from the instance it was built on.",
   "repository": "https://github.com/Tejesh080/Free-Agentic-Workflows-in-N8N",
   "generated_at": "2026-09-08",
   "n8n": {

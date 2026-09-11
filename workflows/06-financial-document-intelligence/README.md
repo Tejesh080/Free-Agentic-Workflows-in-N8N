@@ -2,7 +2,7 @@
 
 > Invoice extraction with arithmetic reconciliation, duplicate fingerprinting against a ledger, an explicit exception taxonomy, verification and escalation to Governance.
 
-**Status:** LIVE VERIFIED · **25 nodes** (22 executable) · n8n workflow `1msPTQimtesoxhmm` on the instance it was built and tested on
+**Status:** LIVE VERIFIED · **25 nodes** (22 executable)
 
 ## The problem
 
@@ -37,7 +37,7 @@ The prompt explicitly tells the extractor **not** to correct a printed total tha
 - **12/12 passed** — [`tests/results-2026-09-08.json`](tests/results-2026-09-08.json) (n8n execution `262`)
   - All vendor names, invoice numbers and amounts are invented. Eleven cases supply a pre-parsed extraction so the reconciliation, duplicate and exception logic is exercised without model variance; I12 runs the real extraction path.
 
-Every figure above came from an execution on a live n8n instance. See [docs/TESTING.md](../../docs/TESTING.md) for how to reproduce them.
+Every figure came from a run on a live n8n instance; the linked files are the raw results.
 
 ## Connections required
 

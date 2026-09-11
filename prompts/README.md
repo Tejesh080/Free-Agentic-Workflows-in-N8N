@@ -17,7 +17,7 @@ came from, so every model call can be traced to an exact prompt version.
     ---
     Body text with {{objective}} placeholders.
 
-Rules enforced by `scripts/validate-prompts.py` and by CI:
+Rules enforced by `scripts/validate-prompts.py`:
 
 1. Front matter parses and contains id, version, description, variables, owner, updated.
 2. `id` matches the file path.

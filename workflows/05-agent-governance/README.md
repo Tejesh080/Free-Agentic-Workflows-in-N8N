@@ -2,7 +2,7 @@
 
 > Deterministic LOW/MEDIUM/HIGH/CRITICAL risk classification, policy validation, Telegram approval and deny-by-default for CRITICAL operations.
 
-**Status:** LIVE VERIFIED · **24 nodes** (21 executable) · n8n workflow `G3OIbtaw2z11zIxP` on the instance it was built and tested on
+**Status:** LIVE VERIFIED · **24 nodes** (21 executable)
 
 ## The problem
 
@@ -35,7 +35,7 @@ Levels can only ever be raised, never lowered. An unrecognised action type defau
 - **12/12 passed** — [`tests/results-2026-09-08.json`](tests/results-2026-09-08.json) (n8n execution `187`)
   - Risk classification, routing, policy validation and the deny-by-default rule are fully exercised. The Telegram approval leg is NOT exercised here; ledger rows from this suite carry decided_by='simulated:test-harness' so they can never be mistaken for real human approvals.
 
-Every figure above came from an execution on a live n8n instance. See [docs/TESTING.md](../../docs/TESTING.md) for how to reproduce them.
+Every figure came from a run on a live n8n instance; the linked files are the raw results.
 
 ## Connections required
 

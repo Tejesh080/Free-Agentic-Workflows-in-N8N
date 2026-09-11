@@ -2,7 +2,7 @@
 
 > Ingestion to grounded answer: chunking with metadata, embeddings, vector storage, metadata-filtered retrieval, deterministic hybrid reranking, citation-bound generation, verification and an explicit no-answer path.
 
-**Status:** LIVE VERIFIED · **27 nodes** (24 executable) · n8n workflow `BpvCMNOhjklm0YF5` on the instance it was built and tested on
+**Status:** LIVE VERIFIED · **27 nodes** (24 executable)
 
 ## The problem
 
@@ -38,7 +38,7 @@ Audience filtering is access control, applied before the model sees anything. Te
 - **5/5 passed** — [`tests/results-2026-09-08.json`](tests/results-2026-09-08.json) (n8n execution `377`)
   - R03 and R04 ask the SAME question with different audiences. That pairing is what makes the access-control result meaningful: proving a document is blocked only means something if you also prove it would otherwise have been returned.
 
-Every figure above came from an execution on a live n8n instance. See [docs/TESTING.md](../../docs/TESTING.md) for how to reproduce them.
+Every figure came from a run on a live n8n instance; the linked files are the raw results.
 
 ## Connections required
 

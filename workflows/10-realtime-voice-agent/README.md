@@ -2,7 +2,7 @@
 
 > Webhook to speech: transcription, intent classification against a closed tool registry, Governance for data-changing intents, verification, and speech synthesis, with per-stage latency measurement.
 
-**Status:** LIVE VERIFIED · **23 nodes** (20 executable) · n8n workflow `5Aup44P7oBr6Zolg` on the instance it was built and tested on
+**Status:** LIVE VERIFIED · **23 nodes** (20 executable)
 
 ## The problem
 
@@ -37,7 +37,7 @@ The tool surface is a closed registry: an invented intent name becomes `unsuppor
 - **2/2 passed** — [`tests/results-2026-09-08.json`](tests/results-2026-09-08.json)
   - latency_measured_ms is real per-stage wall clock. Transcription is near zero on these runs because they used the text-payload path; a real audio upload adds the speech-to-text call.
 
-Every figure above came from an execution on a live n8n instance. See [docs/TESTING.md](../../docs/TESTING.md) for how to reproduce them.
+Every figure came from a run on a live n8n instance; the linked files are the raw results.
 
 ## Connections required
 

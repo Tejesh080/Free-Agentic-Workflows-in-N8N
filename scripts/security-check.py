@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Secret and credential-leak scanner for this repository.
 
-Runs before every commit and in CI (.github/workflows/security.yml).
 Exits non-zero when anything that must never be published is found.
 
 What it looks for
@@ -173,16 +172,30 @@ def scan_workflow_json(rel: str, text: str) -> list[dict]:
                          "severity": "high",
                          "match": "meta.instanceId identifies a specific n8n instance"})
 
-    for nodeobj in data.get("nodes") or []:
-        if not isinstance(nodeobj, dict):
-            continue
-        for ctype, cref in (nodeobj.get("credentials") or {}).items():
-            if isinstance(cref, dict) and cref.get("id"):
-                findings.append({
-                    "file": rel, "line": 0, "rule": "credential_id_reference",
-                    "severity": "critical",
-                    "match": f"node '{nodeobj.get('name')}' credential '{ctype}' carries an instance id",
-                })
+    if data.get("activeVersion"):
+        findings.append({"file": rel, "line": 0, "rule": "server_version_block",
+                         "severity": "critical",
+                         "match": "activeVersion present - holds a second, unsanitised copy of every node"})
+
+    # Walk the WHOLE document, not just data["nodes"]. A credential id nested in a
+    # server-side block is exactly as published as one in the node list.
+    def walk(value, path: str) -> None:
+        if isinstance(value, dict):
+            for ctype, cref in (value.get("credentials") or {}).items():
+                if isinstance(cref, dict) and cref.get("id"):
+                    findings.append({
+                        "file": rel, "line": 0, "rule": "credential_id_reference",
+                        "severity": "critical",
+                        "match": f"{path or 'root'} node '{value.get('name')}' "
+                                 f"credential '{ctype}' carries an instance id",
+                    })
+            for k, v in value.items():
+                walk(v, f"{path}.{k}" if path else k)
+        elif isinstance(value, list):
+            for v in value:
+                walk(v, path)
+
+    walk(data, "")
     return findings
 
 

@@ -2,7 +2,7 @@
 
 > Plans a question into sub-questions, searches the live web, deduplicates evidence by URL and content shingles, synthesises a cited report, and verifies every claim against the retrieved sources.
 
-**Status:** LIVE VERIFIED · **21 nodes** (18 executable) · n8n workflow `eaFjl41WOLWVwJqR` on the instance it was built and tested on
+**Status:** LIVE VERIFIED · **21 nodes** (18 executable)
 
 ## The problem
 
@@ -36,7 +36,7 @@ If every search returns nothing the agent stops and reports a gap. It never writ
 - **2 recorded run(s)** — [`tests/results-2026-09-08.json`](tests/results-2026-09-08.json)
   - Live web results change over time, so the exact sources and figures will differ on a re-run. What is asserted here is structural: sources were retrieved and deduplicated, the report cited only real markers, and every claim was checked against the retrieved evidence.
 
-Every figure above came from an execution on a live n8n instance. See [docs/TESTING.md](../../docs/TESTING.md) for how to reproduce them.
+Every figure came from a run on a live n8n instance; the linked files are the raw results.
 
 ## Connections required
 

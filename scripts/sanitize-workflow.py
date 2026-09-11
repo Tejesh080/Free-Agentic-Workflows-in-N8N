@@ -36,7 +36,13 @@ from pathlib import Path
 
 DROP_TOP = ["id", "meta", "pinData", "versionId", "active", "createdAt", "updatedAt",
             "shared", "homeProject", "triggerCount", "staticData", "isArchived",
-            "scopes", "activeVersionId", "parentFolderId"]
+            "scopes", "activeVersionId", "parentFolderId",
+            # activeVersion is server-side publish state. It carries a second,
+            # UNSANITISED copy of every node - live workflow ids, data table ids,
+            # webhook ids and credential ids - plus the author's name, n8n user id
+            # and publish history. The importer never reads it (it POSTs only name,
+            # nodes, connections and settings), so it is dropped outright.
+            "activeVersion", "versionCounter", "sourceWorkflowId"]
 
 SUBWORKFLOW_TYPES = {"n8n-nodes-base.executeWorkflow", "@n8n/n8n-nodes-langchain.toolWorkflow"}
 DATATABLE_TYPES = {"n8n-nodes-base.dataTable", "n8n-nodes-base.dataTableTool"}

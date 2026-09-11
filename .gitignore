@@ -33,6 +33,10 @@ venv/
 dist/
 coverage/
 
+# Local build notes. Instance ids, project ids and a running to-do list -
+# useful while building, noise in a published repository.
+BUILD_STATE.md
+
 # Editors / OS
 .DS_Store
 Thumbs.db

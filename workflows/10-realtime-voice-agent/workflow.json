@@ -1202,8 +1202,5 @@
   },
   "tags": [],
   "description": "Webhook to speech: transcribe, classify intent, execute a restricted tool, gate risky intents through Governance, verify the reply, and speak it back. Every stage is timed separately so the latency budget is visible.",
-  "versionCounter": 1,
-  "sourceWorkflowId": null,
-  "nodeGroups": [],
-  "activeVersion": null
+  "nodeGroups": []
 }

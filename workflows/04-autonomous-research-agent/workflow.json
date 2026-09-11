@@ -1150,8 +1150,5 @@
   },
   "tags": [],
   "description": "Plans a research question into sub-questions, searches the live web, deduplicates evidence, synthesises a cited report through the Model Router, and verifies every claim against the collected sources. Returns explicit uncertainty rather than inventing cit",
-  "versionCounter": 2,
-  "sourceWorkflowId": null,
-  "nodeGroups": [],
-  "activeVersion": null
+  "nodeGroups": []
 }

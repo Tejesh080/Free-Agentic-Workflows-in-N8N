@@ -2,7 +2,7 @@
 
 > Fetches versioned prompts from GitHub at run time, validates declared variables, interpolates, and returns the blob SHA so every model call is traceable to exact prompt bytes.
 
-**Status:** LIVE VERIFIED · **12 nodes** (10 executable) · n8n workflow `aYVpA31jgNL0shma` on the instance it was built and tested on
+**Status:** LIVE VERIFIED · **12 nodes** (10 executable)
 
 ## The problem
 
@@ -35,7 +35,7 @@ In strict mode a prompt with an unfilled `{{placeholder}}` is refused rather tha
 - **7/7 passed** — [`tests/results-2026-09-08.json`](tests/results-2026-09-08.json) (n8n execution `200`)
   - latency_ms_measured includes the GitHub round trip. Cases that hit the local cache path (P02, P03, P07 reuse an already-fetched blob within the same GitHub edge cache window) are visibly faster; that is real, not smoothed.
 
-Every figure above came from an execution on a live n8n instance. See [docs/TESTING.md](../../docs/TESTING.md) for how to reproduce them.
+Every figure came from a run on a live n8n instance; the linked files are the raw results.
 
 ## Connections required
 

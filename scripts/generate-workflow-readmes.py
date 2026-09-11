@@ -212,6 +212,16 @@ def read_evidence(folder: Path) -> tuple[str, list[str]]:
                 lines.append(f"- [`{rel}`]({rel})")
             if data.get("note"):
                 lines.append(f"  - {data['note']}")
+
+    # A folder with no suite still has evidence if it captured a real run verbatim.
+    out = folder / "sample-output.json"
+    if not lines and out.exists():
+        data = json.loads(out.read_text(encoding="utf-8"))
+        exec_id = data.get("n8n_execution_id")
+        lines.append("- **1 recorded run** — [`sample-output.json`](sample-output.json)"
+                     + (f" (n8n execution `{exec_id}`)" if exec_id else ""))
+        if data.get("_note"):
+            lines.append(f"  - {data['_note']}")
     return headline, lines
 
 
@@ -231,8 +241,9 @@ def main() -> int:
         p = ["# " + num + " " + entry["name"], ""]
         p.append(f"> {entry['summary']}")
         p.append("")
-        p.append(f"**Status:** {entry['status']} · **{node_count} nodes** ({len(real_nodes)} executable) · "
-                 f"n8n workflow `{entry['n8n_workflow_id']}` on the instance it was built and tested on")
+        # The n8n workflow id stays in the catalog for export-workflows.py, but it is
+        # an identifier inside one private instance and means nothing to a reader here.
+        p.append(f"**Status:** {entry['status']} · **{node_count} nodes** ({len(real_nodes)} executable)")
         p.append("")
 
         p.append("## The problem")
@@ -285,11 +296,10 @@ def main() -> int:
         p.append("")
         if ev:
             p.extend(ev)
+            p.append("")
+            p.append("Every figure came from a run on a live n8n instance; the linked files are the raw results.")
         else:
             p.append("- No recorded run in this folder.")
-        p.append("")
-        p.append("Every figure above came from an execution on a live n8n instance. "
-                 "See [docs/TESTING.md](../../docs/TESTING.md) for how to reproduce them.")
         p.append("")
 
         p.append("## Connections required")
