@@ -11,6 +11,7 @@ import { authenticate, requireScope } from '@/lib/auth/request';
 import { withOrgContext } from '@/lib/db/client';
 import { ingestLead } from '@/lib/leads/ingest';
 import { callbackUrlFor, dispatchExecution } from '@/lib/n8n/dispatch';
+import { callbackTokenFor } from '@/lib/hmac';
 import { fail, internal, invalid, ok } from '@/lib/http';
 import { consumeIngestBudget, retryAfterSeconds } from '@/lib/rate-limit';
 import { LeadIngest, LeadListQuery, DispatchPayload } from '@/lib/schemas';
@@ -109,6 +110,12 @@ export async function POST(req: Request): Promise<Response> {
       dry_run: result.dryRun,
       allowed_actions: result.allowed,
       callback_url: callbackUrlFor(result.traceId),
+      // Derived, not stored, and different for every execution. The master
+      // secret never leaves this process.
+      callback_token: callbackTokenFor(
+        process.env.N8N_CALLBACK_SECRET ?? '',
+        result.executionId,
+      ),
     });
 
     const dispatched = await dispatchExecution(payload);

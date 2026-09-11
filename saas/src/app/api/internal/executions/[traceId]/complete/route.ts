@@ -4,21 +4,29 @@
  * The engine's only way to write back. The order of the checks below is the
  * security design, not an implementation detail:
  *
- *   1. Verify the signature over the raw bytes.  An unsigned or mis-signed
- *      request is refused before anything is looked up, so a probe cannot use
- *      this endpoint to discover which trace ids exist.
- *   2. Parse and validate the payload.
- *   3. Resolve the execution, and take the organization from the row we stored
+ *   1. Resolve the execution, and take the organization from the row we stored
  *      when we dispatched it. The payload's opinion about which organization it
  *      belongs to is not consulted, and the schema rejects it for carrying one.
- *   4. Record the nonce, then apply. Both inside one transaction, so a replay
- *      cannot interleave with the state change it is trying to duplicate.
+ *   2. Verify the signature, using the key derived from that execution's id.
+ *      An unknown trace and a bad signature produce the *same* 401 with the
+ *      same body, so resolving first does not turn this endpoint into an oracle
+ *      for which traces exist.
+ *   3. Record the nonce, then apply. Both inside one transaction under that
+ *      organization's context — so a replay cannot interleave with the state
+ *      change it is trying to duplicate, and every write is still checked by
+ *      row level security.
+ *
+ * Step 2 needs step 1 because the signing key is per-execution: see
+ * callbackTokenFor() for why that is worth the ordering constraint.
  */
-import { verifyRequest } from '@/lib/hmac';
+import { callbackTokenFor, verifyRequest } from '@/lib/hmac';
 import { withOrgContext, withResolver } from '@/lib/db/client';
 import { applyCompletion, systemPrincipal, type CallbackTarget } from '@/lib/executions/complete';
 import { CallbackPayload } from '@/lib/schemas';
-import { fail, internal, invalid, notFound, ok } from '@/lib/http';
+import { fail, internal, invalid, ok } from '@/lib/http';
+
+/** One response for every authentication failure, whatever the cause. */
+const REJECT = () => fail(401, 'unauthenticated', 'the callback could not be authenticated');
 
 export async function POST(
   req: Request,
@@ -27,36 +35,17 @@ export async function POST(
   const { traceId } = await ctx.params;
   const url = new URL(req.url);
 
+  const master = process.env.N8N_CALLBACK_SECRET;
+  if (!master) {
+    // Fail closed. A deployment with no callback secret accepts nothing.
+    console.error('callback rejected: N8N_CALLBACK_SECRET is not configured');
+    return REJECT();
+  }
+
   // Raw bytes. The digest must be taken over exactly what was signed; parsing
   // and re-serialising first is how a signature check passes while the handler
   // acts on something else.
   const raw = await req.text();
-
-  const verified = verifyRequest({
-    secret: process.env.N8N_CALLBACK_SECRET,
-    method: 'POST',
-    path: url.pathname,
-    body: raw,
-    headers: req.headers,
-  });
-  if (!verified.ok) {
-    if (verified.reason === 'no_secret') {
-      console.error('callback rejected: N8N_CALLBACK_SECRET is not configured');
-    }
-    // One status and one message for every failure mode.
-    return fail(401, 'unauthenticated', 'the callback signature is not valid');
-  }
-
-  let parsedBody: unknown;
-  try {
-    parsedBody = JSON.parse(raw);
-  } catch {
-    return invalid('body must be JSON');
-  }
-  const payload = CallbackPayload.safeParse(parsedBody);
-  if (!payload.success) {
-    return invalid('the callback payload is not valid', payload.error.issues);
-  }
 
   try {
     const rows = await withResolver((tx) =>
@@ -74,7 +63,28 @@ export async function POST(
       ),
     );
     const row = rows[0];
-    if (!row) return notFound();
+    if (!row) return REJECT();
+
+    const verified = verifyRequest({
+      secret: callbackTokenFor(master, row.execution_id),
+      method: 'POST',
+      path: url.pathname,
+      body: raw,
+      headers: req.headers,
+    });
+    if (!verified.ok) return REJECT();
+
+    // Only now is the caller known to hold this execution's key.
+    let parsedBody: unknown;
+    try {
+      parsedBody = JSON.parse(raw);
+    } catch {
+      return invalid('body must be JSON');
+    }
+    const payload = CallbackPayload.safeParse(parsedBody);
+    if (!payload.success) {
+      return invalid('the callback payload is not valid', payload.error.issues);
+    }
 
     const target: CallbackTarget = {
       executionId: row.execution_id,

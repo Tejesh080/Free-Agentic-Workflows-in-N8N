@@ -87,6 +87,12 @@ export const DispatchPayload = strict({
   dry_run: z.boolean(),
   allowed_actions: z.array(z.enum(['crm_write', 'outreach_draft', 'outreach_send'])),
   callback_url: z.string().url(),
+  /**
+   * Per-execution signing key, derived from the master secret. See
+   * callbackTokenFor(). The engine signs its completion with this and nothing
+   * else; the master secret never leaves the control plane.
+   */
+  callback_token: z.string().min(16).max(200),
 });
 export type DispatchPayload = z.infer<typeof DispatchPayload>;
 

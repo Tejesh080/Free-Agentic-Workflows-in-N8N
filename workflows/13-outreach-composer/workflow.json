@@ -499,7 +499,8 @@
           "name": "Telegram account"
         }
       },
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "disabled": false
     },
     {
       "id": "8ca9b471-7dca-4020-9123-8974c1251e21",

@@ -36,36 +36,47 @@ jobs:
 
           crm = json.loads(Path("workflows/11-crm-sync-service/workflow.json").read_text(encoding="utf-8"))
 
-          # Matched on whether a node can AUTHENTICATE to HubSpot, not on its
-          # node type and not on whether a URL string appears in it.
+          # What must hold now that the CRM boundary is genuinely live.
           #
-          # Two earlier versions of this check were wrong in opposite
-          # directions. Testing for `n8n-nodes-base.hubspot` began passing
-          # vacuously the moment those nodes were replaced with HTTP Request
-          # nodes. Testing for the string "hubapi.com" matched the Code node
-          # that BUILDS the url — which cannot call anything — and missed the
-          # three HTTP nodes, whose urls are expressions.
+          # This check used to assert that all three HubSpot nodes ship
+          # disabled. That was right while no credential existed; it is wrong
+          # now, and leaving it would mean either a permanently red build or a
+          # check nobody believes. The invariants that still matter:
           #
-          # The credential is the thing that matters: a node holding a HubSpot
-          # token is a node that can write to a customer's CRM.
+          #   1. create_task stays disabled. Its endpoint additionally requires
+          #      crm.objects.contacts.read, which would grant read access to
+          #      every contact in the portal — a far larger blast radius than
+          #      the two write scopes the rest of the service needs.
+          #   2. Anything that can reach HubSpot carries a credential, so it can
+          #      never run unauthenticated.
+          #   3. No legacy v1 endpoint comes back.
           can_authenticate = []
           for node in crm["nodes"]:
               params = node.get("parameters", {})
               holds_token = (
                   params.get("nodeCredentialType") == "hubspotAppToken"
                   or node["type"] == "n8n-nodes-base.hubspot"
-                  or "hubspotAppToken" in json.dumps(node.get("credentials", {}))
               )
               if holds_token:
                   can_authenticate.append(node["name"])
-                  if not node.get("disabled"):
-                      failures.append(f"11: {node['name']!r} can authenticate to HubSpot and is enabled in the published export")
+                  if not node.get("credentials"):
+                      failures.append(f"11: {node['name']!r} can reach HubSpot with no credential attached")
 
           if len(can_authenticate) != 3:
               failures.append(
                   f"11: expected exactly 3 nodes able to authenticate to HubSpot, found "
                   f"{len(can_authenticate)} ({can_authenticate}). Every CRM call in the "
                   "platform is supposed to live in those three."
+              )
+
+          task_node = next((n for n in crm["nodes"] if n["name"] == "HubSpot Create Task"), None)
+          if task_node is None:
+              failures.append("11: the HubSpot Create Task node is missing")
+          elif not task_node.get("disabled"):
+              failures.append(
+                  "11: HubSpot Create Task is ENABLED. That endpoint needs "
+                  "crm.objects.contacts.read; enabling it is a deliberate decision that "
+                  "should change this check too, not slip through it."
               )
 
           # The API version is meant to be configuration with a current default.
@@ -88,18 +99,36 @@ jobs:
                       failures.append("14: dry_run no longer defaults to true")
               if node["type"] == "n8n-nodes-base.webhook" and node["parameters"].get("authentication") not in (None, "none"):
                   continue
-          for node in swarm["nodes"]:
-              if node["name"] == "Check Ingest Key":
-                  if "SWARM_INGEST_KEY" not in node["parameters"]["jsCode"]:
-                      failures.append("14: the ingest key check no longer references SWARM_INGEST_KEY")
-                  break
+          # The public webhook's gate moved from an instance variable to n8n's
+          # own header auth, because n8n variables are a licensed feature this
+          # instance does not have — so the old check could never authenticate
+          # anything and refused every lead (verified in execution 1033). The
+          # credential gate runs before any node, which is stronger; what CI has
+          # to guarantee is that it is still configured.
+          webhook = next((n for n in swarm["nodes"] if n["name"] == "Lead Webhook"), None)
+          if webhook is None:
+              failures.append("14: the Lead Webhook node is missing from the published export")
           else:
-              failures.append("14: the Check Ingest Key node is missing from the published export")
+              if webhook["parameters"].get("authentication") != "headerAuth":
+                  failures.append(
+                      "14: the public Lead Webhook is not using header authentication. "
+                      "It is reachable from the internet; it must not be open."
+                  )
+              if not webhook.get("credentials"):
+                  failures.append("14: the Lead Webhook has header auth selected but no credential attached")
+              if webhook["parameters"].get("responseMode") != "onReceived":
+                  failures.append(
+                      "14: the Lead Webhook no longer acknowledges immediately. The control "
+                      "plane's dispatch must not block for the length of an AI execution."
+                  )
 
           if failures:
               print("FAIL  safeguard check")
               for f in failures:
                   print(f"  - {f}")
               sys.exit(1)
-          print("PASS  safeguards intact: HubSpot nodes disabled, dry_run default, ingest key enforced")
+          print(
+              "PASS  safeguards intact: create_task disabled, all HubSpot nodes credentialed, "
+              "dry_run default, public webhook gated by header auth and acknowledging immediately"
+          )
           PY

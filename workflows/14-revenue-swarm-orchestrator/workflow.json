@@ -12,7 +12,7 @@
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const raw = $input.first().json || {};\n\nfunction parseJson(value, fallback) {\n  if (value && typeof value === \"object\") { return value; }\n  if (typeof value === \"string\" && value.trim()) {\n    try { return JSON.parse(value); } catch (e) { return fallback; }\n  }\n  return fallback;\n}\n\n// Three shapes reach this node: a webhook POST (fields under body), a\n// sub-workflow call (a JSON string in lead), and a direct manual run.\nconst fromSubWorkflow = raw.lead !== undefined;\nconst body = raw.body && typeof raw.body === \"object\" ? raw.body : null;\nconst headers = raw.headers || {};\nconst lead = fromSubWorkflow ? parseJson(raw.lead, {}) : (body || raw);\nconst options = fromSubWorkflow\n  ? parseJson(raw.options, {})\n  : parseJson((body && body.options) || raw.options, {});\n\nconst email = String(lead.email || \"\").trim().toLowerCase();\nconst leadKey = email || \"anonymous\";\n\nconst dryRun = options.dry_run === undefined ? true : String(options.dry_run).toLowerCase() !== \"false\";\n\n// Tenant comes from the caller, and on the public path from a header rather\n// than the body, so a lead payload cannot choose which workspace it lands in.\nconst rawTenant = String(\n  options.tenant_id || headers[\"x-tenant-id\"] || headers[\"X-Tenant-Id\"] || \"default\"\n).trim().toLowerCase();\nconst tenantId = /^[a-z0-9][a-z0-9_-]{0,62}$/.test(rawTenant) ? rawTenant : \"\";\n\n// One trace id per lead, generated here if the caller did not supply one, and\n// threaded through every service so a run can be reassembled after the fact.\nfunction rand() { return Math.random().toString(36).slice(2, 10); }\nconst traceId = String(options.trace_id || (\"t-\" + $execution.id + \"-\" + rand())).trim().slice(0, 64);\n\nreturn [{ json: {\n  lead: lead,\n  lead_json: JSON.stringify(lead),\n  lead_key: leadKey,\n  email: email,\n  tenant_id: tenantId,\n  tenant_valid: !!tenantId,\n  tenant_error: tenantId ? \"\" : (\"tenant_id must match ^[a-z0-9][a-z0-9_-]{0,62}$; got \" + JSON.stringify(rawTenant)),\n  trace_id: traceId,\n  entry: fromSubWorkflow ? \"sub_workflow\" : (body ? \"webhook\" : \"manual\"),\n  dry_run: dryRun,\n  enrich: options.enrich === undefined ? false : String(options.enrich).toLowerCase() === \"true\",\n  force: options.force === undefined ? false : String(options.force).toLowerCase() === \"true\",\n  channel: String(options.channel || \"email\").toLowerCase(),\n  deal_stage: String(options.deal_stage || \"qualifiedtobuy\"),\n  icp_json: options.icp ? JSON.stringify(options.icp) : \"\",\n  rubric_override: options.rubric_override\n    ? (typeof options.rubric_override === \"string\" ? options.rubric_override : JSON.stringify(options.rubric_override))\n    : \"\",\n  verification_mode: String(options.verification_mode || \"deterministic_only\"),\n  simulate_decision: String(options.simulate_decision || \"\"),\n  governance_action_type: String(options.governance_action_type || \"send\"),\n  chat_id: String(options.chat_id || \"\"),\n  signals_override: options.signals_override\n    ? (typeof options.signals_override === \"string\" ? options.signals_override : JSON.stringify(options.signals_override))\n    : \"\",\n  started_at_ms: Date.now()\n} }];\n"
+        "jsCode": "const raw = $input.first().json || {};\n\nfunction parseJson(value, fallback) {\n  if (value && typeof value === \"object\") { return value; }\n  if (typeof value === \"string\" && value.trim()) {\n    try { return JSON.parse(value); } catch (e) { return fallback; }\n  }\n  return fallback;\n}\n\n// Three shapes reach this node: a webhook POST (fields under body), a\n// sub-workflow call (a JSON string in lead), and a direct manual run.\nconst fromSubWorkflow = raw.lead !== undefined;\n\nconst body = raw.body && typeof raw.body === \"object\" ? raw.body : null;\nconst headers = raw.headers || {};\n\n// A fourth shape: the control plane's dispatch envelope. Recognised by carrying\n// both a trace id and a lead OBJECT, which neither the webhook shape (lead\n// fields at the top level) nor the sub-workflow shape (lead as a JSON string)\n// does.\n//\n// Note which field is NOT trusted from it: nothing here decides authorization.\n// organization_id arrives as execution data so this engine's own per-tenant\n// state is scoped correctly, and the control plane already settled whether the\n// caller may act on it before the payload was built.\nconst envelope = body && body.trace_id && body.lead && typeof body.lead === \"object\" ? body : null;\nconst fromControlPlane = envelope !== null;\nconst lead = fromControlPlane ? envelope.lead : (fromSubWorkflow ? parseJson(raw.lead, {}) : (body || raw));\nconst options = fromControlPlane\n  ? {\n      dry_run: String(envelope.dry_run),\n      tenant_id: envelope.organization_id,\n      trace_id: envelope.trace_id,\n      enrich: \"false\"\n    }\n  : fromSubWorkflow\n  ? parseJson(raw.options, {})\n  : parseJson((body && body.options) || raw.options, {});\n\nconst email = String(lead.email || \"\").trim().toLowerCase();\nconst leadKey = email || \"anonymous\";\n\nconst dryRun = options.dry_run === undefined ? true : String(options.dry_run).toLowerCase() !== \"false\";\n\n// Tenant comes from the caller, and on the public path from a header rather\n// than the body, so a lead payload cannot choose which workspace it lands in.\nconst rawTenant = String(\n  options.tenant_id || headers[\"x-tenant-id\"] || headers[\"X-Tenant-Id\"] || \"default\"\n).trim().toLowerCase();\nconst tenantId = /^[a-z0-9][a-z0-9_-]{0,62}$/.test(rawTenant) ? rawTenant : \"\";\n\n// One trace id per lead, generated here if the caller did not supply one, and\n// threaded through every service so a run can be reassembled after the fact.\nfunction rand() { return Math.random().toString(36).slice(2, 10); }\nconst traceId = String(options.trace_id || (\"t-\" + $execution.id + \"-\" + rand())).trim().slice(0, 64);\n\nreturn [{ json: {\n  lead: lead,\n  lead_json: JSON.stringify(lead),\n  lead_key: leadKey,\n  email: email,\n  tenant_id: tenantId,\n  tenant_valid: !!tenantId,\n  tenant_error: tenantId ? \"\" : (\"tenant_id must match ^[a-z0-9][a-z0-9_-]{0,62}$; got \" + JSON.stringify(rawTenant)),\n  trace_id: traceId,\n  entry: fromControlPlane ? \"control_plane\" : (fromSubWorkflow ? \"sub_workflow\" : (body ? \"webhook\" : \"manual\")),\n  // Carried through so the completion can be signed and delivered. Absent for\n  // every other entry shape, and the callback is then skipped rather than faked.\n  callback_url: fromControlPlane ? String(envelope.callback_url || \"\") : \"\",\n  callback_token: fromControlPlane ? String(envelope.callback_token || \"\") : \"\",\n  saas_execution_id: fromControlPlane ? String(envelope.execution_id || \"\") : \"\",\n  // The ceiling the control plane set. The engine may narrow this; it may never\n  // widen it. An entry shape that does not set it is unconstrained by it.\n  allowed_actions: fromControlPlane && Array.isArray(envelope.allowed_actions)\n    ? envelope.allowed_actions.map(function (a) { return String(a); })\n    : null,\n  outreach_permitted: fromControlPlane && Array.isArray(envelope.allowed_actions)\n    ? (envelope.allowed_actions.indexOf(\"outreach_draft\") !== -1 || envelope.allowed_actions.indexOf(\"outreach_send\") !== -1)\n    : true,\n  dry_run: dryRun,\n  enrich: options.enrich === undefined ? false : String(options.enrich).toLowerCase() === \"true\",\n  // Ownership boundary. When the control plane dispatched this run it had\n  // already consulted its own executions table, where (org_id, idempotency_key)\n  // is unique — so it has decided this is a new execution. n8n's lead ledger\n  // must not then overrule that with a second, independent dedupe verdict;\n  // two systems answering \"have we seen this lead?\" is how state becomes\n  // ambiguous. Postgres owns lead identity; the ledger here is execution-local\n  // bookkeeping and a CRM write lock.\n  force: fromControlPlane\n    ? true\n    : (options.force === undefined ? false : String(options.force).toLowerCase() === \"true\"),\n  channel: String(options.channel || \"email\").toLowerCase(),\n  deal_stage: String(options.deal_stage || \"qualifiedtobuy\"),\n  icp_json: options.icp ? JSON.stringify(options.icp) : \"\",\n  rubric_override: options.rubric_override\n    ? (typeof options.rubric_override === \"string\" ? options.rubric_override : JSON.stringify(options.rubric_override))\n    : \"\",\n  verification_mode: String(options.verification_mode || \"deterministic_only\"),\n  simulate_decision: String(options.simulate_decision || \"\"),\n  governance_action_type: String(options.governance_action_type || \"send\"),\n  chat_id: String(options.chat_id || \"\"),\n  signals_override: options.signals_override\n    ? (typeof options.signals_override === \"string\" ? options.signals_override : JSON.stringify(options.signals_override))\n    : \"\",\n  started_at_ms: Date.now()\n} }];\n"
       }
     },
     {
@@ -477,6 +477,15 @@
                 "operation": "true",
                 "singleValue": true
               }
+            },
+            {
+              "id": "ow2",
+              "leftValue": "={{ $(\"Normalise Intake\").first().json.outreach_permitted }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
           ],
           "combinator": "and"
@@ -632,7 +641,7 @@
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// A public lead endpoint needs a shared secret, and the safe failure is to\n// refuse. If SWARM_INGEST_KEY is not set on the instance, nothing is accepted:\n// an unset secret must never read as \"no secret required\".\nconst item = $input.first().json || {};\nconst headers = item.headers || {};\n\nlet expected = \"\";\ntry { expected = String(($vars && $vars.SWARM_INGEST_KEY) || \"\"); } catch (e) { expected = \"\"; }\n\nconst supplied = String(headers[\"x-swarm-key\"] || headers[\"X-Swarm-Key\"] || \"\");\n\nlet authorised = false;\nlet reason = \"\";\nif (!expected) {\n  reason = \"the SWARM_INGEST_KEY variable is not set on this n8n instance, so no inbound lead can be authenticated\";\n} else if (!supplied) {\n  reason = \"the request did not carry an x-swarm-key header\";\n} else if (supplied.length !== expected.length) {\n  reason = \"the x-swarm-key header did not match\";\n} else {\n  // Constant-time-ish compare: same length, every byte examined.\n  let diff = 0;\n  for (let i = 0; i < expected.length; i++) { diff |= expected.charCodeAt(i) ^ supplied.charCodeAt(i); }\n  authorised = diff === 0;\n  if (!authorised) { reason = \"the x-swarm-key header did not match\"; }\n}\n\nitem.ingest_authorised = authorised;\nitem.ingest_reason = reason;\nreturn [{ json: item }];\n"
+        "jsCode": "// Second layer.\n//\n// The PRIMARY gate is the webhook node's own header auth credential, which n8n\n// enforces before this workflow runs at all: a request without the right\n// x-swarm-key never reaches this node. That is stronger than what used to be\n// here, which compared against $vars.SWARM_INGEST_KEY — and n8n variables are a\n// licensed feature this instance does not have, so that comparison could never\n// succeed and the endpoint refused every lead (verified in execution 1033).\n//\n// The credential cannot be read from a Code node, by design. So this node no\n// longer re-checks the secret; it checks the things it still can see, and the\n// invariant that the webhook is actually configured with authentication is\n// enforced in CI against the exported workflow instead.\nconst item = $input.first().json || {};\nconst headers = item.headers || {};\n\n// If a licensed instance does set the variable, keep honouring it as a real\n// second factor. If it is unset, the edge gate already ran.\nlet expected = \"\";\ntry { expected = String(($vars && $vars.SWARM_INGEST_KEY) || \"\"); } catch (e) { expected = \"\"; }\nconst supplied = String(headers[\"x-swarm-key\"] || headers[\"X-Swarm-Key\"] || \"\");\n\nlet authorised = true;\nlet reason = \"\";\nlet gate = \"webhook_header_auth\";\n\nif (expected) {\n  gate = \"webhook_header_auth + instance_variable\";\n  if (supplied.length !== expected.length) {\n    authorised = false;\n    reason = \"the x-swarm-key header did not match the instance variable\";\n  } else {\n    let diff = 0;\n    for (let i = 0; i < expected.length; i++) { diff |= expected.charCodeAt(i) ^ supplied.charCodeAt(i); }\n    authorised = diff === 0;\n    if (!authorised) { reason = \"the x-swarm-key header did not match the instance variable\"; }\n  }\n}\n\n// A tenant must be named, and the character set is restricted rather than\n// escaped so it cannot smuggle a separator into a composite key downstream.\nconst rawTenant = String(headers[\"x-tenant-id\"] || headers[\"X-Tenant-Id\"] || \"\").trim().toLowerCase();\nif (authorised && rawTenant && !/^[a-z0-9][a-z0-9_-]{0,62}$/.test(rawTenant)) {\n  authorised = false;\n  reason = \"x-tenant-id must match ^[a-z0-9][a-z0-9_-]{0,62}$\";\n}\n\nitem.ingest_authorised = authorised;\nitem.ingest_reason = reason;\nitem.ingest_gate = gate;\nreturn [{ json: item }];\n"
       }
     },
     {
@@ -826,9 +835,16 @@
       "parameters": {
         "path": "revenue-swarm",
         "httpMethod": "POST",
-        "authentication": "none",
-        "responseMode": "lastNode",
-        "options": {}
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {
+          "responseData": "{\"status\":\"accepted\"}"
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Revenue Swarm Ingest Key"
+        }
       }
     },
     {
@@ -898,6 +914,97 @@
         "mode": "runOnceForAllItems",
         "jsCode": "// The receipt write emits a database row. Re-emit the response so the webhook\n// and any sub-workflow caller receive the decision, not the row id.\nreturn $(\"Build Swarm Response\").all();\n"
       }
+    },
+    {
+      "id": "cb-build-0001",
+      "name": "Build Callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2320,
+        1080
+      ],
+      "parameters": {
+        "jsCode": "\n\nfunction sha256Bytes(bytes) {\n  const K = [\n    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,\n    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,\n    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,\n    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,\n    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,\n    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,\n    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,\n    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2\n  ];\n  let h0=0x6a09e667,h1=0xbb67ae85,h2=0x3c6ef372,h3=0xa54ff53a,\n      h4=0x510e527f,h5=0x9b05688c,h6=0x1f83d9ab,h7=0x5be0cd19;\n\n  const ml = bytes.length * 8;\n  const withPad = bytes.slice();\n  withPad.push(0x80);\n  while (withPad.length % 64 !== 56) { withPad.push(0); }\n  // 64-bit big-endian length. Messages here are far below 2^32 bits, so the\n  // high word is zero, but write it explicitly rather than assuming.\n  const hi = Math.floor(ml / 4294967296);\n  withPad.push((hi>>>24)&255,(hi>>>16)&255,(hi>>>8)&255,hi&255);\n  withPad.push((ml>>>24)&255,(ml>>>16)&255,(ml>>>8)&255,ml&255);\n\n  const w = new Array(64);\n  function rotr(x,n){ return ((x>>>n)|(x<<(32-n)))>>>0; }\n\n  for (let i = 0; i < withPad.length; i += 64) {\n    for (let t = 0; t < 16; t++) {\n      w[t] = ((withPad[i+t*4]<<24)|(withPad[i+t*4+1]<<16)|(withPad[i+t*4+2]<<8)|withPad[i+t*4+3])>>>0;\n    }\n    for (let t = 16; t < 64; t++) {\n      const s0 = (rotr(w[t-15],7) ^ rotr(w[t-15],18) ^ (w[t-15]>>>3))>>>0;\n      const s1 = (rotr(w[t-2],17) ^ rotr(w[t-2],19) ^ (w[t-2]>>>10))>>>0;\n      w[t] = (((w[t-16]+s0)>>>0) + ((w[t-7]+s1)>>>0))>>>0;\n    }\n    let a=h0,b=h1,c=h2,d=h3,e=h4,f=h5,g=h6,h=h7;\n    for (let t = 0; t < 64; t++) {\n      const S1 = (rotr(e,6) ^ rotr(e,11) ^ rotr(e,25))>>>0;\n      const ch = ((e & f) ^ (~e & g))>>>0;\n      const t1 = (((((h + S1)>>>0) + ch)>>>0) + ((K[t] + w[t])>>>0))>>>0;\n      const S0 = (rotr(a,2) ^ rotr(a,13) ^ rotr(a,22))>>>0;\n      const maj = ((a & b) ^ (a & c) ^ (b & c))>>>0;\n      const t2 = ((S0 + maj)>>>0);\n      h=g; g=f; f=e; e=(d+t1)>>>0; d=c; c=b; b=a; a=(t1+t2)>>>0;\n    }\n    h0=(h0+a)>>>0; h1=(h1+b)>>>0; h2=(h2+c)>>>0; h3=(h3+d)>>>0;\n    h4=(h4+e)>>>0; h5=(h5+f)>>>0; h6=(h6+g)>>>0; h7=(h7+h)>>>0;\n  }\n\n  const out = [];\n  [h0,h1,h2,h3,h4,h5,h6,h7].forEach(function (v) {\n    out.push((v>>>24)&255,(v>>>16)&255,(v>>>8)&255,v&255);\n  });\n  return out;\n}\n\nfunction utf8Bytes(str) {\n  const out = [];\n  for (let i = 0; i < str.length; i++) {\n    let c = str.charCodeAt(i);\n    if (c < 0x80) { out.push(c); }\n    else if (c < 0x800) { out.push(0xc0|(c>>6), 0x80|(c&63)); }\n    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < str.length) {\n      const c2 = str.charCodeAt(i+1);\n      const cp = 0x10000 + ((c - 0xd800) << 10) + (c2 - 0xdc00);\n      out.push(0xf0|(cp>>18), 0x80|((cp>>12)&63), 0x80|((cp>>6)&63), 0x80|(cp&63));\n      i++;\n    }\n    else { out.push(0xe0|(c>>12), 0x80|((c>>6)&63), 0x80|(c&63)); }\n  }\n  return out;\n}\n\nfunction toHex(bytes) {\n  let s = '';\n  for (let i = 0; i < bytes.length; i++) {\n    s += (bytes[i] < 16 ? '0' : '') + bytes[i].toString(16);\n  }\n  return s;\n}\n\nfunction sha256Hex(str) { return toHex(sha256Bytes(utf8Bytes(str))); }\n\nfunction hmacSha256Hex(secret, message) {\n  const block = 64;\n  let key = utf8Bytes(secret);\n  if (key.length > block) { key = sha256Bytes(key); }\n  while (key.length < block) { key.push(0); }\n  const ipad = [], opad = [];\n  for (let i = 0; i < block; i++) {\n    ipad.push(key[i] ^ 0x36);\n    opad.push(key[i] ^ 0x5c);\n  }\n  const inner = sha256Bytes(ipad.concat(utf8Bytes(message)));\n  return toHex(sha256Bytes(opad.concat(inner)));\n}\n\n\nconst intake = $(\"Normalise Intake\").first().json;\nconst response = $(\"Build Swarm Response\").first().json;\n\n// No callback_url means this run did not come from the control plane (a direct\n// webhook post, or the test suite). Emit a marker the IF node routes on.\nif (!intake.callback_url || !intake.callback_token) {\n  return [{ json: { callback_skipped: true, reason: \"no callback_url in the dispatch payload\" } }];\n}\n\nconst q = response.qualification || {};\nconst scoring = q.scoring || {};\nconst grounding = q.grounding || {};\nconst crm = response.crm || {};\nconst outreach = response.outreach || {};\n\n// Evidence: every quoted span the model returned, marked with whether the\n// deterministic check found it in the source text. The unsupported ones are\n// kept, not dropped — why a lead lost points is part of the audit trail.\nconst unsupported = {};\n(grounding.unsupported_evidence || []).forEach(function (e) {\n  unsupported[String(e.signal) + \"|\" + String(e.quote)] = true;\n});\nconst evidence = ((q.signals || {}).evidence || []).map(function (e) {\n  const key = String(e.signal) + \"|\" + String(e.quote);\n  return {\n    signal: String(e.signal || \"\"),\n    value: String((q.signals || {})[e.signal] || \"\"),\n    quote: e.quote === undefined ? null : String(e.quote),\n    source_field: \"message\",\n    supported: !unsupported[key],\n    points: 0\n  };\n});\n\nconst components = (scoring.components || []).map(function (c) {\n  return {\n    signal: String(c.component || \"\"),\n    value: String(c.detail || \"\"),\n    points: Math.round(Number(c.points) || 0),\n    supported: true\n  };\n});\n(scoring.modifiers || []).forEach(function (m) {\n  components.push({\n    signal: String(m.modifier || \"modifier\"),\n    value: String(m.reason || \"\"),\n    points: Math.round(Number(m.points) || 0),\n    supported: false\n  });\n});\n\nconst taken = [];\nif (crm.contact_id) {\n  taken.push({ action: \"crm_upsert_contact\", object_id: String(crm.contact_id), status: String(crm.contact_status || \"\") });\n}\nif (crm.deal_id) {\n  taken.push({ action: \"crm_create_deal\", object_id: String(crm.deal_id), status: String(crm.deal_status || \"\") });\n}\nif (crm.task_id) {\n  taken.push({ action: \"crm_create_task\", object_id: String(crm.task_id), status: String(crm.task_status || \"\") });\n}\nif (outreach.sent) {\n  taken.push({ action: \"outreach_send\", status: String(outreach.status || \"\") });\n}\n\n// Every step that did not happen carries the reason it did not happen. A\n// skipped step with no reason is a missing audit record, and the control\n// plane's schema refuses it.\nconst skipped = [];\n(response.steps || []).forEach(function (s) {\n  if (!s.done) {\n    skipped.push({\n      action: String(s.step || \"unknown\"),\n      reason: String(s.detail || \"no reason recorded\")\n    });\n  }\n});\nif (!outreach.attempted && !skipped.some(function (s) { return s.action === \"outreach\"; })) {\n  skipped.push({ action: \"outreach\", reason: String(outreach.detail || \"outreach was not attempted\") });\n}\n\nconst payload = {\n  status: response.ok === false ? \"failed\" : \"succeeded\",\n  decision: String(response.outcome || \"unknown\"),\n  score: q.score === undefined || q.score === null ? null : Math.round(Number(q.score)),\n  tier: q.tier || null,\n  rubric_version: scoring.rubric_version || null,\n  prompt_versions: (q.provenance && q.provenance.prompt_sha)\n    ? { \"revenue/lead-qualifier\": String(q.provenance.prompt_sha) }\n    : {},\n  model_metadata: (q.provenance && q.provenance.model_provider)\n    ? { provider: String(q.provenance.model_provider) }\n    : {},\n  score_components: components,\n  evidence: evidence,\n  verification: q.verification || {},\n  governance: outreach.governance || {},\n  actions_taken: taken,\n  actions_skipped: skipped,\n  crm_result: crm,\n  engine_execution_id: String($execution.id)\n};\n\nconst body = JSON.stringify(payload);\n\n// The signature binds method, path, time, a single-use nonce and a digest of\n// the exact bytes below. The control plane recomputes it over the raw body it\n// receives, so re-serialising anywhere in between would invalidate it.\nconst url = intake.callback_url;\nconst path = url.replace(/^https?:\\/\\/[^/]+/, \"\");\nconst timestamp = String(Math.floor(Date.now() / 1000));\nlet nonce = \"\";\nconst alphabet = \"abcdefghijklmnopqrstuvwxyz0123456789\";\nfor (let i = 0; i < 24; i++) { nonce += alphabet[Math.floor(Math.random() * alphabet.length)]; }\n\nconst digest = sha256Hex(body);\nconst canonical = \"v1:POST:\" + path + \":\" + timestamp + \":\" + nonce + \":\" + digest;\nconst signature = \"v1=\" + hmacSha256Hex(String(intake.callback_token), canonical);\n\nreturn [{ json: {\n  callback_skipped: false,\n  callback_url: url,\n  callback_body: body,\n  signature: signature,\n  timestamp: timestamp,\n  nonce: nonce,\n  trace_id: String(intake.trace_id || \"\")\n} }];\n"
+      },
+      "notes": "Signs the completion with the per-execution callback_token from the dispatch payload. Hand-rolled SHA-256/HMAC because n8n Code nodes cannot rely on require(\"crypto\"); verified against node:crypto by scripts/verify-callback-node.ts."
+    },
+    {
+      "id": "cb-if-000001",
+      "name": "Callback Wanted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2100,
+        1080
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cw1",
+              "leftValue": "={{ $(\"Normalise Intake\").first().json.callback_url }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "Only a run dispatched by the control plane has somewhere to report back to. A direct webhook post or a suite run skips the callback rather than inventing a destination."
+    },
+    {
+      "id": "cb-send-00001",
+      "name": "Send Callback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2540,
+        1080
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callback_url }}",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-swarm-signature",
+              "value": "={{ $json.signature }}"
+            },
+            {
+              "name": "x-swarm-timestamp",
+              "value": "={{ $json.timestamp }}"
+            },
+            {
+              "name": "x-swarm-nonce",
+              "value": "={{ $json.nonce }}"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.callback_body }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "notes": "Delivers the signed completion. A failure here fails the execution on purpose: the control plane not learning the result is a real failure, and workflow 16 records it for replay."
     }
   ],
   "connections": {
@@ -1274,6 +1381,46 @@
       ]
     },
     "Record Decision Receipt": {
+      "main": [
+        [
+          {
+            "node": "Callback Wanted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Callback Wanted?": {
+      "main": [
+        [
+          {
+            "node": "Build Callback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Swarm Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Callback": {
+      "main": [
+        [
+          {
+            "node": "Send Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Callback": {
       "main": [
         [
           {

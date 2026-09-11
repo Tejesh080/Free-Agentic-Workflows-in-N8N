@@ -3,16 +3,30 @@
  *
  * In production this comes from a verified Supabase access token in a cookie.
  *
- * In local development there is no identity provider, so a demo principal is
- * used instead — and it is gated on the database being the local PGlite one.
- * That gate is the important part: the same build deployed against a real
- * Postgres cannot fall back to a demo user, because `isLocalDatabase()` is
- * false there and this function returns undefined rather than a session.
+ * In local development there is no identity provider, so a demo principal can
+ * be used instead. It requires TWO independent opt-ins, neither of which is
+ * implied by anything else:
+ *
+ *   NODE_ENV !== 'production'   and   ALLOW_DEMO_SESSION === 'true'
+ *
+ * That combination is the important part. An earlier version keyed this off the
+ * database being PGlite, which was safe but wrong in shape: pointing local
+ * development at a real Postgres then silently removed the ability to sign in,
+ * and — worse — the gate would have been one connection-string change away from
+ * meaning nothing. A production build cannot enable this by changing a database
+ * URL; it has to set a variable that exists for no other purpose.
  */
 import { cookies } from 'next/headers';
-import { isLocalDatabase } from '../db/local';
 import { withResolver, type OrgRole, type Principal } from '../db/client';
 import { verifySupabaseJwt } from './request';
+
+/**
+ * Both conditions, evaluated together and never cached, so flipping either one
+ * takes effect without a rebuild.
+ */
+export function demoSessionAllowed(): boolean {
+  return process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEMO_SESSION === 'true';
+}
 
 export interface Session {
   principal: Principal & { kind: 'user' };
@@ -45,8 +59,7 @@ export async function getSession(): Promise<Session | undefined> {
     userId = verifySupabaseJwt(token, secret)?.sub;
   }
 
-  if (!userId && isLocalDatabase()) {
-    // Local only. Never reachable against a hosted database.
+  if (!userId && demoSessionAllowed()) {
     userId = process.env.DEMO_USER_ID;
   }
   if (!userId) return undefined;
@@ -74,7 +87,7 @@ export async function requireSession(): Promise<Session> {
   const session = await getSession();
   if (!session) {
     throw new Error(
-      'no session: sign in, or set DEMO_USER_ID with DATABASE_URL=pglite://.pglite for local development',
+      'no session: sign in, or for local development set ALLOW_DEMO_SESSION=true and DEMO_USER_ID',
     );
   }
   return session;

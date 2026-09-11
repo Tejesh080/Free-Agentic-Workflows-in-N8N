@@ -14,6 +14,14 @@
 import { DispatchPayload } from '../schemas';
 import { signRequest } from '../hmac';
 
+/**
+ * The header the n8n webhook's header-auth credential is configured to check.
+ * It must match the credential exactly: n8n rejects a mismatch at the edge with
+ * 403 before any node runs, which is the behaviour we want but also means a
+ * typo here looks like an outage rather than a bug.
+ */
+export const INGEST_HEADER = 'x-swarm-key';
+
 export type DispatchOutcome =
   | { ok: true; engineExecutionId: string | null }
   | { ok: false; reason: 'not_configured' | 'rejected' | 'unreachable'; detail: string };
@@ -44,6 +52,10 @@ export async function dispatchExecution(
     !config.webhookUrl && 'N8N_INGEST_WEBHOOK_URL',
     !config.ingestKey && 'SWARM_INGEST_KEY',
     !config.signingSecret && 'N8N_DISPATCH_SECRET',
+    // Without this the engine would be handed a callback token derived from an
+    // empty key, and every completion would then verify against that same empty
+    // key — an authentication check that passes for anyone. Refuse to dispatch.
+    !process.env.N8N_CALLBACK_SECRET && 'N8N_CALLBACK_SECRET',
   ].filter(Boolean);
   if (missing.length > 0) {
     return { ok: false, reason: 'not_configured', detail: `unset: ${missing.join(', ')}` };
@@ -72,7 +84,7 @@ export async function dispatchExecution(
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-swarm-ingest-key': config.ingestKey!,
+        [INGEST_HEADER]: config.ingestKey!,
         ...signed,
       },
       body,

@@ -26,6 +26,29 @@
  */
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
+/**
+ * The key the engine signs a completion with.
+ *
+ * Not the master secret. The master never leaves this process; what the engine
+ * receives in its dispatch payload is HMAC(master, execution_id) — a token that
+ * is different for every execution and derived, so nothing extra is stored.
+ *
+ * Why per-execution rather than one shared callback secret:
+ *   - n8n persists execution data, so a shared secret would sit in every
+ *     execution log forever. This puts one execution's token in one log.
+ *   - A token is useless outside its own execution: the signature also binds
+ *     the path, which carries the trace id.
+ *   - Rotating the master invalidates every outstanding token at once.
+ *
+ * It is also the reason the callback handler resolves the execution *before*
+ * verifying: it cannot know which key to expect until it does. Both "unknown
+ * trace" and "bad signature" return the same 401, so resolving first does not
+ * turn the endpoint into an oracle for which traces exist.
+ */
+export function callbackTokenFor(masterSecret: string, executionId: string): string {
+  return createHmac('sha256', masterSecret).update(`callback:v1:${executionId}`).digest('base64url');
+}
+
 export const SIGNATURE_HEADER = 'x-swarm-signature';
 export const TIMESTAMP_HEADER = 'x-swarm-timestamp';
 export const NONCE_HEADER = 'x-swarm-nonce';
