@@ -1,61 +1,52 @@
-# 10 Real-Time Voice Automation Agent
+# 10 — Voice Agent
 
-> Webhook to speech: transcription, intent classification against a closed tool registry, Governance for data-changing intents, verification, and speech synthesis, with per-stage latency measurement.
+Webhook to speech, with intent classification against a closed registry and a gate before anything can act.
 
-**Status:** LIVE VERIFIED · **23 nodes** (20 executable)
+`Live tested` · [`workflow.json`](workflow.json)
 
-## The problem
+## What it does
 
-A voice agent that can act on what it thinks it heard is a liability, and a single end-to-end latency number hides where the time actually goes.
+- Transcribes with Whisper, or accepts a text payload for testing.
+- Classifies against a closed registry of five intents; an invented name becomes `unsupported`.
+- Reads whether an intent changes data from the registry, not from the model.
+- Sends data-changing intents to Governance and records the decision — it never executes them.
+- Measures latency per stage, so the slow step is visible rather than averaged away.
 
-## How it works
+## Flow
 
-1. Accept audio or text on a webhook and stamp a start time.
-2. Transcribe audio with Whisper, or use the supplied text.
-3. Classify the transcript against a **closed registry** of five intents using the `voice/intent-router` prompt.
-4. Send data-changing intents to Governance.
-5. Execute a restricted tool, compose a short spoken reply, verify it against the tool result, synthesise speech, and respond.
+```mermaid
+flowchart LR
+  A["webhook: audio or text"] --> B[Whisper transcribe]
+  B --> C[Classify against<br/>closed intent registry]
+  C --> D{Changes data?}
+  D -->|yes| E[Governance<br/>recorded, not executed]
+  D -->|no| F[Run restricted tool]
+  F --> G[Compose reply]
+  E --> G
+  G --> H[Verify, then speak]
+```
 
-## Platform services it calls
+Calls 02 Model Router, 05 Governance, 08 Prompt Registry, 09 Verification.
 
-- **02 Model Router**
-- **05 Governance**
-- **08 Prompt Registry**
-- **09 Verification**
-
-## Safety properties
-
-The tool surface is a closed registry: an invented intent name becomes `unsupported`, never an undefined action. Whether an intent changes data is declared **in the registry, not by the model**. Even on approval this workflow **does not execute** data-changing intents — the approval is recorded for a human. That is what makes a public webhook demo safe.
-
-## Triggers
-
-- `Voice Webhook`
-- `Respond to Caller`
-
-## Verification
-
-- **2/2 passed** — [`tests/results-2026-09-08.json`](tests/results-2026-09-08.json)
-  - latency_measured_ms is real per-stage wall clock. Transcription is near zero on these runs because they used the text-payload path; a real audio upload adds the speech-to-text call.
-
-Every figure came from a run on a live n8n instance; the linked files are the raw results.
-
-## Connections required
+## Setup
 
 - OpenAI Whisper (speech to text)
 - OpenAI TTS (text to speech)
 
-Full setup: [docs/CONNECTIONS.md](../../docs/CONNECTIONS.md)
+Run it from `Voice Webhook` or `Respond to Caller`.
+
+Credentials and data tables: [docs/CONNECTIONS.md](../../docs/CONNECTIONS.md)
+
+## Test evidence
+
+| Result | Raw output |
+| --- | --- |
+| 2/2 fixtures passed | [`tests/results-2026-09-08.json`](tests/results-2026-09-08.json) |
+
+latency_measured_ms is real per-stage wall clock. Transcription is near zero on these runs because they used the text-payload path; a real audio upload adds the speech-to-text call.
 
 ## Limitations
 
-- The audio upload path is structurally validated but not exercised end to end; both recorded runs used the text payload. Text-to-speech **is** exercised.
+- The audio upload path is structurally validated but was not exercised end to end. Text-to-speech is.
 - No conversation memory across turns.
 - Demo tools return invented static data.
-
-## Import
-
-```bash
-python scripts/import-workflows.py --only 10
-```
-
-Or import [`workflow.json`](workflow.json) in the n8n editor. Sub-workflow references carry the placeholder `REPLACE_WITH_YOUR_WORKFLOW_ID` and must be relinked — the import script does this automatically.

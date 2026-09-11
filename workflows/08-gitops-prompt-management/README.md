@@ -1,58 +1,49 @@
-# 08 GitOps Prompt Management
+# 08 — Prompt Registry
 
-> Fetches versioned prompts from GitHub at run time, validates declared variables, interpolates, and returns the blob SHA so every model call is traceable to exact prompt bytes.
+Prompts live in Git rather than inside workflow JSON, and every render reports the blob SHA it came from.
 
-**Status:** LIVE VERIFIED · **12 nodes** (10 executable)
+`Live tested` · [`workflow.json`](workflow.json)
 
-## The problem
+## What it does
 
-Prompts embedded in workflow JSON cannot be reviewed, diffed, versioned or rolled back, and there is no way to tell which prompt text produced a given output.
+- Fetches prompt files through the GitHub Contents API at any Git ref, defaulting to `main`.
+- Validates the caller's variables against the prompt's declared contract before interpolating.
+- Refuses a prompt with an unfilled `{{placeholder}}` rather than sending it to a model.
+- Returns the blob SHA, so an execution log ties back to exact prompt bytes.
+- On a GitHub outage returns a bundled fallback flagged `degraded: true` — never silent non-Git text.
 
-## How it works
+## Flow
 
-1. Resolve the prompt path and Git ref, defaulting to `main`.
-2. Fetch the file through the GitHub Contents API, retrying three times with backoff and treating a 404 or rate limit as data rather than a crash.
-3. Parse the front matter, validate the caller's variables against the prompt's declared contract, and interpolate.
-4. Return the rendered prompt with its **blob SHA**, so an execution log ties back to exact prompt bytes.
+```mermaid
+flowchart LR
+  A[prompt id + ref] --> B[GitHub Contents API]
+  B -->|ok| C[Parse front matter]
+  B -->|outage| D["Bundled fallback<br/>degraded: true"]
+  C --> E[Validate variables]
+  E --> F[Rendered prompt + blob SHA]
+  D --> F
+```
 
-## Platform services it calls
+Called by 01, 03, 04, 06, 07, 10.
 
-None — this *is* a platform service.
-
-Called by: **01**, **03**, **04**, **06**, **07**, **10**
-
-## Safety properties
-
-In strict mode a prompt with an unfilled `{{placeholder}}` is refused rather than sent to a model, because models handle a literal placeholder unpredictably. On a GitHub outage the service returns a **bundled fallback** for hot-path prompts with `degraded: true` and an explicit issue, so a caller can never silently run on non-Git text believing it came from Git.
-
-## Triggers
-
-- `Prompt Request`
-- `Test Suite Trigger`
-
-## Verification
-
-- **7/7 passed** — [`tests/results-2026-09-08.json`](tests/results-2026-09-08.json) (n8n execution `200`)
-  - latency_ms_measured includes the GitHub round trip. Cases that hit the local cache path (P02, P03, P07 reuse an already-fetched blob within the same GitHub edge cache window) are visibly faster; that is real, not smoothed.
-
-Every figure came from a run on a live n8n instance; the linked files are the raw results.
-
-## Connections required
+## Setup
 
 - GitHub Contents API (anonymous)
 
-Full setup: [docs/CONNECTIONS.md](../../docs/CONNECTIONS.md)
+Run it from `Prompt Request` or `Test Suite Trigger`.
+
+Credentials and data tables: [docs/CONNECTIONS.md](../../docs/CONNECTIONS.md)
+
+## Test evidence
+
+| Result | Raw output |
+| --- | --- |
+| 7/7 fixtures passed | [`tests/results-2026-09-08.json`](tests/results-2026-09-08.json) · execution `200` |
+
+latency_ms_measured includes the GitHub round trip. Cases that hit the local cache path (P02, P03, P07 reuse an already-fetched blob within the same GitHub edge cache window) are visibly faster; that is real, not smoothed.
 
 ## Limitations
 
-- Anonymous GitHub API is 60 requests/hour per IP. Add a token for heavy use.
+- The anonymous GitHub API allows 60 requests/hour per IP. Add a token for heavy use.
 - No caching layer: every render is a live fetch.
 - Bundled fallbacks exist for two hot-path prompts, not all twelve.
-
-## Import
-
-```bash
-python scripts/import-workflows.py --only 08
-```
-
-Or import [`workflow.json`](workflow.json) in the n8n editor. Sub-workflow references carry the placeholder `REPLACE_WITH_YOUR_WORKFLOW_ID` and must be relinked — the import script does this automatically.

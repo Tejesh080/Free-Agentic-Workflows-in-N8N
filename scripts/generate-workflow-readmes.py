@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Generate each workflow folder's README from the catalog plus its own files.
 
-Facts that must not drift (node counts, entry points, dependency edges, test
-results) are read from workflow.json and the tests/benchmarks files rather than
-retyped, so a README cannot quietly disagree with what shipped.
+Facts that must not drift (dependency edges, trigger names, test results) are read
+from workflow.json and the tests/benchmarks files rather than retyped, so a README
+cannot quietly disagree with what shipped.
 
-Prose that is specific to a workflow lives in DETAIL below.
+Prose that is specific to a workflow lives in DETAIL below. Keep it specific: a
+sentence that would read the same under any of the ten does not belong here.
 
     python scripts/generate-workflow-readmes.py
 """
@@ -21,52 +22,87 @@ SERVICE_NAMES = {
     "02": "Model Router", "05": "Governance", "08": "Prompt Registry", "09": "Verification",
 }
 
+# Short display names. The folder names are longer and stay as they are - renaming
+# them would break the catalog, the scripts and every existing link.
+TITLES = {
+    "01": "API Integration Engineer",
+    "02": "Intelligent Model Router",
+    "03": "RAG Intelligence",
+    "04": "Research Agent",
+    "05": "Human Approval & Governance",
+    "06": "Document Intelligence",
+    "07": "Conversational Analytics",
+    "08": "Prompt Registry",
+    "09": "Output Verification",
+    "10": "Voice Agent",
+}
+
 DETAIL: dict[str, dict] = {
     "01": {
-        "problem": "Reading an unfamiliar API and writing the first integration is slow, and an LLM asked to do it will confidently invent endpoints that do not exist.",
-        "how": [
-            "Fetch the OpenAPI document and parse it **deterministically** — servers, security schemes, every operation with its parameters, request body, response codes and read/write effect. No model is involved in this step.",
-            "Fetch the `api-integration/spec-analyst` prompt from the GitOps registry and ask the Model Router to plan an integration for the stated goal.",
-            "**Ground the plan**: every `operation_id` the model proposed must exist in the parsed operation list. Method, path and write effect are taken from the specification, never from the model, and disagreements are reported.",
-            "Verify the plan against a JSON Schema through the Verification Layer.",
-            "If the plan contains write steps, send them to Governance for a decision.",
-            "Probe read-only endpoints against the server the specification declares, and compare the live response fields to what the plan expected.",
-            "Emit an integration report with a six-point readiness verdict.",
+        "oneline": "Reads an OpenAPI spec, plans an integration, and checks every step the model "
+                   "proposes against the operations the spec actually declares.",
+        "does": [
+            "Parses the spec deterministically — no model touches the operation list.",
+            "Grounds the plan: an `operation_id` that is not in the spec fails, so an invented endpoint cannot survive.",
+            "Takes method, path and write effect from the spec, never from the model.",
+            "Probes only GET and HEAD, only against the spec's own base URL.",
+            "Write steps go to Governance and are recorded — never executed.",
         ],
-        "safety": "Only GET and HEAD are probed, only against the specification's own base URL, and only where the path needs no invented identifier. **Write operations are never executed**, whether or not Governance approved them — the approval is recorded for a human.",
+        "flow": """flowchart LR
+  A[OpenAPI spec] --> B[Deterministic parse]
+  B --> C[Plan integration]
+  C --> D{Every operation_id<br/>in the spec?}
+  D -->|no| E[Reported as ungrounded]
+  D -->|yes| F[Verify plan]
+  F --> G[Probe GET / HEAD only]
+  G --> H[Readiness report]""",
         "limits": [
-            "JSON OpenAPI 3 only. YAML specifications are rejected with a clear message.",
+            "JSON OpenAPI 3 only. YAML specs are rejected with a clear message.",
             "`$ref` is not dereferenced, so response field checking uses observed keys rather than the resolved schema.",
             "The probe stage cannot exercise endpoints that require authentication.",
         ],
     },
     "02": {
-        "problem": "Hard-coding one model into every workflow makes cost, latency and provider outages someone else's problem later. Picking a model with a prompt makes the choice unauditable.",
-        "how": [
-            "Normalise the request and stamp a start time.",
-            "**Decision engine (no LLM).** Hard gates first: privacy locality, JSON-mode capability, minimum quality, context size. Then a weighted score over quality prior, blended token price and latency prior, using the weight profile for the requested objective.",
-            "Route to the winning provider's chain node.",
-            "On failure, retry three times with backoff, then route the **error output** to a different vendor.",
-            "Measure wall-clock latency, estimate tokens and cost, and write a telemetry row.",
+        "oneline": "Picks a model per request from explicit rules, with privacy and capability gates "
+                   "and cross-vendor fallback.",
+        "does": [
+            "Scores Gemini, OpenAI and Anthropic on quality prior, blended token price and latency.",
+            "Runs hard gates before scoring: privacy locality, JSON mode, minimum quality, context size.",
+            "Refuses `privacy=local_only` rather than quietly downgrading it to a cloud provider.",
+            "`force_provider` can bypass the capability gate. It can never bypass the privacy gate.",
+            "Retries three times, fails over to a different vendor, and writes a telemetry row.",
         ],
-        "safety": "`privacy=local_only` is **refused** rather than silently downgraded to a cloud provider when no local candidate is registered. `force_provider` can bypass the capability gate — it can never bypass the privacy gate.",
+        "flow": """flowchart LR
+  A[request] --> B[Privacy gate]
+  B --> C[Capability gate]
+  C --> D[Weighted score<br/>quality · cost · latency]
+  D --> E[Chosen provider]
+  E -->|3 failures| F[Fallback vendor]
+  E --> G[Telemetry row]
+  F --> G""",
         "limits": [
-            "Quality priors and prices in the registry are **configured values, not measurements**. Re-check prices before trusting a cost figure.",
-            "Token counts are estimated from characters/4; the n8n LangChain chain nodes do not surface provider-reported usage.",
+            "Quality priors and prices are configured values, not measurements. Re-check prices before trusting a cost figure.",
             "No local provider is wired. The registry has a commented example.",
         ],
     },
     "03": {
-        "problem": "Most RAG demos retrieve the nearest chunks and let the model talk. That produces confident answers from irrelevant context, ignores document access rules, and gives no way to tell a good retrieval from a bad one.",
-        "how": [
-            "**Ingest**: chunk at 700 characters with 120 overlap, attaching `doc_id`, `title`, `category`, `audience` and `effective_from` as metadata, embed and store.",
-            "**Retrieve** the top-k chunks for the question.",
-            "**Filter on metadata** — an `internal` document is never returned to a `public` caller, even when it is the best semantic match.",
-            "**Rerank**: `0.7 x normalised vector score + 0.3 x lexical term overlap`. Deterministic, free, and it rescues exact-term matches that embeddings rank low.",
-            "**Gate on relevance** — being the closest thing in the store does not make a chunk evidence.",
-            "Generate with the `rag/answerer` prompt, requiring `[C#]` citations, then verify the answer against the retrieved chunks.",
+        "oneline": "Retrieval with metadata access control, deterministic reranking and "
+                   "citation-bound answers.",
+        "does": [
+            "Chunks with `doc_id`, `title`, `category`, `audience` and `effective_from` metadata.",
+            "Filters on audience before the model sees anything — an internal document is never returned to a public caller.",
+            "Reranks `0.7 × vector + 0.3 × lexical overlap`, which rescues exact-term matches that embeddings rank low.",
+            "Gates on relevance, so closest-in-the-store is not treated as evidence.",
+            "Answers with `[C#]` citations and checks them against the chunks that were retrieved.",
         ],
-        "safety": "Audience filtering is access control, applied before the model sees anything. Test fixtures R03 and R04 ask the *same question* with different audiences to prove the filter is what blocks the answer, not retrieval luck.",
+        "flow": """flowchart LR
+  A[question] --> B[Retrieve top-k]
+  B --> C[Filter by audience]
+  C --> D[Rerank<br/>0.7 vector + 0.3 lexical]
+  D --> E{Relevant enough?}
+  E -->|no| F[Explicit no-answer]
+  E -->|yes| G["Answer with C# citations"]
+  G --> H[Verify against chunks]""",
         "limits": [
             "The demo uses n8n's in-memory Simple Vector Store, which does not survive a restart. Qdrant is the documented production swap.",
             "Retrieval quality has not been measured against a labelled ground-truth set. The fixtures prove behaviour, not ranking quality.",
@@ -74,46 +110,71 @@ DETAIL: dict[str, dict] = {
         ],
     },
     "04": {
-        "problem": "Research agents are the easiest place for an LLM to fabricate a citation, because a plausible URL looks like evidence.",
-        "how": [
-            "Plan the question into sub-questions and keyword queries using the `research/planner` prompt.",
-            "Run each query against live web search and collect results.",
-            "**Deduplicate** in two stages: exact match on a normalised URL (tracking parameters, `www.`, fragments and trailing slashes stripped), then near-duplicate detection using 3-word shingles with a Jaccard threshold of 0.8.",
-            "Synthesise a report with the `research/synthesiser` prompt, requiring an `[S#]` marker after every factual sentence.",
-            "Verify every claim against the collected evidence, and build a provenance map of what was cited, what was collected but unused, and any invented marker.",
+        "oneline": "Plans sub-questions, searches the live web, and checks every claim in the report "
+                   "against the sources it actually retrieved.",
+        "does": [
+            "Deduplicates twice: exact normalised URL, then 3-word shingles at a Jaccard threshold of 0.8.",
+            "Requires an `[S#]` marker after every factual sentence.",
+            "Checks each marker and URL against the collected evidence by string match, not by asking another model.",
+            "Maps what was cited, what was collected but unused, and any marker that was invented.",
+            "Stops and reports a gap when search returns nothing, rather than writing an unsourced answer.",
         ],
-        "safety": "If every search returns nothing the agent stops and reports a gap. It never writes an unsourced answer. Fabricated markers and URLs are detected by string matching against the sources actually retrieved.",
+        "flow": """flowchart LR
+  A[question] --> B[Plan sub-questions]
+  B --> C[Live web search]
+  C --> D[Deduplicate<br/>URL + shingles]
+  D --> E["Synthesise with S# markers"]
+  E --> F[Check every claim]
+  F --> G[Report + provenance map]""",
         "limits": [
-            "Live web results change, so a re-run will cite different sources.",
             "The entailment judge evaluates at most 15 claims per call; longer reports report `claims_truncated`.",
             "No source-quality weighting: a blog and a primary regulator carry equal weight.",
         ],
     },
     "05": {
-        "problem": "Agents that can act need a decision layer that is auditable and that fails closed. Asking a model whether an action is safe is not that layer.",
-        "how": [
-            "Classify risk **deterministically** from the action type, then raise it on destructive verbs, production targets, monetary amounts, bulk operations, personal data in parameters, low agent confidence, and injection-shaped reasoning.",
-            "LOW executes. MEDIUM runs five deterministic policy checks and executes only if all pass. HIGH goes to a human. CRITICAL is denied by default.",
-            "Send HIGH and CRITICAL to Telegram and wait, with a 60 minute limit.",
-            "Record every decision with its reasons, the decider and an expiry.",
+        "oneline": "Deterministic risk classification with a human in the loop, and deny-by-default "
+                   "for the worst case.",
+        "does": [
+            "Scores risk from the action type, then raises it on destructive verbs, production targets, money, bulk operations and personal data.",
+            "LOW executes. MEDIUM passes five policy checks first. HIGH waits for a human. CRITICAL is denied.",
+            "Levels can only be raised, never lowered; an unrecognised action type defaults to HIGH.",
+            "A timeout, a channel error and a malformed reply all resolve to rejected.",
+            "A request arguing that it is already pre-approved is treated as a suspected injection and raised to CRITICAL.",
         ],
-        "safety": "Levels can only ever be raised, never lowered. An unrecognised action type defaults to **HIGH**, not LOW. A timeout, channel error or malformed response all resolve to **rejected**. A request whose own text argues it is pre-approved is treated as a suspected injection and raised to CRITICAL. Simulated decisions used by tests are written to the ledger as `simulated:test-harness` so they can never be mistaken for real approvals.",
+        "flow": """flowchart TD
+  A[action request] --> B[Deterministic risk score]
+  B --> C{Level}
+  C -->|LOW| D[Execute]
+  C -->|MEDIUM| E[5 policy checks]
+  E --> D
+  C -->|HIGH| F[Human approval<br/>60 min limit]
+  C -->|CRITICAL| G[Denied by default]
+  D --> H[Decision ledger]
+  F --> H
+  G --> H""",
         "limits": [
-            "The Telegram approval leg is not covered by the automated suite; the 12 fixtures use `simulate_decision`.",
             "The MEDIUM allow-list of target systems is a demo list and must be replaced for real use.",
             "Approvals are not cryptographically signed.",
         ],
     },
     "06": {
-        "problem": "Invoice extraction that only checks 'did the model return JSON' misses the failure that matters: a well-formed record whose numbers do not add up.",
-        "how": [
-            "Extract fields with the `finance/invoice-extractor` prompt through the Model Router, or accept a supplied extraction for deterministic testing.",
-            "**Reconcile arithmetically**: line items summed against the subtotal, subtotal plus tax against the total, quantity times unit price against each line amount — all to a 0.02 tolerance.",
-            "Validate document type, required fields, ISO 4217 currency, date sanity and implied tax rate.",
-            "Fingerprint on `vendor | invoice number | currency | total` and check the ledger for duplicates.",
-            "Score system confidence, verify, and escalate anything with an exception to Governance.",
+        "oneline": "Invoice extraction that checks the arithmetic instead of trusting well-formed JSON.",
+        "does": [
+            "Reconciles line items against subtotal, subtotal plus tax against total, and quantity × unit price against each line, to 0.02.",
+            "Validates document type, required fields, ISO 4217 currency, date sanity and implied tax rate.",
+            "Fingerprints on vendor, invoice number, currency and total, and checks a ledger for duplicates.",
+            "Tells the extractor **not** to correct a printed total that disagrees with the lines — fixing it silently would hide the discrepancy.",
+            "Escalates anything carrying an exception to Governance.",
         ],
-        "safety": "The prompt explicitly tells the extractor **not** to correct a printed total that disagrees with the line items — silently fixing it would hide exactly the discrepancy this workflow exists to find. System confidence starts at 1.0 and is only ever reduced by evidence.",
+        "flow": """flowchart LR
+  A[invoice text] --> B[Extract fields]
+  B --> C[Arithmetic reconciliation]
+  C --> D[Field + currency validation]
+  D --> E[Duplicate fingerprint]
+  E --> F{Exceptions?}
+  F -->|yes| G[Escalate to Governance]
+  F -->|no| H[Ledger row]
+  G --> H""",
         "limits": [
             "Text in, no OCR or vision stage. Feed it text extracted upstream.",
             "Single currency per document; no FX conversion.",
@@ -121,15 +182,21 @@ DETAIL: dict[str, dict] = {
         ],
     },
     "07": {
-        "problem": "Letting an LLM write SQL against a warehouse is the fastest way to turn a prompt injection into a data breach.",
-        "how": [
-            "Load the metric and dimension registry — the security boundary.",
-            "Ask the model, via the `analytics/query-planner` prompt, for a **query spec**: metric names, dimension names, filters, a date range and a limit. Never SQL.",
-            "**Validate and compile deterministically.** Every name is checked against the registry and anything unknown is discarded. SQL is assembled from registry column names with user values bound as `$1, $2, ...` parameters.",
-            "Execute read-only, aggregate, then narrate the rows with the `analytics/narrator` prompt.",
-            "Verify the narration against the returned rows.",
+        "oneline": "Natural-language questions over a warehouse where the model never writes SQL.",
+        "does": [
+            "The model emits a query spec: metric names, dimensions, filters, a date range and a limit.",
+            "Every name is validated against a fixed registry, and anything unknown is discarded.",
+            "SQL is assembled from registry column names, with user values bound as `$1, $2, …` parameters.",
+            "The compiled SQL and its parameters come back with every answer, so a result can be audited.",
+            "The worst a prompt injection achieves is having its spec rejected.",
         ],
-        "safety": "No model text ever reaches a query string. The worst a prompt injection can achieve is having its spec rejected. The compiled SQL and its bound parameters are returned in every response, so each answer is auditable.",
+        "flow": """flowchart LR
+  A[question] --> B[Model emits query spec]
+  B --> C[Validate against registry]
+  C --> D[Compile parameterised SQL]
+  D --> E[Read-only execute]
+  E --> F[Narrate rows]
+  F --> G[Verify narration]""",
         "limits": [
             "The demo warehouse is an n8n Data Table with 90 synthetic rows; aggregation happens in memory.",
             "The registry covers four metrics and five dimensions. Anything outside it returns `unsupported`.",
@@ -137,29 +204,46 @@ DETAIL: dict[str, dict] = {
         ],
     },
     "08": {
-        "problem": "Prompts embedded in workflow JSON cannot be reviewed, diffed, versioned or rolled back, and there is no way to tell which prompt text produced a given output.",
-        "how": [
-            "Resolve the prompt path and Git ref, defaulting to `main`.",
-            "Fetch the file through the GitHub Contents API, retrying three times with backoff and treating a 404 or rate limit as data rather than a crash.",
-            "Parse the front matter, validate the caller's variables against the prompt's declared contract, and interpolate.",
-            "Return the rendered prompt with its **blob SHA**, so an execution log ties back to exact prompt bytes.",
+        "oneline": "Prompts live in Git rather than inside workflow JSON, and every render reports "
+                   "the blob SHA it came from.",
+        "does": [
+            "Fetches prompt files through the GitHub Contents API at any Git ref, defaulting to `main`.",
+            "Validates the caller's variables against the prompt's declared contract before interpolating.",
+            "Refuses a prompt with an unfilled `{{placeholder}}` rather than sending it to a model.",
+            "Returns the blob SHA, so an execution log ties back to exact prompt bytes.",
+            "On a GitHub outage returns a bundled fallback flagged `degraded: true` — never silent non-Git text.",
         ],
-        "safety": "In strict mode a prompt with an unfilled `{{placeholder}}` is refused rather than sent to a model, because models handle a literal placeholder unpredictably. On a GitHub outage the service returns a **bundled fallback** for hot-path prompts with `degraded: true` and an explicit issue, so a caller can never silently run on non-Git text believing it came from Git.",
+        "flow": """flowchart LR
+  A[prompt id + ref] --> B[GitHub Contents API]
+  B -->|ok| C[Parse front matter]
+  B -->|outage| D["Bundled fallback<br/>degraded: true"]
+  C --> E[Validate variables]
+  E --> F[Rendered prompt + blob SHA]
+  D --> F""",
         "limits": [
-            "Anonymous GitHub API is 60 requests/hour per IP. Add a token for heavy use.",
+            "The anonymous GitHub API allows 60 requests/hour per IP. Add a token for heavy use.",
             "No caching layer: every render is a live fetch.",
             "Bundled fallbacks exist for two hot-path prompts, not all twelve.",
         ],
     },
     "09": {
-        "problem": "'LLM judges LLM' is the standard answer to hallucination and it is not good enough on its own: it is slow, costs a model call, and is itself capable of being wrong.",
-        "how": [
-            "**Deterministic checks first, always.** JSON Schema conformance, required fields, arithmetic business rules, **citation existence** and safety markers (unfilled placeholders, refusals, echoed prompt injections).",
-            "Decompose remaining prose into checkable factual claims, dropping headings, list lead-ins and other document furniture.",
-            "Only then, and only if sources were supplied, ask a model to label each claim SUPPORTED, CONTRADICTED or NOT_STATED — one batched call through the Model Router.",
-            "Combine into `score = 0.6 x deterministic + 0.4 x groundedness`, and return a machine-readable verdict.",
+        "oneline": "Deterministic checks first; an LLM judge is one weighted signal, never the "
+                   "whole verdict.",
+        "does": [
+            "Checks JSON Schema conformance, required fields, arithmetic rules, citation existence and safety markers.",
+            "Decomposes the remaining prose into checkable claims, dropping headings and list lead-ins.",
+            "Only then asks a model to label claims SUPPORTED, CONTRADICTED or NOT_STATED, in one batched call.",
+            "Caps the judge at 40% of the score, and only when it actually ran.",
+            "Degrades a failed or malformed judge to 'not evaluated' with `verified: false` — not a silent pass.",
         ],
-        "safety": "The judge can move at most **40%** of the score, and only when it actually ran. A judge that fails or returns malformed JSON degrades to 'not evaluated' rather than scoring zero — and `verified` is then **false**, because grounding was asked for and did not happen. Truncated judge responses are repaired by finding the longest balanced prefix.",
+        "flow": """flowchart LR
+  A[output + sources] --> B[Schema · fields · arithmetic]
+  B --> C[Citation existence]
+  C --> D[Safety markers]
+  D --> E{Sources supplied?}
+  E -->|no| G[Verdict]
+  E -->|yes| F[Claim entailment<br/>max 40% of score]
+  F --> G""",
         "limits": [
             "At most 15 claims per call; beyond that `claims_truncated` is reported.",
             "The JSON Schema validator is a documented subset, not a full implementation.",
@@ -167,17 +251,26 @@ DETAIL: dict[str, dict] = {
         ],
     },
     "10": {
-        "problem": "A voice agent that can act on what it thinks it heard is a liability, and a single end-to-end latency number hides where the time actually goes.",
-        "how": [
-            "Accept audio or text on a webhook and stamp a start time.",
-            "Transcribe audio with Whisper, or use the supplied text.",
-            "Classify the transcript against a **closed registry** of five intents using the `voice/intent-router` prompt.",
-            "Send data-changing intents to Governance.",
-            "Execute a restricted tool, compose a short spoken reply, verify it against the tool result, synthesise speech, and respond.",
+        "oneline": "Webhook to speech, with intent classification against a closed registry and a "
+                   "gate before anything can act.",
+        "does": [
+            "Transcribes with Whisper, or accepts a text payload for testing.",
+            "Classifies against a closed registry of five intents; an invented name becomes `unsupported`.",
+            "Reads whether an intent changes data from the registry, not from the model.",
+            "Sends data-changing intents to Governance and records the decision — it never executes them.",
+            "Measures latency per stage, so the slow step is visible rather than averaged away.",
         ],
-        "safety": "The tool surface is a closed registry: an invented intent name becomes `unsupported`, never an undefined action. Whether an intent changes data is declared **in the registry, not by the model**. Even on approval this workflow **does not execute** data-changing intents — the approval is recorded for a human. That is what makes a public webhook demo safe.",
+        "flow": """flowchart LR
+  A["webhook: audio or text"] --> B[Whisper transcribe]
+  B --> C[Classify against<br/>closed intent registry]
+  C --> D{Changes data?}
+  D -->|yes| E[Governance<br/>recorded, not executed]
+  D -->|no| F[Run restricted tool]
+  F --> G[Compose reply]
+  E --> G
+  G --> H[Verify, then speak]""",
         "limits": [
-            "The audio upload path is structurally validated but not exercised end to end; both recorded runs used the text payload. Text-to-speech **is** exercised.",
+            "The audio upload path is structurally validated but was not exercised end to end. Text-to-speech is.",
             "No conversation memory across turns.",
             "Demo tools return invented static data.",
         ],
@@ -190,154 +283,106 @@ def trigger_names(wf: dict) -> list[str]:
     for n in wf.get("nodes") or []:
         t = str(n.get("type", "")).lower()
         if "trigger" in t or t.endswith("webhook"):
-            out.append(f"`{n['name']}`")
+            out.append(n["name"])
     return out
 
 
-def read_evidence(folder: Path) -> tuple[str, list[str]]:
-    lines: list[str] = []
-    headline = ""
+def read_evidence(folder: Path) -> list[dict]:
+    """One row per evidence file: headline result, link, and the file's own caveat."""
+    rows: list[dict] = []
     for sub in ("tests", "benchmarks"):
         for f in sorted((folder / sub).glob("*.json")):
             data = json.loads(f.read_text(encoding="utf-8"))
             rel = f"{sub}/{f.name}"
             if "passed" in data and "total" in data:
-                headline = headline or f"{data['passed']}/{data['total']} assertions passed"
-                lines.append(f"- **{data['passed']}/{data['total']} passed** — [`{rel}`]({rel})"
-                             + (f" (n8n execution `{data['n8n_execution_id']}`)" if data.get("n8n_execution_id") else ""))
+                result = f"{data['passed']}/{data['total']} fixtures passed"
             elif data.get("runs"):
-                n = len(data["runs"])
-                lines.append(f"- **{n} recorded run(s)** — [`{rel}`]({rel})")
+                result = f"{len(data['runs'])} recorded runs"
             else:
-                lines.append(f"- [`{rel}`]({rel})")
-            if data.get("note"):
-                lines.append(f"  - {data['note']}")
+                result = "recorded run"
+            rows.append({
+                "result": result,
+                "rel": rel,
+                "exec": data.get("n8n_execution_id"),
+                "note": data.get("note"),
+            })
 
     # A folder with no suite still has evidence if it captured a real run verbatim.
     out = folder / "sample-output.json"
-    if not lines and out.exists():
+    if not rows and out.exists():
         data = json.loads(out.read_text(encoding="utf-8"))
-        exec_id = data.get("n8n_execution_id")
-        lines.append("- **1 recorded run** — [`sample-output.json`](sample-output.json)"
-                     + (f" (n8n execution `{exec_id}`)" if exec_id else ""))
-        if data.get("_note"):
-            lines.append(f"  - {data['_note']}")
-    return headline, lines
+        rows.append({
+            "result": "1 recorded run",
+            "rel": "sample-output.json",
+            "exec": data.get("n8n_execution_id"),
+            "note": data.get("_note"),
+        })
+    return rows
+
+
+def render(entry: dict, folder: Path) -> str:
+    num = entry["number"]
+    d = DETAIL[num]
+    wf = json.loads((folder / "workflow.json").read_text(encoding="utf-8"))
+    calls = entry.get("calls") or []
+    called_by = entry.get("called_by") or []
+
+    p: list[str] = [f"# {num} — {TITLES[num]}", ""]
+    p += [d["oneline"], ""]
+    p += ["`Live tested` · [`workflow.json`](workflow.json)", ""]
+
+    p += ["## What it does", ""]
+    p += [f"- {b}" for b in d["does"]]
+    p += [""]
+
+    p += ["## Flow", "", "```mermaid", d["flow"], "```", ""]
+    if calls:
+        p += ["Calls " + ", ".join(f"{c} {SERVICE_NAMES[c]}" for c in calls) + ".", ""]
+    if called_by:
+        p += ["Called by " + ", ".join(called_by) + ".", ""]
+
+    p += ["## Setup", ""]
+    svc = entry.get("external_services") or []
+    if svc:
+        p += [f"- {s}" for s in svc]
+    else:
+        p += ["No credentials of its own beyond the shared services it calls."]
+    p += [""]
+    if entry.get("credential_note"):
+        p += [entry["credential_note"], ""]
+    triggers = trigger_names(wf)
+    if triggers:
+        p += ["Run it from " + " or ".join(f"`{t}`" for t in triggers) + ".", ""]
+    p += ["Credentials and data tables: [docs/CONNECTIONS.md](../../docs/CONNECTIONS.md)", ""]
+
+    rows = read_evidence(folder)
+    if rows:
+        p += ["## Test evidence", ""]
+        p += ["| Result | Raw output |", "| --- | --- |"]
+        for r in rows:
+            ref = f"[`{r['rel']}`]({r['rel']})"
+            if r["exec"]:
+                ref += f" · execution `{r['exec']}`"
+            p += [f"| {r['result']} | {ref} |"]
+        p += [""]
+        for r in rows:
+            if r["note"]:
+                p += [r["note"], ""]
+
+    p += ["## Limitations", ""]
+    p += [f"- {lim}" for lim in d["limits"]]
+    p += [""]
+
+    return "\n".join(p).rstrip() + "\n"
 
 
 def main() -> int:
     written = 0
     for entry in CATALOG["workflows"]:
-        num = entry["number"]
         folder = ROOT / "workflows" / entry["folder"]
-        wf = json.loads((folder / "workflow.json").read_text(encoding="utf-8"))
-        d = DETAIL[num]
-
-        node_count = len(wf.get("nodes") or [])
-        real_nodes = [n for n in wf["nodes"] if not str(n.get("type", "")).endswith("stickyNote")]
-        calls = entry.get("calls") or []
-        called_by = entry.get("called_by") or []
-
-        p = ["# " + num + " " + entry["name"], ""]
-        p.append(f"> {entry['summary']}")
-        p.append("")
-        # The n8n workflow id stays in the catalog for export-workflows.py, but it is
-        # an identifier inside one private instance and means nothing to a reader here.
-        p.append(f"**Status:** {entry['status']} · **{node_count} nodes** ({len(real_nodes)} executable)")
-        p.append("")
-
-        p.append("## The problem")
-        p.append("")
-        p.append(d["problem"])
-        p.append("")
-
-        p.append("## How it works")
-        p.append("")
-        for i, step in enumerate(d["how"], 1):
-            p.append(f"{i}. {step}")
-        p.append("")
-
-        p.append("## Platform services it calls")
-        p.append("")
-        if calls:
-            for c in calls:
-                p.append(f"- **{c} {SERVICE_NAMES.get(c, '')}**")
-        else:
-            p.append("None — this *is* a platform service.")
-        p.append("")
-        if called_by:
-            p.append("Called by: " + ", ".join(f"**{c}**" for c in called_by))
-            p.append("")
-
-        p.append("## Safety properties")
-        p.append("")
-        p.append(d["safety"])
-        p.append("")
-
-        p.append("## Triggers")
-        p.append("")
-        for t in trigger_names(wf):
-            p.append(f"- {t}")
-        p.append("")
-
-        # Sample IO
-        si, so = folder / "sample-input.json", folder / "sample-output.json"
-        if si.exists() or so.exists():
-            p.append("## Sample input and output")
-            p.append("")
-            if si.exists():
-                p.append("- [`sample-input.json`](sample-input.json)")
-            if so.exists():
-                p.append("- [`sample-output.json`](sample-output.json) — a verbatim capture of a real run")
-            p.append("")
-
-        headline, ev = read_evidence(folder)
-        p.append("## Verification")
-        p.append("")
-        if ev:
-            p.extend(ev)
-            p.append("")
-            p.append("Every figure came from a run on a live n8n instance; the linked files are the raw results.")
-        else:
-            p.append("- No recorded run in this folder.")
-        p.append("")
-
-        p.append("## Connections required")
-        p.append("")
-        svc = entry.get("external_services") or []
-        if svc:
-            for s in svc:
-                p.append(f"- {s}")
-        else:
-            p.append("- None beyond the platform services above.")
-        if entry.get("credential_note"):
-            p.append("")
-            p.append(entry["credential_note"])
-        p.append("")
-        p.append("Full setup: [docs/CONNECTIONS.md](../../docs/CONNECTIONS.md)")
-        p.append("")
-
-        p.append("## Limitations")
-        p.append("")
-        for lim in d["limits"]:
-            p.append(f"- {lim}")
-        p.append("")
-
-        p.append("## Import")
-        p.append("")
-        p.append("```bash")
-        p.append(f"python scripts/import-workflows.py --only {num}")
-        p.append("```")
-        p.append("")
-        p.append("Or import [`workflow.json`](workflow.json) in the n8n editor. Sub-workflow "
-                 "references carry the placeholder `REPLACE_WITH_YOUR_WORKFLOW_ID` and must be "
-                 "relinked — the import script does this automatically.")
-        p.append("")
-
-        (folder / "README.md").write_text("\n".join(p), encoding="utf-8")
+        (folder / "README.md").write_text(render(entry, folder), encoding="utf-8")
+        print(f"wrote {entry['folder']}/README.md")
         written += 1
-        print(f"wrote workflows/{entry['folder']}/README.md ({node_count} nodes, {headline or 'runs recorded'})")
-
     print(f"\n{written} README(s) written")
     return 0
 

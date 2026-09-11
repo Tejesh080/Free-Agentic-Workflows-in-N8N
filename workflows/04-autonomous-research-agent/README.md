@@ -1,59 +1,48 @@
-# 04 Autonomous Research Agent
+# 04 — Research Agent
 
-> Plans a question into sub-questions, searches the live web, deduplicates evidence by URL and content shingles, synthesises a cited report, and verifies every claim against the retrieved sources.
+Plans sub-questions, searches the live web, and checks every claim in the report against the sources it actually retrieved.
 
-**Status:** LIVE VERIFIED · **21 nodes** (18 executable)
+`Live tested` · [`workflow.json`](workflow.json)
 
-## The problem
+## What it does
 
-Research agents are the easiest place for an LLM to fabricate a citation, because a plausible URL looks like evidence.
+- Deduplicates twice: exact normalised URL, then 3-word shingles at a Jaccard threshold of 0.8.
+- Requires an `[S#]` marker after every factual sentence.
+- Checks each marker and URL against the collected evidence by string match, not by asking another model.
+- Maps what was cited, what was collected but unused, and any marker that was invented.
+- Stops and reports a gap when search returns nothing, rather than writing an unsourced answer.
 
-## How it works
+## Flow
 
-1. Plan the question into sub-questions and keyword queries using the `research/planner` prompt.
-2. Run each query against live web search and collect results.
-3. **Deduplicate** in two stages: exact match on a normalised URL (tracking parameters, `www.`, fragments and trailing slashes stripped), then near-duplicate detection using 3-word shingles with a Jaccard threshold of 0.8.
-4. Synthesise a report with the `research/synthesiser` prompt, requiring an `[S#]` marker after every factual sentence.
-5. Verify every claim against the collected evidence, and build a provenance map of what was cited, what was collected but unused, and any invented marker.
+```mermaid
+flowchart LR
+  A[question] --> B[Plan sub-questions]
+  B --> C[Live web search]
+  C --> D[Deduplicate<br/>URL + shingles]
+  D --> E["Synthesise with S# markers"]
+  E --> F[Check every claim]
+  F --> G[Report + provenance map]
+```
 
-## Platform services it calls
+Calls 02 Model Router, 08 Prompt Registry, 09 Verification.
 
-- **02 Model Router**
-- **08 Prompt Registry**
-- **09 Verification**
-
-## Safety properties
-
-If every search returns nothing the agent stops and reports a gap. It never writes an unsourced answer. Fabricated markers and URLs are detected by string matching against the sources actually retrieved.
-
-## Triggers
-
-- `Research Request`
-- `Demo Trigger`
-
-## Verification
-
-- **2 recorded run(s)** — [`tests/results-2026-09-08.json`](tests/results-2026-09-08.json)
-  - Live web results change over time, so the exact sources and figures will differ on a re-run. What is asserted here is structural: sources were retrieved and deduplicated, the report cited only real markers, and every claim was checked against the retrieved evidence.
-
-Every figure came from a run on a live n8n instance; the linked files are the raw results.
-
-## Connections required
+## Setup
 
 - Firecrawl (web search and scrape)
 
-Full setup: [docs/CONNECTIONS.md](../../docs/CONNECTIONS.md)
+Run it from `Research Request` or `Demo Trigger`.
+
+Credentials and data tables: [docs/CONNECTIONS.md](../../docs/CONNECTIONS.md)
+
+## Test evidence
+
+| Result | Raw output |
+| --- | --- |
+| 2 recorded runs | [`tests/results-2026-09-08.json`](tests/results-2026-09-08.json) |
+
+Live web results change over time, so the exact sources and figures will differ on a re-run. What is asserted here is structural: sources were retrieved and deduplicated, the report cited only real markers, and every claim was checked against the retrieved evidence.
 
 ## Limitations
 
-- Live web results change, so a re-run will cite different sources.
 - The entailment judge evaluates at most 15 claims per call; longer reports report `claims_truncated`.
 - No source-quality weighting: a blog and a primary regulator carry equal weight.
-
-## Import
-
-```bash
-python scripts/import-workflows.py --only 04
-```
-
-Or import [`workflow.json`](workflow.json) in the n8n editor. Sub-workflow references carry the placeholder `REPLACE_WITH_YOUR_WORKFLOW_ID` and must be relinked — the import script does this automatically.
