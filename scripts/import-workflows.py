@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Import the ten workflows into an n8n instance and relink their dependencies.
+"""Import this repository's workflows into an n8n instance and relink their dependencies.
 
 The published workflow.json files carry placeholder ids for sub-workflows and
 data tables, because an id from one n8n instance is meaningless in another.

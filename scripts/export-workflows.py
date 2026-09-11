@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export the ten workflows from a live n8n instance into this repository.
+"""Export this repository's workflows from a live n8n instance into this repository.
 
 Fetches each workflow by id, runs it through the sanitiser, and writes it to
 `workflows/<folder>/workflow.json`. The raw export is optionally kept under

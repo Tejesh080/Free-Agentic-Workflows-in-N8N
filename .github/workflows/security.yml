@@ -1,0 +1,64 @@
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Published workflow exports are the risk surface here: a raw n8n export
+      # carries credential ids, an instance id and any payload pinned during
+      # testing. The scanner fails the build on those; it only advises on
+      # lower-severity finds like a fixture phone number.
+      - name: Scan exports and docs for secrets and instance identifiers
+        run: python scripts/security-check.py
+
+      - name: No disabled-by-default safeguard has been quietly enabled
+        run: |
+          python - <<'PY'
+          import json, sys
+          from pathlib import Path
+
+          # 11's HubSpot nodes ship disabled and 14 defaults to dry_run. Both are
+          # deliberate. A change that flips either one should be a conscious act
+          # with a commit message explaining it, not a diff nobody noticed.
+          failures = []
+
+          crm = json.loads(Path("workflows/11-crm-sync-service/workflow.json").read_text(encoding="utf-8"))
+          for node in crm["nodes"]:
+              if node["type"] == "n8n-nodes-base.hubspot" and not node.get("disabled"):
+                  failures.append(f"11: HubSpot node {node['name']!r} is enabled in the published export")
+
+          swarm = json.loads(Path("workflows/14-revenue-swarm-orchestrator/workflow.json").read_text(encoding="utf-8"))
+          for node in swarm["nodes"]:
+              if node["name"] == "Normalise Intake":
+                  code = node["parameters"]["jsCode"]
+                  if 'options.dry_run === undefined ? true' not in code:
+                      failures.append("14: dry_run no longer defaults to true")
+              if node["type"] == "n8n-nodes-base.webhook" and node["parameters"].get("authentication") not in (None, "none"):
+                  continue
+          for node in swarm["nodes"]:
+              if node["name"] == "Check Ingest Key":
+                  if "SWARM_INGEST_KEY" not in node["parameters"]["jsCode"]:
+                      failures.append("14: the ingest key check no longer references SWARM_INGEST_KEY")
+                  break
+          else:
+              failures.append("14: the Check Ingest Key node is missing from the published export")
+
+          if failures:
+              print("FAIL  safeguard check")
+              for f in failures:
+                  print(f"  - {f}")
+              sys.exit(1)
+          print("PASS  safeguards intact: HubSpot nodes disabled, dry_run default, ingest key enforced")
+          PY

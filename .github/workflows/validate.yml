@@ -1,0 +1,38 @@
+name: validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Every check here is offline and hermetic. None of them reach n8n, a
+      # model provider or a CRM, so a pull request from a fork runs the same
+      # checks as a push to main.
+      - name: Workflow structure matches the catalog
+        run: python scripts/validate-workflows.py
+
+      - name: Prompt registry contract
+        run: python scripts/validate-prompts.py
+
+      - name: Golden set has not drifted from the evaluation workflow
+        run: python scripts/validate-evals.py
+
+      - name: Per-workflow READMEs are in sync with the catalog and exports
+        run: |
+          python scripts/generate-workflow-readmes.py
+          if ! git diff --quiet -- workflows; then
+            echo "::error::A workflow README is stale. Run scripts/generate-workflow-readmes.py and commit the result."
+            git --no-pager diff --stat -- workflows
+            exit 1
+          fi
