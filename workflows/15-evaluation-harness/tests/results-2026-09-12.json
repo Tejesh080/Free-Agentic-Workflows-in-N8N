@@ -1,0 +1,221 @@
+{
+  "suite": "15-evaluation-harness",
+  "generated_at": "2026-09-11T16:09:18.352Z",
+  "n8n_execution_id": "718",
+  "workflow": "Evaluation Harness",
+  "how_to_reproduce": "Open the workflow in n8n and run the 'Run Evaluation' manual trigger.",
+  "note": "Both rubrics are scored through the real qualification workflow with supplied signals, so no model call is made and the run is free to repeat. The promotion gate is arithmetic over the labelled rows; no model is consulted about whether the candidate is better.",
+  "golden_set": "revenue-swarm-b2b-v1",
+  "golden_version": "1.0.0",
+  "total_cases": 12,
+  "rubric_a": "1.2.0",
+  "rubric_b": "2.0.0-candidate",
+  "production": {
+    "accuracy": 0.917,
+    "hot_precision": 1,
+    "hot_recall": 1,
+    "hot_conversion": 1,
+    "predicted_hot": 4,
+    "correct": 11
+  },
+  "candidate": {
+    "accuracy": 0.833,
+    "hot_precision": 0.667,
+    "hot_recall": 1,
+    "hot_conversion": 0.667,
+    "predicted_hot": 6,
+    "correct": 10
+  },
+  "regressions": [
+    "accuracy 0.917 -> 0.833",
+    "hot_precision 1 -> 0.667",
+    "hot_conversion 1 -> 0.667"
+  ],
+  "improvements": [],
+  "promote": false,
+  "promote_reason": "rejected: 3 regression(s) - accuracy 0.917 -> 0.833; hot_precision 1 -> 0.667; hot_conversion 1 -> 0.667",
+  "disagreements": [
+    {
+      "case_id": "G04",
+      "note": "Ops manager, adjacent use case, no figure named",
+      "human_label": "WARM",
+      "production": "WARM (69)",
+      "candidate": "HOT (69)",
+      "outcome": "no_reply"
+    },
+    {
+      "case_id": "G06",
+      "note": "Senior and specific, but a company one band below the ICP",
+      "human_label": "WARM",
+      "production": "WARM (63)",
+      "candidate": "HOT (63)",
+      "outcome": "no_reply"
+    },
+    {
+      "case_id": "G08",
+      "note": "Very small company, no budget - a human would still keep it in nurture rather than bin it",
+      "human_label": "COLD",
+      "production": "DISQUALIFIED (23)",
+      "candidate": "COLD (23)",
+      "outcome": "no_reply"
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "G01",
+      "note": "CFO at an enterprise with an approved budget and an immediate start",
+      "expected_tier": "HOT",
+      "outcome": "won",
+      "a_score": 100,
+      "a_tier": "HOT",
+      "a_rubric": "1.2.0",
+      "b_score": 100,
+      "b_tier": "HOT",
+      "b_rubric": "2.0.0-candidate",
+      "latency_ms": 618
+    },
+    {
+      "case_id": "G02",
+      "note": "VP Engineering, mid-market, budget named, buying this quarter",
+      "expected_tier": "HOT",
+      "outcome": "won",
+      "a_score": 96,
+      "a_tier": "HOT",
+      "a_rubric": "1.2.0",
+      "b_score": 96,
+      "b_tier": "HOT",
+      "b_rubric": "2.0.0-candidate",
+      "latency_ms": 446
+    },
+    {
+      "case_id": "G03",
+      "note": "Director of Ops, in-band, budget implied rather than stated",
+      "expected_tier": "HOT",
+      "outcome": "won",
+      "a_score": 81,
+      "a_tier": "HOT",
+      "a_rubric": "1.2.0",
+      "b_score": 81,
+      "b_tier": "HOT",
+      "b_rubric": "2.0.0-candidate",
+      "latency_ms": 447
+    },
+    {
+      "case_id": "G04",
+      "note": "Ops manager, adjacent use case, no figure named",
+      "expected_tier": "WARM",
+      "outcome": "no_reply",
+      "a_score": 69,
+      "a_tier": "WARM",
+      "a_rubric": "1.2.0",
+      "b_score": 69,
+      "b_tier": "HOT",
+      "b_rubric": "2.0.0-candidate",
+      "latency_ms": 452
+    },
+    {
+      "case_id": "G05",
+      "note": "Right company, right use case, no budget and no urgency",
+      "expected_tier": "WARM",
+      "outcome": "lost",
+      "a_score": 57,
+      "a_tier": "WARM",
+      "a_rubric": "1.2.0",
+      "b_score": 57,
+      "b_tier": "WARM",
+      "b_rubric": "2.0.0-candidate",
+      "latency_ms": 444
+    },
+    {
+      "case_id": "G06",
+      "note": "Senior and specific, but a company one band below the ICP",
+      "expected_tier": "WARM",
+      "outcome": "no_reply",
+      "a_score": 63,
+      "a_tier": "WARM",
+      "a_rubric": "1.2.0",
+      "b_score": 63,
+      "b_tier": "HOT",
+      "b_rubric": "2.0.0-candidate",
+      "latency_ms": 463
+    },
+    {
+      "case_id": "G07",
+      "note": "Individual contributor browsing, nothing behind it",
+      "expected_tier": "COLD",
+      "outcome": "no_reply",
+      "a_score": 32,
+      "a_tier": "COLD",
+      "a_rubric": "1.2.0",
+      "b_score": 32,
+      "b_tier": "COLD",
+      "b_rubric": "2.0.0-candidate",
+      "latency_ms": 455
+    },
+    {
+      "case_id": "G08",
+      "note": "Very small company, no budget - a human would still keep it in nurture rather than bin it",
+      "expected_tier": "COLD",
+      "outcome": "no_reply",
+      "a_score": 23,
+      "a_tier": "DISQUALIFIED",
+      "a_rubric": "1.2.0",
+      "b_score": 23,
+      "b_tier": "COLD",
+      "b_rubric": "2.0.0-candidate",
+      "latency_ms": 455
+    },
+    {
+      "case_id": "G09",
+      "note": "Tiny company but a core use case and a manager asking",
+      "expected_tier": "COLD",
+      "outcome": "no_reply",
+      "a_score": 32,
+      "a_tier": "COLD",
+      "a_rubric": "1.2.0",
+      "b_score": 32,
+      "b_tier": "COLD",
+      "b_rubric": "2.0.0-candidate",
+      "latency_ms": 459
+    },
+    {
+      "case_id": "G10",
+      "note": "Textbook buyer for a product we do not sell",
+      "expected_tier": "DISQUALIFIED",
+      "outcome": "lost",
+      "a_score": 15,
+      "a_tier": "DISQUALIFIED",
+      "a_rubric": "1.2.0",
+      "b_score": 15,
+      "b_tier": "DISQUALIFIED",
+      "b_rubric": "2.0.0-candidate",
+      "latency_ms": 465
+    },
+    {
+      "case_id": "G11",
+      "note": "A form submission that says nothing at all",
+      "expected_tier": "DISQUALIFIED",
+      "outcome": "no_reply",
+      "a_score": 0,
+      "a_tier": "DISQUALIFIED",
+      "a_rubric": "1.2.0",
+      "b_score": 0,
+      "b_tier": "DISQUALIFIED",
+      "b_rubric": "2.0.0-candidate",
+      "latency_ms": 473
+    },
+    {
+      "case_id": "G12",
+      "note": "A strong buyer who happened to use a personal email address",
+      "expected_tier": "HOT",
+      "outcome": "won",
+      "a_score": 91,
+      "a_tier": "HOT",
+      "a_rubric": "1.2.0",
+      "b_score": 91,
+      "b_tier": "HOT",
+      "b_rubric": "2.0.0-candidate",
+      "latency_ms": 478
+    }
+  ]
+}

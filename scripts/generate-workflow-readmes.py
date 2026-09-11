@@ -6,7 +6,7 @@ from workflow.json and the tests/benchmarks files rather than retyped, so a READ
 cannot quietly disagree with what shipped.
 
 Prose that is specific to a workflow lives in DETAIL below. Keep it specific: a
-sentence that would read the same under any of the ten does not belong here.
+sentence that would read the same under any of them does not belong here.
 
     python scripts/generate-workflow-readmes.py
 """
@@ -20,6 +20,7 @@ CATALOG = json.loads((ROOT / "catalog" / "workflows.json").read_text(encoding="u
 
 SERVICE_NAMES = {
     "02": "Model Router", "05": "Governance", "08": "Prompt Registry", "09": "Verification",
+    "11": "CRM Sync", "12": "Lead Qualification", "13": "Outreach Composer",
 }
 
 # Short display names. The folder names are longer and stay as they are - renaming
@@ -35,9 +36,155 @@ TITLES = {
     "08": "Prompt Registry",
     "09": "Output Verification",
     "10": "Voice Agent",
+    "11": "CRM Sync Service",
+    "12": "Lead Qualification",
+    "13": "Outreach Composer",
+    "14": "Revenue Swarm",
+    "15": "Evaluation Harness",
 }
 
 DETAIL: dict[str, dict] = {
+    "15": {
+        "oneline": "A candidate scoring rubric is promoted by arithmetic, or not at all.",
+        "does": [
+            "Scores a labelled golden set under the production rubric and a candidate rubric, through the real qualification workflow rather than a reimplementation of it.",
+            "Measures tier accuracy, HOT precision, HOT recall and the conversion rate of the leads each rubric calls HOT.",
+            "Promotes only when the candidate regresses on nothing and improves something. A tie is not a promotion.",
+            "Reports every disagreement between a rubric and its human label instead of hiding them in an aggregate.",
+            "Never asks a model whether the new rubric is better \u2014 that is the judgement a model is worst placed to make about its own output.",
+        ],
+        "flow": """flowchart TD
+  A[golden set: labelled leads + outcomes] --> B[Score under production rubric]
+  A --> C[Score under candidate rubric]
+  B --> D[Accuracy - precision - recall - conversion]
+  C --> D
+  D --> E{Any regression?}
+  E -->|yes| F[Rejected, with the regressions named]
+  E -->|no| G{Any improvement?}
+  G -->|no| F
+  G -->|yes| H[Promote]""",
+        "limits": [
+            "Twelve labelled leads is enough to catch a direction, not enough to trust a decimal place. Grow the set before treating a 2-point move as real.",
+            "The labels are one person's judgement. A second labeller would move the numbers.",
+            "Outcomes in the golden set are recorded, not attributed \u2014 a lead that converted may have converted regardless of what the rubric said.",
+            "Only the rubric is under test. Prompt and model changes need their own comparison.",
+        ],
+    },
+    "11": {
+        "oneline": "Every CRM write in the swarm goes through here, once, whatever the caller retries.",
+        "does": [
+            "Supports three operations only: contact upsert, deal create, task create. Anything else is refused before a request is built.",
+            "Checks a write ledger **before** the CRM, so a replayed webhook returns the first object id instead of creating a second contact.",
+            "Validates the payload per operation - an upsert without an email never reaches HubSpot.",
+            "`dry_run=true` simulates the write and derives the id from the payload digest, so the same payload always simulates to the same id.",
+            "Returns one flat verdict whatever happened: written, simulated, replayed or rejected, each with its reason.",
+        ],
+        "flow": """flowchart TD
+  A[op + payload] --> B[Validate per operation]
+  B -->|invalid| R[Rejected, nothing written]
+  B -->|valid| C[Write ledger]
+  C -->|key seen| D[Replay first id]
+  C -->|new| E{dry_run?}
+  E -->|yes| F[Simulated id]
+  E -->|no| G[HubSpot contact / deal / task]
+  F --> H[Ledger row]
+  G --> H""",
+        "limits": [
+            "The three HubSpot nodes ship **disabled**. A node with a missing required credential blocks publishing, and an unpublished sub-workflow cannot be called. Add the credential, then enable them.",
+            "Contact upsert writes two custom properties, `swarm_lead_score` and `swarm_lead_tier`. Create them in HubSpot first, or remove them from the node.",
+            "The live write path is not exercised by the suite, because this instance has no HubSpot portal. Everything except the three HubSpot calls is.",
+            "A task is used where a note would read more naturally; the n8n HubSpot node offers call, email, meeting and task engagements, not notes.",
+        ],
+    },
+    "12": {
+        "oneline": "The model labels the lead. It never scores it.",
+        "does": [
+            "Asks for seven signals from a closed value set, plus a verbatim quote for each one that is not `unknown`.",
+            "Turns labels into points with fixed weights, so the same lead always produces the same number and every point names its component.",
+            "Checks each quote against the text the model was given. A quote that is not there costs 10 points and forces review, rather than passing as evidence.",
+            "Caps rather than trusts: four unknowns cap the score at 45, and an out-of-ICP use case caps it at 15 however strong the buying intent.",
+            "Canonicalises near-miss labels such as `VP` and `201-1000 employees`, and refuses to guess at anything else - an unreadable label scores zero and is named in the verdict.",
+        ],
+        "flow": """flowchart TD
+  A[raw lead] --> B[Normalise + free-email check]
+  B --> C{enrich?}
+  C -->|yes| D[Scrape company site]
+  C -->|no| E[Prompt registry]
+  D --> E
+  E --> F[Extract signals via Router]
+  F --> G[Canonicalise labels]
+  G --> H[Weighted rubric]
+  H --> I[Quote grounding check]
+  I --> J[Verification]
+  J --> K[Score, tier, reasons]""",
+        "limits": [
+            "The weights are a starting point, not a measured model. Re-fit them against closed-won data before trusting the tiers.",
+            "Enrichment is a single page scrape of the company domain, which says little about a large company.",
+            "The grounding check is exact substring matching, so a correctly paraphrased quote is treated as unsupported.",
+            "A free-email domain costs 8 points, which is wrong for founders who use one deliberately.",
+        ],
+    },
+    "13": {
+        "oneline": "A message to a real person is a HIGH-risk action, so a human approves it.",
+        "does": [
+            "Drafts from the prompt registry through the Model Router, with the collected evidence as the only thing it may assert.",
+            "Runs deterministic copy rules first: length per channel, placeholder leaks, banned phrases, links, and any figure that is not in the evidence.",
+            "Refuses locally when a rule fails, so a draft with a fabricated number never becomes a question for a human.",
+            "Classifies the send through Governance, which rates `send` HIGH and waits for approval. An operator can lower it to `write`, and that choice is recorded on every log row.",
+            "Logs the outcome either way, including the stage a blocked message was stopped at.",
+        ],
+        "flow": """flowchart TD
+  A[lead + qualification] --> B{outreach allowed?}
+  B -->|no| X[Blocked, logged]
+  B -->|yes| C[Draft via Router]
+  C --> D[Copy rules]
+  D -->|fail| X
+  D -->|pass| E[Verify against evidence]
+  E -->|fail| X
+  E -->|pass| F[Governance]
+  F -->|rejected| X
+  F -->|approved| G{dry_run?}
+  G -->|yes| H[Simulated]
+  G -->|no| I[Send]""",
+        "limits": [
+            "Only Telegram can actually send. Email and SMS are drafted, checked and approved, then recorded as `channel_not_configured`.",
+            "Governance scans the draft text as well as the operation, so copy offering to delete something is escalated to CRITICAL and denied. That false positive is deliberate.",
+            "The banned-phrase list is a short opinionated one, not a style guide.",
+            "The figure check allows meeting durations; every other number must appear in the evidence verbatim.",
+        ],
+    },
+    "14": {
+        "oneline": "One lead in, one decision record out, naming every step taken and every step skipped.",
+        "does": [
+            "Takes a lead from a webhook or from another workflow, and checks a shared secret before anything else on the public path.",
+            "Refuses a lead already in the ledger instead of re-qualifying it, so a retried webhook creates nothing.",
+            "Qualifies through 12, then writes only what the tier justifies: HOT gets a deal, WARM and COLD do not, DISQUALIFIED is never written to the CRM at all.",
+            "Writes the scoring rationale into the CRM task, so a salesperson reads why the number is what it is rather than just the number.",
+            "Returns the full record: score, components, CRM ids, the drafted message, the governance decision and the latency.",
+        ],
+        "flow": """flowchart TD
+  A[lead] --> B[Ingest key check]
+  B --> C{already seen?}
+  C -->|yes| D[Duplicate, nothing created]
+  C -->|no| E[Qualify]
+  E --> F{tier}
+  F -->|DISQUALIFIED| G[Recorded, no CRM write]
+  F -->|HOT| H[Contact + deal]
+  F -->|WARM / COLD| I[Contact]
+  H --> J[Task carrying the rationale]
+  I --> J
+  J --> K{outreach allowed?}
+  K -->|yes| L[Compose + govern]
+  K -->|no| M[Skipped, reason recorded]
+  L --> N[Decision record]
+  M --> N""",
+        "limits": [
+            "The webhook needs a `SWARM_INGEST_KEY` n8n variable. Until it is set every inbound lead is refused, which is the intended failure direction.",
+            "Dedupe is on email for all time, with no re-engagement window. A lead who returns a year later is a duplicate.",
+            "`dry_run` defaults to true. Nothing reaches a CRM or an inbox until a caller passes `dry_run=false`.",
+            "One lead per request. There is no batch intake and no nurture sweep.",
+        ],
+    },
     "01": {
         "oneline": "Reads an OpenAPI spec, plans an integration, and checks every step the model "
                    "proposes against the operations the spec actually declares.",
@@ -293,7 +440,10 @@ def read_evidence(folder: Path) -> list[dict]:
         for f in sorted((folder / sub).glob("*.json")):
             data = json.loads(f.read_text(encoding="utf-8"))
             rel = f"{sub}/{f.name}"
-            if "passed" in data and "total" in data:
+            if "promote" in data and "total_cases" in data:
+                verdict = "promoted" if data["promote"] else "rejected"
+                result = f"{data['total_cases']} labelled leads, candidate {verdict}"
+            elif "passed" in data and "total" in data:
                 result = f"{data['passed']}/{data['total']} fixtures passed"
             elif data.get("runs"):
                 result = f"{len(data['runs'])} recorded runs"
@@ -329,6 +479,12 @@ def render(entry: dict, folder: Path) -> str:
     p: list[str] = [f"# {num} — {TITLES[num]}", ""]
     p += [d["oneline"], ""]
     p += ["`Live tested` · [`workflow.json`](workflow.json)", ""]
+
+    # One canvas screenshot, directly under the header, only if it has been captured.
+    # Referencing a missing file would render as a broken image on GitHub.
+    shot = folder / "assets" / "workflow.png"
+    if shot.exists():
+        p += [f"![{TITLES[num]} open in the n8n editor](assets/workflow.png)", ""]
 
     p += ["## What it does", ""]
     p += [f"- {b}" for b in d["does"]]

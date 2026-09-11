@@ -1,0 +1,110 @@
+{
+  "$comment": "Labelled leads used to evaluate a scoring rubric. The tier on each row is a human judgement, not a rubric output - it is the thing the rubric is measured against. `outcome` is what actually happened commercially, which is what makes precision measurable rather than merely self-consistent. scripts/validate-evals.py checks this file against the copy embedded in workflow 15.",
+  "golden_set": "revenue-swarm-b2b-v1",
+  "golden_version": "1.0.0",
+  "labelled_by": "product owner",
+  "labelled_at": "2026-09-12",
+  "icp": {
+    "target_size_bands": ["51-200", "201-1000", "1000+"],
+    "core_use_cases": ["workflow automation", "ai agents", "internal tooling"],
+    "min_score_for_outreach": 50
+  },
+  "cases": [
+    {
+      "case_id": "G01",
+      "note": "CFO at an enterprise with an approved budget and an immediate start",
+      "expected_tier": "HOT",
+      "outcome": "won",
+      "lead": { "email": "cfo@enterprise.example", "job_title": "CFO", "company_name": "Enterprise Co", "message": "Board approved 120k for this, we want to start immediately." },
+      "signals": { "seniority": "executive", "decision_authority": "decision_maker", "company_size_band": "1000+", "budget_signal": "explicit", "timeline": "immediate", "pain_specificity": "specific", "use_case_fit": "core", "competitor_mentioned": false, "evidence": [] }
+    },
+    {
+      "case_id": "G02",
+      "note": "VP Engineering, mid-market, budget named, buying this quarter",
+      "expected_tier": "HOT",
+      "outcome": "won",
+      "lead": { "email": "vpe@midmarket.example", "job_title": "VP Engineering", "company_name": "Midmarket Ltd", "message": "We have 40k allocated and want it running this quarter." },
+      "signals": { "seniority": "vp", "decision_authority": "decision_maker", "company_size_band": "201-1000", "budget_signal": "explicit", "timeline": "this_quarter", "pain_specificity": "specific", "use_case_fit": "core", "competitor_mentioned": false, "evidence": [] }
+    },
+    {
+      "case_id": "G03",
+      "note": "Director of Ops, in-band, budget implied rather than stated",
+      "expected_tier": "HOT",
+      "outcome": "won",
+      "lead": { "email": "ops@inband.example", "job_title": "Director of Operations", "company_name": "Inband Inc", "message": "We know roughly what this costs and have room for it this quarter." },
+      "signals": { "seniority": "director", "decision_authority": "influencer", "company_size_band": "51-200", "budget_signal": "implied", "timeline": "this_quarter", "pain_specificity": "specific", "use_case_fit": "core", "competitor_mentioned": false, "evidence": [] }
+    },
+    {
+      "case_id": "G04",
+      "note": "Ops manager, adjacent use case, no figure named",
+      "expected_tier": "WARM",
+      "outcome": "no_reply",
+      "lead": { "email": "mgr@adjacent.example", "job_title": "Operations Manager", "company_name": "Adjacent Co", "message": "Looking at automating onboarding some time this quarter." },
+      "signals": { "seniority": "manager", "decision_authority": "influencer", "company_size_band": "51-200", "budget_signal": "implied", "timeline": "this_quarter", "pain_specificity": "general", "use_case_fit": "adjacent", "competitor_mentioned": false, "evidence": [] }
+    },
+    {
+      "case_id": "G05",
+      "note": "Right company, right use case, no budget and no urgency",
+      "expected_tier": "WARM",
+      "outcome": "lost",
+      "lead": { "email": "mgr@nobudget.example", "job_title": "Engineering Manager", "company_name": "Nobudget Corp", "message": "Interested in principle, nothing set aside yet, maybe later this year." },
+      "signals": { "seniority": "manager", "decision_authority": "influencer", "company_size_band": "201-1000", "budget_signal": "none", "timeline": "this_year", "pain_specificity": "general", "use_case_fit": "core", "competitor_mentioned": false, "evidence": [] }
+    },
+    {
+      "case_id": "G06",
+      "note": "Senior and specific, but a company one band below the ICP",
+      "expected_tier": "WARM",
+      "outcome": "no_reply",
+      "lead": { "email": "dir@smallco.example", "job_title": "Director of Engineering", "company_name": "Smallco", "message": "Our handoff between support and engineering is the specific problem." },
+      "signals": { "seniority": "director", "decision_authority": "influencer", "company_size_band": "11-50", "budget_signal": "implied", "timeline": "this_year", "pain_specificity": "specific", "use_case_fit": "adjacent", "competitor_mentioned": false, "evidence": [] }
+    },
+    {
+      "case_id": "G07",
+      "note": "Individual contributor browsing, nothing behind it",
+      "expected_tier": "COLD",
+      "outcome": "no_reply",
+      "lead": { "email": "eng@browsing.example", "job_title": "Engineer", "company_name": "Browsing Co", "message": "Just having a look." },
+      "signals": { "seniority": "ic", "decision_authority": "end_user", "company_size_band": "11-50", "budget_signal": "none", "timeline": "no_timeline", "pain_specificity": "general", "use_case_fit": "adjacent", "competitor_mentioned": false, "evidence": [] }
+    },
+    {
+      "case_id": "G08",
+      "note": "Very small company, no budget - a human would still keep it in nurture rather than bin it",
+      "expected_tier": "COLD",
+      "outcome": "no_reply",
+      "lead": { "email": "dev@tiny.example", "job_title": "Developer", "company_name": "Tiny", "message": "Might be relevant for us eventually." },
+      "signals": { "seniority": "ic", "decision_authority": "end_user", "company_size_band": "1-10", "budget_signal": "none", "timeline": "this_year", "pain_specificity": "none", "use_case_fit": "adjacent", "competitor_mentioned": false, "evidence": [] }
+    },
+    {
+      "case_id": "G09",
+      "note": "Tiny company but a core use case and a manager asking",
+      "expected_tier": "COLD",
+      "outcome": "no_reply",
+      "lead": { "email": "mgr@tinycore.example", "job_title": "Team Lead", "company_name": "Tinycore", "message": "We would use this for internal tooling if we had the budget." },
+      "signals": { "seniority": "manager", "decision_authority": "end_user", "company_size_band": "1-10", "budget_signal": "none", "timeline": "no_timeline", "pain_specificity": "general", "use_case_fit": "core", "competitor_mentioned": false, "evidence": [] }
+    },
+    {
+      "case_id": "G10",
+      "note": "Textbook buyer for a product we do not sell",
+      "expected_tier": "DISQUALIFIED",
+      "outcome": "lost",
+      "lead": { "email": "cto@wrongfit.example", "job_title": "CTO", "company_name": "Wrongfit Plc", "message": "We need a payroll platform for 400 staff, budget approved, starting now." },
+      "signals": { "seniority": "executive", "decision_authority": "decision_maker", "company_size_band": "201-1000", "budget_signal": "explicit", "timeline": "immediate", "pain_specificity": "specific", "use_case_fit": "out_of_scope", "competitor_mentioned": false, "evidence": [] }
+    },
+    {
+      "case_id": "G11",
+      "note": "A form submission that says nothing at all",
+      "expected_tier": "DISQUALIFIED",
+      "outcome": "no_reply",
+      "lead": { "email": "someone@empty.example", "message": "hi" },
+      "signals": { "seniority": "unknown", "decision_authority": "unknown", "company_size_band": "unknown", "budget_signal": "unknown", "timeline": "unknown", "pain_specificity": "none", "use_case_fit": "unknown", "competitor_mentioned": false, "evidence": [] }
+    },
+    {
+      "case_id": "G12",
+      "note": "A strong buyer who happened to use a personal email address",
+      "expected_tier": "HOT",
+      "outcome": "won",
+      "lead": { "email": "strong.buyer@gmail.com", "job_title": "VP Revenue Operations", "company_name": "Goodfit Co", "message": "We have 30k signed off and need this live immediately." },
+      "signals": { "seniority": "vp", "decision_authority": "decision_maker", "company_size_band": "51-200", "budget_signal": "explicit", "timeline": "immediate", "pain_specificity": "specific", "use_case_fit": "core", "competitor_mentioned": false, "evidence": [] }
+    }
+  ]
+}

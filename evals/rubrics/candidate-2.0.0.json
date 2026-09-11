@@ -1,0 +1,14 @@
+{
+  "$comment": "A candidate rubric, kept here so an evaluation run is reproducible from the repository. This one lowers every tier threshold on the theory that the system is too conservative and is leaving pipeline on the table. Workflow 15 scores the golden set under both this and production. Whether it is actually better is not a matter of opinion: see evals/README.md for the recorded result.",
+  "version": "2.0.0-candidate",
+  "seniority": { "executive": 12, "vp": 11, "director": 9, "manager": 6, "ic": 2, "unknown": 0 },
+  "authority": { "decision_maker": 13, "influencer": 8, "end_user": 3, "unknown": 0 },
+  "budget": { "explicit": 20, "implied": 12, "none": 2, "unknown": 0 },
+  "timeline": { "immediate": 15, "this_quarter": 12, "this_year": 6, "no_timeline": 2, "unknown": 0 },
+  "pain": { "specific": 10, "general": 5, "none": 0, "unknown": 0 },
+  "fit": { "core": 10, "adjacent": 6, "out_of_scope": 0, "unknown": 0 },
+  "size_points": { "in_target": 20, "adjacent": 12, "outside": 4, "unknown": 0 },
+  "modifiers": { "competitor_mentioned": 4, "consumer_email_domain": -8, "unsupported_evidence": -10, "signal_parse_failure": -15 },
+  "caps": { "unknown_threshold": 4, "unknown_cap": 45, "out_of_scope_cap": 15, "parse_error_cap": 40, "unreadable_cap": 45 },
+  "tiers": { "hot": 60, "warm": 40, "cold": 20 }
+}

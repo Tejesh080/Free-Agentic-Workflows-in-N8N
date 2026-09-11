@@ -1,0 +1,344 @@
+{
+  "name": "[Platform] 15 Evaluation Harness",
+  "nodes": [
+    {
+      "id": "60e3d7fc-082f-4eec-ba30-9216998bba35",
+      "name": "Run Evaluation",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        192
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "e801593b-4890-4d3f-a9e4-272d1fe3446c",
+      "name": "Load Golden Set",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Golden set, mirrored from evals/golden/leads.json. The labels are human\n// judgements and are the thing the rubric is measured against, so they are\n// never derived from a rubric output.\nconst GOLDEN_SET = \"revenue-swarm-b2b-v1\";\nconst GOLDEN_VERSION = \"1.0.0\";\n\nconst ICP = JSON.stringify({\n  target_size_bands: [\"51-200\", \"201-1000\", \"1000+\"],\n  core_use_cases: [\"workflow automation\", \"ai agents\", \"internal tooling\"],\n  min_score_for_outreach: 50\n});\n\n// evals/rubrics/candidate-2.0.0.json: identical weights, lower tier thresholds.\n// The theory under test is that the system is too conservative.\nconst CANDIDATE_RUBRIC = JSON.stringify({\n  version: \"2.0.0-candidate\",\n  seniority: { executive: 12, vp: 11, director: 9, manager: 6, ic: 2, unknown: 0 },\n  authority: { decision_maker: 13, influencer: 8, end_user: 3, unknown: 0 },\n  budget: { explicit: 20, implied: 12, none: 2, unknown: 0 },\n  timeline: { immediate: 15, this_quarter: 12, this_year: 6, no_timeline: 2, unknown: 0 },\n  pain: { specific: 10, general: 5, none: 0, unknown: 0 },\n  fit: { core: 10, adjacent: 6, out_of_scope: 0, unknown: 0 },\n  size_points: { in_target: 20, adjacent: 12, outside: 4, unknown: 0 },\n  modifiers: { competitor_mentioned: 4, consumer_email_domain: -8, unsupported_evidence: -10, signal_parse_failure: -15 },\n  caps: { unknown_threshold: 4, unknown_cap: 45, out_of_scope_cap: 15, parse_error_cap: 40, unreadable_cap: 45 },\n  tiers: { hot: 60, warm: 40, cold: 20 }\n});\n\nfunction sig(o) {\n  const base = { seniority: \"unknown\", decision_authority: \"unknown\", company_size_band: \"unknown\", budget_signal: \"unknown\", timeline: \"unknown\", pain_specificity: \"unknown\", use_case_fit: \"unknown\", competitor_mentioned: false, evidence: [] };\n  return JSON.stringify(Object.assign(base, o));\n}\n\nconst CASES = [\n  { case_id: \"G01\", expected_tier: \"HOT\", outcome: \"won\", note: \"CFO at an enterprise with an approved budget and an immediate start\",\n    lead: { email: \"cfo@enterprise.example\", job_title: \"CFO\", company_name: \"Enterprise Co\", message: \"Board approved 120k for this, we want to start immediately.\" },\n    signals: { seniority: \"executive\", decision_authority: \"decision_maker\", company_size_band: \"1000+\", budget_signal: \"explicit\", timeline: \"immediate\", pain_specificity: \"specific\", use_case_fit: \"core\" } },\n  { case_id: \"G02\", expected_tier: \"HOT\", outcome: \"won\", note: \"VP Engineering, mid-market, budget named, buying this quarter\",\n    lead: { email: \"vpe@midmarket.example\", job_title: \"VP Engineering\", company_name: \"Midmarket Ltd\", message: \"We have 40k allocated and want it running this quarter.\" },\n    signals: { seniority: \"vp\", decision_authority: \"decision_maker\", company_size_band: \"201-1000\", budget_signal: \"explicit\", timeline: \"this_quarter\", pain_specificity: \"specific\", use_case_fit: \"core\" } },\n  { case_id: \"G03\", expected_tier: \"HOT\", outcome: \"won\", note: \"Director of Ops, in-band, budget implied rather than stated\",\n    lead: { email: \"ops@inband.example\", job_title: \"Director of Operations\", company_name: \"Inband Inc\", message: \"We know roughly what this costs and have room for it this quarter.\" },\n    signals: { seniority: \"director\", decision_authority: \"influencer\", company_size_band: \"51-200\", budget_signal: \"implied\", timeline: \"this_quarter\", pain_specificity: \"specific\", use_case_fit: \"core\" } },\n  { case_id: \"G04\", expected_tier: \"WARM\", outcome: \"no_reply\", note: \"Ops manager, adjacent use case, no figure named\",\n    lead: { email: \"mgr@adjacent.example\", job_title: \"Operations Manager\", company_name: \"Adjacent Co\", message: \"Looking at automating onboarding some time this quarter.\" },\n    signals: { seniority: \"manager\", decision_authority: \"influencer\", company_size_band: \"51-200\", budget_signal: \"implied\", timeline: \"this_quarter\", pain_specificity: \"general\", use_case_fit: \"adjacent\" } },\n  { case_id: \"G05\", expected_tier: \"WARM\", outcome: \"lost\", note: \"Right company, right use case, no budget and no urgency\",\n    lead: { email: \"mgr@nobudget.example\", job_title: \"Engineering Manager\", company_name: \"Nobudget Corp\", message: \"Interested in principle, nothing set aside yet, maybe later this year.\" },\n    signals: { seniority: \"manager\", decision_authority: \"influencer\", company_size_band: \"201-1000\", budget_signal: \"none\", timeline: \"this_year\", pain_specificity: \"general\", use_case_fit: \"core\" } },\n  { case_id: \"G06\", expected_tier: \"WARM\", outcome: \"no_reply\", note: \"Senior and specific, but a company one band below the ICP\",\n    lead: { email: \"dir@smallco.example\", job_title: \"Director of Engineering\", company_name: \"Smallco\", message: \"Our handoff between support and engineering is the specific problem.\" },\n    signals: { seniority: \"director\", decision_authority: \"influencer\", company_size_band: \"11-50\", budget_signal: \"implied\", timeline: \"this_year\", pain_specificity: \"specific\", use_case_fit: \"adjacent\" } },\n  { case_id: \"G07\", expected_tier: \"COLD\", outcome: \"no_reply\", note: \"Individual contributor browsing, nothing behind it\",\n    lead: { email: \"eng@browsing.example\", job_title: \"Engineer\", company_name: \"Browsing Co\", message: \"Just having a look.\" },\n    signals: { seniority: \"ic\", decision_authority: \"end_user\", company_size_band: \"11-50\", budget_signal: \"none\", timeline: \"no_timeline\", pain_specificity: \"general\", use_case_fit: \"adjacent\" } },\n  { case_id: \"G08\", expected_tier: \"COLD\", outcome: \"no_reply\", note: \"Very small company, no budget - a human would still keep it in nurture rather than bin it\",\n    lead: { email: \"dev@tiny.example\", job_title: \"Developer\", company_name: \"Tiny\", message: \"Might be relevant for us eventually.\" },\n    signals: { seniority: \"ic\", decision_authority: \"end_user\", company_size_band: \"1-10\", budget_signal: \"none\", timeline: \"this_year\", pain_specificity: \"none\", use_case_fit: \"adjacent\" } },\n  { case_id: \"G09\", expected_tier: \"COLD\", outcome: \"no_reply\", note: \"Tiny company but a core use case and a manager asking\",\n    lead: { email: \"mgr@tinycore.example\", job_title: \"Team Lead\", company_name: \"Tinycore\", message: \"We would use this for internal tooling if we had the budget.\" },\n    signals: { seniority: \"manager\", decision_authority: \"end_user\", company_size_band: \"1-10\", budget_signal: \"none\", timeline: \"no_timeline\", pain_specificity: \"general\", use_case_fit: \"core\" } },\n  { case_id: \"G10\", expected_tier: \"DISQUALIFIED\", outcome: \"lost\", note: \"Textbook buyer for a product we do not sell\",\n    lead: { email: \"cto@wrongfit.example\", job_title: \"CTO\", company_name: \"Wrongfit Plc\", message: \"We need a payroll platform for 400 staff, budget approved, starting now.\" },\n    signals: { seniority: \"executive\", decision_authority: \"decision_maker\", company_size_band: \"201-1000\", budget_signal: \"explicit\", timeline: \"immediate\", pain_specificity: \"specific\", use_case_fit: \"out_of_scope\" } },\n  { case_id: \"G11\", expected_tier: \"DISQUALIFIED\", outcome: \"no_reply\", note: \"A form submission that says nothing at all\",\n    lead: { email: \"someone@empty.example\", message: \"hi\" },\n    signals: { pain_specificity: \"none\" } },\n  { case_id: \"G12\", expected_tier: \"HOT\", outcome: \"won\", note: \"A strong buyer who happened to use a personal email address\",\n    lead: { email: \"strong.buyer@gmail.com\", job_title: \"VP Revenue Operations\", company_name: \"Goodfit Co\", message: \"We have 30k signed off and need this live immediately.\" },\n    signals: { seniority: \"vp\", decision_authority: \"decision_maker\", company_size_band: \"51-200\", budget_signal: \"explicit\", timeline: \"immediate\", pain_specificity: \"specific\", use_case_fit: \"core\" } }\n];\n\nreturn CASES.map(function (c) {\n  return { json: {\n    case_id: c.case_id,\n    note: c.note,\n    expected_tier: c.expected_tier,\n    outcome: c.outcome,\n    lead: JSON.stringify(c.lead),\n    signals: sig(c.signals),\n    icp: ICP,\n    candidate_rubric: CANDIDATE_RUBRIC,\n    golden_set: GOLDEN_SET,\n    golden_version: GOLDEN_VERSION\n  } };\n});\n"
+      }
+    },
+    {
+      "id": "10daf035-1484-4091-8c51-90f929f3afbd",
+      "name": "Compute Eval Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map(function (i) { return i.json; });\nconst meta = $(\"Load Golden Set\").first().json;\n\n// Every metric here is arithmetic over labelled rows. No model is asked\n// whether the new rubric is better, because that is exactly the question\n// a model is worst placed to answer about its own output.\nfunction metrics(prefix) {\n  const tierKey = prefix + \"_tier\";\n  const correct = rows.filter(function (r) { return r[tierKey] === r.expected_tier; });\n  const predictedHot = rows.filter(function (r) { return r[tierKey] === \"HOT\"; });\n  const labelledHot = rows.filter(function (r) { return r.expected_tier === \"HOT\"; });\n  const truePositives = predictedHot.filter(function (r) { return r.expected_tier === \"HOT\"; });\n  const wonAmongPredictedHot = predictedHot.filter(function (r) { return r.outcome === \"won\"; });\n  function ratio(n, d) { return d === 0 ? null : Math.round((n / d) * 1000) / 1000; }\n  return {\n    accuracy: ratio(correct.length, rows.length),\n    hot_precision: ratio(truePositives.length, predictedHot.length),\n    hot_recall: ratio(truePositives.length, labelledHot.length),\n    hot_conversion: ratio(wonAmongPredictedHot.length, predictedHot.length),\n    predicted_hot: predictedHot.length,\n    correct: correct.length\n  };\n}\n\nconst A = metrics(\"a\");\nconst B = metrics(\"b\");\n\nconst disagreements = rows.filter(function (r) { return r.a_tier !== r.expected_tier || r.b_tier !== r.expected_tier; })\n  .map(function (r) {\n    return {\n      case_id: r.case_id,\n      note: r.note,\n      human_label: r.expected_tier,\n      production: r.a_tier + \" (\" + r.a_score + \")\",\n      candidate: r.b_tier + \" (\" + r.b_score + \")\",\n      outcome: r.outcome\n    };\n  });\n\n// Promotion gate: a candidate may not regress on any tracked metric, and\n// must beat production on at least one. Ties are not promotions.\nconst TRACKED = [\"accuracy\", \"hot_precision\", \"hot_recall\", \"hot_conversion\"];\nconst regressions = [];\nconst improvements = [];\nTRACKED.forEach(function (k) {\n  const a = A[k];\n  const b = B[k];\n  if (a === null || b === null) { return; }\n  if (b < a) { regressions.push(k + \" \" + a + \" -> \" + b); }\n  if (b > a) { improvements.push(k + \" \" + a + \" -> \" + b); }\n});\n\nconst promote = regressions.length === 0 && improvements.length > 0;\nlet reason;\nif (regressions.length) {\n  reason = \"rejected: \" + regressions.length + \" regression(s) - \" + regressions.join(\"; \");\n} else if (!improvements.length) {\n  reason = \"rejected: the candidate matches production on every tracked metric, so there is nothing to gain by changing\";\n} else {\n  reason = \"promote: \" + improvements.join(\"; \") + \", no regressions\";\n}\n\nreturn [{ json: {\n  run_id: \"eval-\" + $execution.id,\n  golden_set: meta.golden_set,\n  golden_version: meta.golden_version,\n  total_cases: rows.length,\n  rubric_a: rows.length ? rows[0].a_rubric : \"unknown\",\n  rubric_b: rows.length ? rows[0].b_rubric : \"unknown\",\n  production: A,\n  candidate: B,\n  regressions: regressions,\n  improvements: improvements,\n  promote: promote,\n  promote_reason: reason,\n  disagreements: disagreements,\n  cases: rows\n} }];\n"
+      }
+    },
+    {
+      "id": "fa646bdd-7b95-4e19-b90b-8a94080cc8ca",
+      "name": "Record Eval Run",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATA_TABLE_ID",
+          "cachedResultName": "swarm_eval_runs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "run_id": "={{ $json.run_id }}",
+            "golden_set": "={{ $json.golden_set }}",
+            "golden_version": "={{ $json.golden_version }}",
+            "total_cases": "={{ $json.total_cases }}",
+            "rubric_a": "={{ $json.rubric_a }}",
+            "rubric_b": "={{ $json.rubric_b }}",
+            "accuracy_a": "={{ $json.production.accuracy }}",
+            "accuracy_b": "={{ $json.candidate.accuracy }}",
+            "hot_precision_a": "={{ $json.production.hot_precision }}",
+            "hot_precision_b": "={{ $json.candidate.hot_precision }}",
+            "hot_recall_a": "={{ $json.production.hot_recall }}",
+            "hot_recall_b": "={{ $json.candidate.hot_recall }}",
+            "hot_conversion_a": "={{ $json.production.hot_conversion }}",
+            "hot_conversion_b": "={{ $json.candidate.hot_conversion }}",
+            "promote": "={{ $json.promote === true }}",
+            "promote_reason": "={{ $json.promote_reason }}",
+            "disagreements_json": "={{ JSON.stringify($json.disagreements).slice(0, 4000) }}",
+            "metrics_json": "={{ JSON.stringify({ production: $json.production, candidate: $json.candidate, regressions: $json.regressions, improvements: $json.improvements }).slice(0, 4000) }}",
+            "created_at": "={{ $now.toISO() }}",
+            "execution_id": "={{ $execution.id }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "0f37e510-8dae-483d-9f95-523a175588b5",
+      "name": "Return Eval Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return $(\"Compute Eval Metrics\").all();\n"
+      }
+    },
+    {
+      "id": "d20e1982-5150-4861-ba08-4b9e205fc686",
+      "name": "Score Under Production",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        672,
+        192
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 12 Lead Qualification Agent"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead": "={{ $json.lead }}",
+            "icp": "={{ $json.icp }}",
+            "enrich": "false",
+            "signals_override": "={{ $json.signals }}",
+            "rubric_override": "",
+            "verification_mode": "deterministic_only",
+            "tenant_id": "eval",
+            "trace_id": "={{ \"eval-\" + $execution.id + \"-\" + $json.case_id + \"-a\" }}",
+            "source_workflow": "15-evaluation-harness"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "83cc8737-9e07-4574-aac8-8af5b2cc5c1e",
+      "name": "Score Under Candidate",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        896,
+        192
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 12 Lead Qualification Agent"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead": "={{ $(\"Eval Case Loop\").first().json.lead }}",
+            "icp": "={{ $(\"Eval Case Loop\").first().json.icp }}",
+            "enrich": "false",
+            "signals_override": "={{ $(\"Eval Case Loop\").first().json.signals }}",
+            "rubric_override": "={{ $(\"Eval Case Loop\").first().json.candidate_rubric }}",
+            "verification_mode": "deterministic_only",
+            "tenant_id": "eval",
+            "trace_id": "={{ \"eval-\" + $execution.id + \"-\" + $(\"Eval Case Loop\").first().json.case_id + \"-b\" }}",
+            "source_workflow": "15-evaluation-harness"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "ea025c27-6667-4e46-8b21-635b088b91de",
+      "name": "Slim Eval Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        272
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "function unwrap(x) { return (x && x.json) ? x.json : x; }\nconst fx = $(\"Eval Case Loop\").first().json;\nconst a = unwrap($(\"Score Under Production\").first().json);\nconst b = unwrap($input.first().json);\nreturn [{ json: {\n  case_id: fx.case_id,\n  note: fx.note,\n  expected_tier: fx.expected_tier,\n  outcome: fx.outcome,\n  a_score: a.score,\n  a_tier: a.tier,\n  a_rubric: (a.scoring || {}).rubric_version,\n  b_score: b.score,\n  b_tier: b.tier,\n  b_rubric: (b.scoring || {}).rubric_version,\n  latency_ms: (a.latency_ms || 0) + (b.latency_ms || 0)\n} }];\n"
+      }
+    },
+    {
+      "id": "b66bd3ff-4ec7-42ad-8389-d9ce37c028cb",
+      "name": "Eval Case Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        448,
+        192
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "5d9ade80-4946-4fe8-b15c-a619ae555de7",
+      "name": "Sticky Note 7eca9984",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        496,
+        272
+      ],
+      "parameters": {
+        "content": "## The promotion gate is arithmetic\n\nA candidate rubric is scored against the same labelled leads as production,\nthrough the same workflow. It is promoted only if it regresses on nothing and\nimproves something.\n\nNo model is asked whether the new rubric is better. That judgement is exactly\nthe one a model is worst placed to make about its own output, and it is where\nan automated system would quietly drift.",
+        "color": 3
+      }
+    },
+    {
+      "id": "ccfb26e8-285c-4524-b652-95ec1946e8c2",
+      "name": "Sticky Note 41618551",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        496,
+        528
+      ],
+      "parameters": {
+        "content": "## Golden set\n\nTwelve labelled leads with a human tier and a recorded commercial outcome,\nmirrored from `evals/golden/leads.json`. The labels are the ground truth; the\nrubric is the thing under test.\n\nDisagreements are reported rather than hidden. A rubric that agrees with every\nlabel on a set this small is more likely overfitted than correct.",
+        "color": 4
+      }
+    }
+  ],
+  "connections": {
+    "Run Evaluation": {
+      "main": [
+        [
+          {
+            "node": "Load Golden Set",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Golden Set": {
+      "main": [
+        [
+          {
+            "node": "Eval Case Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Eval Metrics": {
+      "main": [
+        [
+          {
+            "node": "Record Eval Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Eval Run": {
+      "main": [
+        [
+          {
+            "node": "Return Eval Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score Under Production": {
+      "main": [
+        [
+          {
+            "node": "Score Under Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score Under Candidate": {
+      "main": [
+        [
+          {
+            "node": "Slim Eval Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slim Eval Result": {
+      "main": [
+        [
+          {
+            "node": "Eval Case Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eval Case Loop": {
+      "main": [
+        [
+          {
+            "node": "Compute Eval Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Score Under Production",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "description": "Scores a labelled golden set under the production rubric and a candidate rubric through the real qualification workflow, then applies a deterministic promotion gate: no regression on any tracked metric, and an improvement on at least one.",
+  "nodeGroups": []
+}
