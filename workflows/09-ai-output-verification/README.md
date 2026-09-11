@@ -15,7 +15,7 @@ Deterministic checks first; an LLM judge is one weighted signal, never the whole
 ## Flow
 
 ```mermaid
-flowchart LR
+flowchart TD
   A[output + sources] --> B[Schema · fields · arithmetic]
   B --> C[Citation existence]
   C --> D[Safety markers]

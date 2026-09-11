@@ -15,14 +15,13 @@ Picks a model per request from explicit rules, with privacy and capability gates
 ## Flow
 
 ```mermaid
-flowchart LR
-  A[request] --> B[Privacy gate]
-  B --> C[Capability gate]
-  C --> D[Weighted score<br/>quality · cost · latency]
-  D --> E[Chosen provider]
-  E -->|3 failures| F[Fallback vendor]
-  E --> G[Telemetry row]
-  F --> G
+flowchart TD
+  A[request] --> B[Privacy + capability gates]
+  B --> C[Weighted score<br/>quality · cost · latency]
+  C --> D[Chosen provider]
+  D -->|3 failures| E[Fallback vendor]
+  D --> F[Telemetry row]
+  E --> F
 ```
 
 Called by 01, 03, 04, 06, 07, 09, 10.

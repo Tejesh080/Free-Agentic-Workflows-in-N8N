@@ -15,7 +15,7 @@ Invoice extraction that checks the arithmetic instead of trusting well-formed JS
 ## Flow
 
 ```mermaid
-flowchart LR
+flowchart TD
   A[invoice text] --> B[Extract fields]
   B --> C[Arithmetic reconciliation]
   C --> D[Field + currency validation]

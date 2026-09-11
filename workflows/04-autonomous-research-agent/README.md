@@ -15,7 +15,7 @@ Plans sub-questions, searches the live web, and checks every claim in the report
 ## Flow
 
 ```mermaid
-flowchart LR
+flowchart TD
   A[question] --> B[Plan sub-questions]
   B --> C[Live web search]
   C --> D[Deduplicate<br/>URL + shingles]

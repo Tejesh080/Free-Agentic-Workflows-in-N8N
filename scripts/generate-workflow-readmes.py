@@ -48,7 +48,7 @@ DETAIL: dict[str, dict] = {
             "Probes only GET and HEAD, only against the spec's own base URL.",
             "Write steps go to Governance and are recorded — never executed.",
         ],
-        "flow": """flowchart LR
+        "flow": """flowchart TD
   A[OpenAPI spec] --> B[Deterministic parse]
   B --> C[Plan integration]
   C --> D{Every operation_id<br/>in the spec?}
@@ -72,14 +72,13 @@ DETAIL: dict[str, dict] = {
             "`force_provider` can bypass the capability gate. It can never bypass the privacy gate.",
             "Retries three times, fails over to a different vendor, and writes a telemetry row.",
         ],
-        "flow": """flowchart LR
-  A[request] --> B[Privacy gate]
-  B --> C[Capability gate]
-  C --> D[Weighted score<br/>quality · cost · latency]
-  D --> E[Chosen provider]
-  E -->|3 failures| F[Fallback vendor]
-  E --> G[Telemetry row]
-  F --> G""",
+        "flow": """flowchart TD
+  A[request] --> B[Privacy + capability gates]
+  B --> C[Weighted score<br/>quality · cost · latency]
+  C --> D[Chosen provider]
+  D -->|3 failures| E[Fallback vendor]
+  D --> F[Telemetry row]
+  E --> F""",
         "limits": [
             "Quality priors and prices are configured values, not measurements. Re-check prices before trusting a cost figure.",
             "No local provider is wired. The registry has a commented example.",
@@ -95,7 +94,7 @@ DETAIL: dict[str, dict] = {
             "Gates on relevance, so closest-in-the-store is not treated as evidence.",
             "Answers with `[C#]` citations and checks them against the chunks that were retrieved.",
         ],
-        "flow": """flowchart LR
+        "flow": """flowchart TD
   A[question] --> B[Retrieve top-k]
   B --> C[Filter by audience]
   C --> D[Rerank<br/>0.7 vector + 0.3 lexical]
@@ -119,7 +118,7 @@ DETAIL: dict[str, dict] = {
             "Maps what was cited, what was collected but unused, and any marker that was invented.",
             "Stops and reports a gap when search returns nothing, rather than writing an unsourced answer.",
         ],
-        "flow": """flowchart LR
+        "flow": """flowchart TD
   A[question] --> B[Plan sub-questions]
   B --> C[Live web search]
   C --> D[Deduplicate<br/>URL + shingles]
@@ -166,7 +165,7 @@ DETAIL: dict[str, dict] = {
             "Tells the extractor **not** to correct a printed total that disagrees with the lines — fixing it silently would hide the discrepancy.",
             "Escalates anything carrying an exception to Governance.",
         ],
-        "flow": """flowchart LR
+        "flow": """flowchart TD
   A[invoice text] --> B[Extract fields]
   B --> C[Arithmetic reconciliation]
   C --> D[Field + currency validation]
@@ -190,7 +189,7 @@ DETAIL: dict[str, dict] = {
             "The compiled SQL and its parameters come back with every answer, so a result can be audited.",
             "The worst a prompt injection achieves is having its spec rejected.",
         ],
-        "flow": """flowchart LR
+        "flow": """flowchart TD
   A[question] --> B[Model emits query spec]
   B --> C[Validate against registry]
   C --> D[Compile parameterised SQL]
@@ -213,7 +212,7 @@ DETAIL: dict[str, dict] = {
             "Returns the blob SHA, so an execution log ties back to exact prompt bytes.",
             "On a GitHub outage returns a bundled fallback flagged `degraded: true` — never silent non-Git text.",
         ],
-        "flow": """flowchart LR
+        "flow": """flowchart TD
   A[prompt id + ref] --> B[GitHub Contents API]
   B -->|ok| C[Parse front matter]
   B -->|outage| D["Bundled fallback<br/>degraded: true"]
@@ -236,7 +235,7 @@ DETAIL: dict[str, dict] = {
             "Caps the judge at 40% of the score, and only when it actually ran.",
             "Degrades a failed or malformed judge to 'not evaluated' with `verified: false` — not a silent pass.",
         ],
-        "flow": """flowchart LR
+        "flow": """flowchart TD
   A[output + sources] --> B[Schema · fields · arithmetic]
   B --> C[Citation existence]
   C --> D[Safety markers]
@@ -260,7 +259,7 @@ DETAIL: dict[str, dict] = {
             "Sends data-changing intents to Governance and records the decision — it never executes them.",
             "Measures latency per stage, so the slow step is visible rather than averaged away.",
         ],
-        "flow": """flowchart LR
+        "flow": """flowchart TD
   A["webhook: audio or text"] --> B[Whisper transcribe]
   B --> C[Classify against<br/>closed intent registry]
   C --> D{Changes data?}

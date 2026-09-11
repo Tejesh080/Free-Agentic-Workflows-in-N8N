@@ -15,7 +15,7 @@ Natural-language questions over a warehouse where the model never writes SQL.
 ## Flow
 
 ```mermaid
-flowchart LR
+flowchart TD
   A[question] --> B[Model emits query spec]
   B --> C[Validate against registry]
   C --> D[Compile parameterised SQL]

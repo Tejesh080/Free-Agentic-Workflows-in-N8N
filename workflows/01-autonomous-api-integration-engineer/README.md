@@ -15,7 +15,7 @@ Reads an OpenAPI spec, plans an integration, and checks every step the model pro
 ## Flow
 
 ```mermaid
-flowchart LR
+flowchart TD
   A[OpenAPI spec] --> B[Deterministic parse]
   B --> C[Plan integration]
   C --> D{Every operation_id<br/>in the spec?}

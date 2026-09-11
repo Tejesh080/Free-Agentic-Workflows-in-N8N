@@ -15,7 +15,7 @@ Retrieval with metadata access control, deterministic reranking and citation-bou
 ## Flow
 
 ```mermaid
-flowchart LR
+flowchart TD
   A[question] --> B[Retrieve top-k]
   B --> C[Filter by audience]
   C --> D[Rerank<br/>0.7 vector + 0.3 lexical]

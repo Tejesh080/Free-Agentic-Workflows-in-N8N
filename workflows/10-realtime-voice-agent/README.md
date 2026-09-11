@@ -15,7 +15,7 @@ Webhook to speech, with intent classification against a closed registry and a ga
 ## Flow
 
 ```mermaid
-flowchart LR
+flowchart TD
   A["webhook: audio or text"] --> B[Whisper transcribe]
   B --> C[Classify against<br/>closed intent registry]
   C --> D{Changes data?}

@@ -15,7 +15,7 @@ Prompts live in Git rather than inside workflow JSON, and every render reports t
 ## Flow
 
 ```mermaid
-flowchart LR
+flowchart TD
   A[prompt id + ref] --> B[GitHub Contents API]
   B -->|ok| C[Parse front matter]
   B -->|outage| D["Bundled fallback<br/>degraded: true"]
