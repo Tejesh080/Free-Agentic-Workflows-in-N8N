@@ -77,7 +77,15 @@ scheduler. Outcome learning is `15`, and it is deliberately not an agent — it 
 a spreadsheet with a gate. Splitting these out would multiply the failure
 surface, the latency and the cost, and buy nothing a reader could point at.
 
-## Multi-tenancy
+## Tenancy
+
+**Implemented: tenant-aware execution. Not implemented: secure multi-tenancy.**
+The distinction matters. What follows removes a class of correctness bug — two
+customers silently sharing a record. It does not authorise anything, because
+`tenant_id` is still whatever the caller says it is. Authorisation arrives with
+the API boundary in [ROADMAP.md](ROADMAP.md) Stage B, and the rule there is:
+**never trust a `tenant_id` in a request body — derive it from the authenticated
+API key or session, and let the database enforce isolation with RLS.**
 
 Every service takes `tenant_id`, validated against `^[a-z0-9][a-z0-9_-]{0,62}$`
 — restricted rather than escaped, because a tenant id that can smuggle a
@@ -94,6 +102,12 @@ Tenancy is enforced at three points:
 Fixtures `C08`/`C08x` in `11` and `S07`/`S07x` in `14` fail if cross-tenant
 suppression ever returns. That is the test that matters: before this change, one
 tenant's lead silently returned another tenant's CRM object id.
+
+These are n8n fixtures, and they prove the *execution engine* keeps tenants
+apart. They say nothing about whether a caller was entitled to that tenant.
+Proving that needs adversarial cross-tenant integration tests at the API and
+database boundary — tenant A's key requesting tenant B's lead and getting a 404,
+not a row — and those belong with the code that introduces the boundary.
 
 ## Correlation and the decision receipt
 

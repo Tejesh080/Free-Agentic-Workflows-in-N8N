@@ -1,7 +1,7 @@
 {
   "suite": "13-outreach-composer",
-  "generated_at": "2026-09-11T15:55:29.097Z",
-  "n8n_execution_id": "585",
+  "generated_at": "2026-09-11T16:34:39.795Z",
+  "n8n_execution_id": "848",
   "workflow": "Outreach Composer",
   "how_to_reproduce": "Open the workflow in n8n and run the 'Test Suite Trigger' manual trigger.",
   "note": "Every case runs with dry_run=true and asserts sent=false. O01-O09 supply the draft; O10 drafts with the real model. Governance decisions for HIGH and CRITICAL cases use simulate_decision in place of the Telegram round trip.",
@@ -9,8 +9,8 @@
   "passed": 10,
   "failed": 0,
   "all_passed": true,
-  "latency_ms_p50_measured": 398,
-  "latency_ms_max_measured": 5488,
+  "latency_ms_p50_measured": 388,
+  "latency_ms_max_measured": 12116,
   "cases": [
     {
       "case_id": "O01",
@@ -56,11 +56,11 @@
         {
           "name": "trace_echoed",
           "pass": true,
-          "expected": "trace-585-O01",
-          "actual": "trace-585-O01"
+          "expected": "trace-848-O01",
+          "actual": "trace-848-O01"
         }
       ],
-      "latency_ms": 715
+      "latency_ms": 576
     },
     {
       "case_id": "O02",
@@ -115,11 +115,11 @@
         {
           "name": "trace_echoed",
           "pass": true,
-          "expected": "trace-585-O02",
-          "actual": "trace-585-O02"
+          "expected": "trace-848-O02",
+          "actual": "trace-848-O02"
         }
       ],
-      "latency_ms": 398
+      "latency_ms": 388
     },
     {
       "case_id": "O03",
@@ -173,11 +173,11 @@
         {
           "name": "trace_echoed",
           "pass": true,
-          "expected": "trace-585-O03",
-          "actual": "trace-585-O03"
+          "expected": "trace-848-O03",
+          "actual": "trace-848-O03"
         }
       ],
-      "latency_ms": 350
+      "latency_ms": 313
     },
     {
       "case_id": "O04",
@@ -231,11 +231,11 @@
         {
           "name": "trace_echoed",
           "pass": true,
-          "expected": "trace-585-O04",
-          "actual": "trace-585-O04"
+          "expected": "trace-848-O04",
+          "actual": "trace-848-O04"
         }
       ],
-      "latency_ms": 380
+      "latency_ms": 326
     },
     {
       "case_id": "O05",
@@ -289,11 +289,11 @@
         {
           "name": "trace_echoed",
           "pass": true,
-          "expected": "trace-585-O05",
-          "actual": "trace-585-O05"
+          "expected": "trace-848-O05",
+          "actual": "trace-848-O05"
         }
       ],
-      "latency_ms": 335
+      "latency_ms": 328
     },
     {
       "case_id": "O06",
@@ -339,11 +339,11 @@
         {
           "name": "trace_echoed",
           "pass": true,
-          "expected": "trace-585-O06",
-          "actual": "trace-585-O06"
+          "expected": "trace-848-O06",
+          "actual": "trace-848-O06"
         }
       ],
-      "latency_ms": 86
+      "latency_ms": 88
     },
     {
       "case_id": "O07",
@@ -389,11 +389,11 @@
         {
           "name": "trace_echoed",
           "pass": true,
-          "expected": "trace-585-O07",
-          "actual": "trace-585-O07"
+          "expected": "trace-848-O07",
+          "actual": "trace-848-O07"
         }
       ],
-      "latency_ms": 561
+      "latency_ms": 526
     },
     {
       "case_id": "O08",
@@ -439,11 +439,11 @@
         {
           "name": "trace_echoed",
           "pass": true,
-          "expected": "trace-585-O08",
-          "actual": "trace-585-O08"
+          "expected": "trace-848-O08",
+          "actual": "trace-848-O08"
         }
       ],
-      "latency_ms": 89
+      "latency_ms": 91
     },
     {
       "case_id": "O09",
@@ -489,11 +489,11 @@
         {
           "name": "trace_echoed",
           "pass": true,
-          "expected": "trace-585-O09",
-          "actual": "trace-585-O09"
+          "expected": "trace-848-O09",
+          "actual": "trace-848-O09"
         }
       ],
-      "latency_ms": 537
+      "latency_ms": 527
     },
     {
       "case_id": "O10",
@@ -504,7 +504,7 @@
           "name": "draft_written",
           "pass": true,
           "expected": "a non-empty draft",
-          "actual": "208 chars"
+          "actual": "112 chars"
         },
         {
           "name": "drafted_by_model",
@@ -528,7 +528,7 @@
           "name": "within_word_limit",
           "pass": true,
           "expected": "1..90 words",
-          "actual": 40
+          "actual": 22
         },
         {
           "name": "tenant_echoed",
@@ -539,11 +539,11 @@
         {
           "name": "trace_echoed",
           "pass": true,
-          "expected": "trace-585-O10",
-          "actual": "trace-585-O10"
+          "expected": "trace-848-O10",
+          "actual": "trace-848-O10"
         }
       ],
-      "latency_ms": 5488
+      "latency_ms": 12116
     }
   ]
 }

@@ -1,0 +1,592 @@
+{
+  "name": "[Platform] 16 Failure Handler",
+  "nodes": [
+    {
+      "id": "8a8abb46-5946-4051-a3b8-22f0cf868116",
+      "name": "Workflow Failed",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "43934337-6ac5-403b-a1c3-8f6c299e64ec",
+      "name": "Capture Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const e = $input.first().json || {};\nconst ex = e.execution || {};\nconst wf = e.workflow || {};\nconst err = ex.error || {};\n\nfunction fnv(s) {\n  let h = 2166136261;\n  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }\n  return (h >>> 0).toString(16).padStart(8, \"0\");\n}\n\n// The Error Trigger does not hand us the failing run\\u2019s input, so the\n// trace id and tenant are only recoverable when the message carries them.\n// Rather than guess, record what is known and mark the rest unknown: a\n// dead-letter row that lies about its scope is worse than one that admits\n// it. The execution URL is always enough for a human to recover the input.\nconst blob = JSON.stringify(e);\nconst traceMatch = blob.match(/\"trace_id\"\\s*:\\s*\"([^\"]{1,64})\"/);\nconst tenantMatch = blob.match(/\"tenant_id\"\\s*:\\s*\"([a-z0-9][a-z0-9_-]{0,62})\"/);\n\nconst message = String(err.message || \"no message supplied by the error trigger\");\nconst failureId = \"f-\" + String(ex.id || \"unknown\") + \"-\" + fnv(message + String(ex.lastNodeExecuted || \"\"));\n\nreturn [{ json: {\n  failure_id: failureId,\n  trace_id: traceMatch ? traceMatch[1] : \"\",\n  tenant_id: tenantMatch ? tenantMatch[1] : \"\",\n  workflow_id: String(wf.id || \"\"),\n  workflow_name: String(wf.name || \"unknown\"),\n  node_name: String(ex.lastNodeExecuted || \"unknown\"),\n  error_message: message.slice(0, 1000),\n  error_detail: String(err.stack || err.description || \"\").slice(0, 3000),\n  execution_id: String(ex.id || \"\"),\n  execution_url: String(ex.url || \"\"),\n  execution_mode: String(ex.mode || \"unknown\"),\n  replay_payload: \"\",\n  replayable: false,\n  status: \"new\"\n} }];\n"
+      }
+    },
+    {
+      "id": "ab7cab83-c5cf-4ee7-8651-63c6f7247817",
+      "name": "Record Failure",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATA_TABLE_ID",
+          "cachedResultName": "swarm_failures"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "failure_id": "={{ $json.failure_id }}",
+            "trace_id": "={{ $json.trace_id }}",
+            "tenant_id": "={{ $json.tenant_id }}",
+            "workflow_id": "={{ $json.workflow_id }}",
+            "workflow_name": "={{ $json.workflow_name }}",
+            "node_name": "={{ $json.node_name }}",
+            "error_message": "={{ $json.error_message }}",
+            "error_detail": "={{ $json.error_detail }}",
+            "execution_id": "={{ $json.execution_id }}",
+            "execution_url": "={{ $json.execution_url }}",
+            "execution_mode": "={{ $json.execution_mode }}",
+            "replay_payload": "={{ $json.replay_payload }}",
+            "replayable": "={{ $json.replayable === true }}",
+            "status": "={{ $json.status }}",
+            "created_at": "={{ $now.toISO() }}",
+            "replayed_at": "",
+            "replay_execution_id": ""
+          }
+        }
+      }
+    },
+    {
+      "id": "79db0b83-36cf-47d7-bbd1-ccbc5b96b59d",
+      "name": "Replay Request",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        320
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "failure_id",
+              "type": "string"
+            },
+            {
+              "name": "lead",
+              "type": "string"
+            },
+            {
+              "name": "options",
+              "type": "string"
+            },
+            {
+              "name": "tenant_id",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fece3e28-07f6-449b-b097-cdc97e62dfc7",
+      "name": "Normalise Replay",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $input.first().json || {};\n\nfunction parseJson(v, fallback) {\n  if (v && typeof v === \"object\") { return v; }\n  if (typeof v === \"string\" && v.trim()) {\n    try { return JSON.parse(v); } catch (e) { return fallback; }\n  }\n  return fallback;\n}\n\nconst rawTenant = String(req.tenant_id || \"default\").trim().toLowerCase();\nconst tenantId = /^[a-z0-9][a-z0-9_-]{0,62}$/.test(rawTenant) ? rawTenant : \"\";\nconst lead = parseJson(req.lead, {});\nconst options = parseJson(req.options, {});\n\n// A replay is a deliberate re-run of a lead the pipeline already saw, so\n// force is set: without it the ledger would suppress it as a duplicate and\n// the replay would silently do nothing. dry_run is still whatever the\n// caller asks for, and still defaults to true.\noptions.force = true;\noptions.tenant_id = tenantId;\nif (options.dry_run === undefined) { options.dry_run = true; }\n\nconst problems = [];\nif (!tenantId) { problems.push(\"tenant_id must match ^[a-z0-9][a-z0-9_-]{0,62}$; got \" + JSON.stringify(rawTenant)); }\nif (!lead || !lead.email) { problems.push(\"a replay needs the original lead; supply it as `lead` (the failure row records the execution URL it can be read from)\"); }\n\nreturn [{ json: {\n  failure_id: String(req.failure_id || \"\"),\n  tenant_id: tenantId,\n  lead_json: JSON.stringify(lead),\n  options_json: JSON.stringify(options),\n  dry_run: options.dry_run !== false,\n  ok: problems.length === 0,\n  problems: problems,\n  started_at_ms: Date.now()\n} }];\n"
+      }
+    },
+    {
+      "id": "8734e7bb-146d-41e5-bb42-e6662273684d",
+      "name": "Replay Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "rv1",
+              "leftValue": "={{ $json.ok }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "03694d26-bcde-4205-97e4-48f76e1d7ade",
+      "name": "Replay Lead (14)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        672,
+        224
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "14 Revenue Swarm Orchestrator"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead": "={{ $json.lead_json }}",
+            "options": "={{ $json.options_json }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "89d40650-81ad-4c6a-95e3-2a5bf9bf2f8f",
+      "name": "Capture Replay",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        224
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise Replay\").first().json;\nconst raw = $input.first().json;\nconst r = (raw && raw.json) ? raw.json : raw;\nreturn [{ json: {\n  failure_id: req.failure_id,\n  tenant_id: req.tenant_id,\n  replayed: true,\n  outcome: r.outcome || \"unknown\",\n  trace_id: r.trace_id || \"\",\n  dry_run: req.dry_run,\n  result: r,\n  problems: [],\n  latency_ms: Date.now() - Number(req.started_at_ms)\n} }];\n"
+      }
+    },
+    {
+      "id": "c78a1006-c578-4f05-b236-163b59a6f54b",
+      "name": "Reject Replay",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        416
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $(\"Normalise Replay\").first().json;\nreturn [{ json: {\n  failure_id: req.failure_id,\n  tenant_id: req.tenant_id,\n  replayed: false,\n  outcome: \"replay_refused\",\n  trace_id: \"\",\n  dry_run: req.dry_run,\n  result: {},\n  problems: req.problems,\n  latency_ms: Date.now() - Number(req.started_at_ms)\n} }];\n"
+      }
+    },
+    {
+      "id": "a6801101-c23b-4760-b65e-69b29ebf7ffc",
+      "name": "Record Replay",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        320
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_DATA_TABLE_ID",
+          "cachedResultName": "swarm_failures"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "failure_id": "={{ $json.failure_id }}",
+            "trace_id": "={{ $json.trace_id }}",
+            "tenant_id": "={{ $json.tenant_id }}",
+            "workflow_id": "LBqg8FFAh9D1rWXu",
+            "workflow_name": "14 Revenue Swarm Orchestrator",
+            "node_name": "Replay Lead (14)",
+            "error_message": "={{ $json.replayed ? \"\" : JSON.stringify($json.problems) }}",
+            "error_detail": "",
+            "execution_id": "={{ $execution.id }}",
+            "execution_url": "",
+            "execution_mode": "replay",
+            "replay_payload": "",
+            "replayable": "={{ $json.replayed === true }}",
+            "status": "={{ $json.replayed ? (\"replayed:\" + $json.outcome) : \"replay_refused\" }}",
+            "created_at": "={{ $now.toISO() }}",
+            "replayed_at": "={{ $now.toISO() }}",
+            "replay_execution_id": "={{ $execution.id }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "aca42190-20e0-49b3-8e62-483a6385e346",
+      "name": "Return Replay Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const SOURCES = [\"Capture Replay\", \"Reject Replay\"];\nfor (const name of SOURCES) {\n  try {\n    const items = $(name).all();\n    if (items && items.length) { return [{ json: items[0].json }]; }\n  } catch (e) { }\n}\nreturn [{ json: { replayed: false, outcome: \"no_branch_ran\", problems: [\"wiring bug: no replay branch produced a result\"] } }];\n"
+      }
+    },
+    {
+      "id": "f0a6f32b-1358-450d-bac7-db7e8a455d3c",
+      "name": "Sticky Note 2b539f48",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        608,
+        416
+      ],
+      "parameters": {
+        "content": "## Dead-letter log\n\nn8n fires an error workflow for **production** executions only, never for a\nmanual test run. A failure here therefore means a real webhook or scheduled run\nbroke, which is exactly the set worth alerting on.\n\nThe Error Trigger does not hand over the failing run’s input, so the trace id\nand tenant are recovered from the error payload when they appear in it and left\nblank when they do not. The execution URL is always recorded, and it is always\nenough for a human to read the original input.",
+        "color": 3
+      }
+    },
+    {
+      "id": "f2d1b3d0-851e-4d82-a712-70cb2dc020ca",
+      "name": "Sticky Note cd5bc2a3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        608,
+        672
+      ],
+      "parameters": {
+        "content": "## Replay\n\nA replay re-submits a lead through 14 with `force: true`, because without it the\nlead ledger would suppress the re-run as a duplicate and the replay would\nsilently do nothing.\n\n`dry_run` still defaults to true. A replay is not a licence to write.\n\nThe failure table is append-only: a replay adds a row referencing the original\n`failure_id` rather than overwriting it, so the history of what broke and what\nwas done about it stays intact.",
+        "color": 4
+      }
+    },
+    {
+      "id": "0ab529bb-72ac-40bd-b570-5070afee11d5",
+      "name": "Test Suite Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -460,
+        1100
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "641333c2-2f43-4786-afc0-d37b1f20f44a",
+      "name": "Build Replay Fixtures",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        1100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Signals are supplied so a replay costs no model call and lands on a known\n// tier. dry_run stays true: a replay must never be a licence to write.\nconst nonce = String($execution.id) + Date.now().toString(36);\n\nconst SIGNALS = JSON.stringify({\n  seniority: \"executive\", decision_authority: \"decision_maker\", company_size_band: \"201-1000\",\n  budget_signal: \"explicit\", timeline: \"immediate\", pain_specificity: \"specific\",\n  use_case_fit: \"core\", competitor_mentioned: false, evidence: []\n});\n\nfunction opts(extra) {\n  return JSON.stringify(Object.assign({\n    dry_run: true,\n    enrich: false,\n    channel: \"email\",\n    simulate_decision: \"approve\",\n    signals_override: SIGNALS\n  }, extra || {}));\n}\n\nconst fixtures = [\n  { case_id: \"R01\", note: \"a valid replay reaches the orchestrator and is processed\",\n    failure_id: \"f-test-\" + nonce, tenant_id: \"acme\",\n    lead: JSON.stringify({ email: \"replay-\" + nonce + \"@analytical.io\", job_title: \"CTO\", company_name: \"Analytical Engines\", message: \"We have 30k set aside.\" }),\n    options: opts(), expect_replayed: true, expect_outcome: \"processed\" },\n  { case_id: \"R02\", note: \"a replay with no lead is refused with a reason\",\n    failure_id: \"f-test-\" + nonce + \"-b\", tenant_id: \"acme\",\n    lead: \"\", options: opts(), expect_replayed: false, expect_outcome: \"replay_refused\" },\n  { case_id: \"R03\", note: \"a malformed tenant is refused before anything is replayed\",\n    failure_id: \"f-test-\" + nonce + \"-c\", tenant_id: \"acme:globex\",\n    lead: JSON.stringify({ email: \"replay-c-\" + nonce + \"@analytical.io\" }),\n    options: opts(), expect_replayed: false, expect_outcome: \"replay_refused\" }\n];\n\nreturn fixtures.map(function (f) { return { json: f }; });\n"
+      }
+    },
+    {
+      "id": "975020fd-b27e-43e0-b264-95db318aad2c",
+      "name": "Replay Fixture Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -20,
+        1100
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "e5954baa-a2eb-4ed9-8a35-35da8561efad",
+      "name": "Run Replay Fixture",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        220,
+        1220
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_WORKFLOW_ID",
+          "cachedResultName": "[Platform] 16 Failure Handler"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "failure_id": "={{ $json.failure_id }}",
+            "lead": "={{ $json.lead }}",
+            "options": "={{ $json.options }}",
+            "tenant_id": "={{ $json.tenant_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "192a75e6-05e6-4f50-9bb2-72ab62ad219e",
+      "name": "Slim Replay Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        1220
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const raw = $input.first().json;\nconst r = (raw && raw.json) ? raw.json : raw;\nconst fx = $(\"Replay Fixture Loop\").first().json;\nreturn [{ json: {\n  case_id: fx.case_id,\n  note: fx.note,\n  expect_replayed: fx.expect_replayed,\n  expect_outcome: fx.expect_outcome,\n  actual_replayed: r.replayed === true,\n  actual_outcome: r.outcome,\n  problems: r.problems || [],\n  trace_id: r.trace_id || \"\",\n  dry_run: r.dry_run,\n  latency_ms: r.latency_ms\n} }];\n"
+      }
+    },
+    {
+      "id": "ea51e001-e58f-4240-9b79-3d343d10ad64",
+      "name": "Assert Replay Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        980
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map(function (i) { return i.json; });\n\nconst cases = rows.map(function (r) {\n  const checks = [];\n  checks.push({ name: \"replayed\", pass: r.actual_replayed === r.expect_replayed, expected: r.expect_replayed, actual: r.actual_replayed });\n  checks.push({ name: \"outcome\", pass: r.actual_outcome === r.expect_outcome, expected: r.expect_outcome, actual: r.actual_outcome });\n  checks.push({ name: \"replay_stays_dry\", pass: r.dry_run === true, expected: true, actual: r.dry_run });\n  if (!r.expect_replayed) {\n    checks.push({ name: \"refusal_explained\", pass: (r.problems || []).length > 0, expected: \">0 problems\", actual: (r.problems || []).length });\n  } else {\n    checks.push({ name: \"trace_recorded\", pass: String(r.trace_id || \"\").length > 0, expected: \"a trace id\", actual: r.trace_id });\n  }\n  const failed = checks.filter(function (c) { return !c.pass; });\n  return { case_id: r.case_id, note: r.note, passed: failed.length === 0, checks: checks, latency_ms: r.latency_ms };\n});\n\nconst passed = cases.filter(function (c) { return c.passed; }).length;\nreturn [{ json: {\n  suite: \"16-failure-handler\",\n  run_at: new Date().toISOString(),\n  execution_id: $execution.id,\n  total: cases.length,\n  passed: passed,\n  failed: cases.length - passed,\n  all_passed: passed === cases.length && cases.length === 3,\n  cases: cases\n} }];\n"
+      }
+    },
+    {
+      "id": "cbe44099-e4e5-4266-ae4a-e1acc3710c44",
+      "name": "Sticky Replay Suite",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        920
+      ],
+      "parameters": {
+        "color": 6,
+        "width": 760,
+        "height": 420,
+        "content": "## Replay suite\n\nThree fixtures covering the replay leg: a valid replay that reaches 14, one with\nno lead, and one with a malformed tenant.\n\nThe Error Trigger leg above is deliberately not covered here. n8n fires an error\nworkflow for production executions only, so exercising it from a test would mean\ndeliberately breaking a live run. It is verified by the fact that a failure\nappears in `swarm_failures` when one actually happens."
+      }
+    }
+  ],
+  "connections": {
+    "Workflow Failed": {
+      "main": [
+        [
+          {
+            "node": "Capture Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Failure": {
+      "main": [
+        [
+          {
+            "node": "Record Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replay Request": {
+      "main": [
+        [
+          {
+            "node": "Normalise Replay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise Replay": {
+      "main": [
+        [
+          {
+            "node": "Replay Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replay Valid?": {
+      "main": [
+        [
+          {
+            "node": "Replay Lead (14)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject Replay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replay Lead (14)": {
+      "main": [
+        [
+          {
+            "node": "Capture Replay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Replay": {
+      "main": [
+        [
+          {
+            "node": "Record Replay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reject Replay": {
+      "main": [
+        [
+          {
+            "node": "Record Replay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Replay": {
+      "main": [
+        [
+          {
+            "node": "Return Replay Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Suite Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build Replay Fixtures",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Replay Fixtures": {
+      "main": [
+        [
+          {
+            "node": "Replay Fixture Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replay Fixture Loop": {
+      "main": [
+        [
+          {
+            "node": "Assert Replay Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run Replay Fixture",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Replay Fixture": {
+      "main": [
+        [
+          {
+            "node": "Slim Replay Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slim Replay Result": {
+      "main": [
+        [
+          {
+            "node": "Replay Fixture Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "description": "Dead-letter log for the revenue pipeline. Captures any production failure in 11-15 with its trace id, failing node and execution URL, and offers an audited replay path that re-submits a lead through 14 with force set.",
+  "nodeGroups": []
+}

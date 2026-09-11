@@ -45,9 +45,9 @@ Credentials and data tables: [docs/CONNECTIONS.md](../../docs/CONNECTIONS.md)
 
 | Result | Raw output |
 | --- | --- |
-| 13/13 fixtures passed | [`tests/results-2026-09-12.json`](tests/results-2026-09-12.json) · execution `561` |
+| 15/15 fixtures passed | [`tests/results-2026-09-12.json`](tests/results-2026-09-12.json) · execution `820` |
 
-Q01-Q08 supply signals directly, so each asserts an exact rubric score and makes no model call. Q09 runs the real model. Q10/Q11 exercise rubric overrides; Q10x and Q11x assert the A/B property and the malformed-rubric fallback across case pairs.
+Q01-Q08 supply signals directly, so each asserts an exact rubric score and makes no model call. Q09 runs the real model. Q10/Q11 exercise rubric overrides. Q12/Q13 point enrichment at a cloud metadata address and a reserved suffix and assert both are refused without a network call.
 
 ## Limitations
 

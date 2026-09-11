@@ -48,7 +48,7 @@ Credentials and data tables: [docs/CONNECTIONS.md](../../docs/CONNECTIONS.md)
 
 | Result | Raw output |
 | --- | --- |
-| 10/10 fixtures passed | [`tests/results-2026-09-12.json`](tests/results-2026-09-12.json) · execution `585` |
+| 10/10 fixtures passed | [`tests/results-2026-09-12.json`](tests/results-2026-09-12.json) · execution `848` |
 
 Every case runs with dry_run=true and asserts sent=false. O01-O09 supply the draft; O10 drafts with the real model. Governance decisions for HIGH and CRITICAL cases use simulate_decision in place of the Telegram round trip.
 

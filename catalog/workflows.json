@@ -14,7 +14,8 @@
     "11",
     "12",
     "13",
-    "15"
+    "15",
+    "16"
   ],
   "domain_workflows": [
     "01",
@@ -406,6 +407,28 @@
       "external_services": [],
       "requires_user_credentials": false,
       "credential_note": "No credentials of its own. It runs entirely through workflow 12 with supplied signals, so an evaluation makes no model call and costs nothing to re-run."
+    },
+    {
+      "number": "16",
+      "name": "Failure Handler",
+      "folder": "16-failure-handler",
+      "role": "platform",
+      "n8n_workflow_id": "HtTcCAwFg3VP4i9y",
+      "summary": "Dead-letter log for the pipeline. Captures any production failure in 11-15 with its trace id, failing node and execution URL, and offers an audited replay that re-submits a lead through 14 with force set and dry_run still defaulting to true.",
+      "entry_points": [
+        "Error Trigger",
+        "Execute Sub-workflow (replay)",
+        "Manual (test suite)"
+      ],
+      "calls": [
+        "14"
+      ],
+      "called_by": [],
+      "status": "LIVE VERIFIED",
+      "evidence": "workflows/16-failure-handler/tests/results-2026-09-12.json",
+      "external_services": [],
+      "requires_user_credentials": false,
+      "credential_note": "No credentials. Set it as the error workflow on 11-15 (already done on this instance); n8n fires it for production executions only, never for a manual test run."
     }
   ]
 }

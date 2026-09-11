@@ -1,9 +1,9 @@
 # n8n AI Workflows
 
-Fifteen AI workflows for n8n: agents, RAG, model routing, output verification,
+Sixteen AI workflows for n8n: agents, RAG, model routing, output verification,
 human approval, and a revenue pipeline that will not email anyone without one.
 
-`15 workflows` · `352 nodes` · `Live tested in n8n` · `Multi-tenant` · `Evaluated`
+`16 workflows` · `372 nodes` · `Live tested in n8n` · `Tenant-aware` · `Evaluated`
 
 <!-- Hero image goes here once there is a real screenshot of a workflow canvas.
      Leave it empty rather than filling it with a mockup. -->
@@ -27,6 +27,7 @@ human approval, and a revenue pipeline that will not email anyone without one.
 | 13 | [Outreach Composer](workflows/13-outreach-composer/) | Drafts, checks and verifies a message, then asks a human |
 | 14 | [Revenue Swarm](workflows/14-revenue-swarm-orchestrator/) | A lead becomes CRM records and a drafted message, or an explained refusal |
 | 15 | [Evaluation Harness](workflows/15-evaluation-harness/) | A candidate scoring rubric is promoted by arithmetic, or not at all |
+| 16 | [Failure Handler](workflows/16-failure-handler/) | Where a broken production run goes, and how it gets run again |
 
 ## How to use
 
@@ -36,15 +37,16 @@ human approval, and a revenue pipeline that will not email anyone without one.
 4. For the interconnected setup, follow [docs/CONNECTIONS.md](docs/CONNECTIONS.md).
 
 To take the whole set at once, `python scripts/import-workflows.py` creates all
-fifteen and relinks the sub-workflow references for you.
+sixteen and relinks the sub-workflow references for you.
 
 ## Shared components
 
-These are not fifteen standalone templates. Eight of them are services the
+These are not sixteen standalone templates. Nine of them are services the
 others call over Execute Sub-workflow — Model Router, Verification, Governance,
 Prompt Registry, CRM Sync, Lead Qualification, Outreach Composer and the
-Evaluation Harness — so routing, checking, approval, prompt versioning, every
-CRM write and rubric promotion are each implemented once.
+Evaluation Harness and the Failure Handler — so routing, checking, approval,
+prompt versioning, every CRM write, rubric promotion and every dead letter are
+each implemented once.
 
 The revenue pipeline (11–15) is what that buys you: 14 reads as a list of steps
 because the judgement lives in the services underneath it. Every HubSpot call in
@@ -58,7 +60,7 @@ anything acts on — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Tested
 
-All fifteen were executed on a live n8n instance. The raw test and benchmark
+All sixteen were executed on a live n8n instance. The raw test and benchmark
 output stays in each workflow folder, next to the workflow it belongs to.
 
 Beyond pass/fail, the scoring rubric is *measured*: a labelled golden set is
@@ -83,6 +85,12 @@ and drafts messages without touching a CRM or an inbox. And 13 treats a send as 
 HIGH-risk action, which means a human approves every outreach until an operator
 decides otherwise.
 
+**On tenancy, precisely:** execution is tenant-aware — keys, ledgers and dedupe
+are scoped to a workspace, and fixtures fail if two are ever conflated. That is
+not the same as secure SaaS multi-tenancy, which needs an authenticated API and
+database-enforced isolation. `tenant_id` is still caller-asserted. See
+[docs/SECURITY.md](docs/SECURITY.md) and [docs/SAAS-DESIGN.md](docs/SAAS-DESIGN.md).
+
 ## Documentation
 
 | | |
@@ -90,6 +98,8 @@ decides otherwise.
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layers, and exactly what decides what |
 | [docs/SECURITY.md](docs/SECURITY.md) | Severity-rated assessment, including what was found and fixed |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Stage A/B/C, scored, including what not to build |
+| [docs/SAAS-DESIGN.md](docs/SAAS-DESIGN.md) | Proposed schema, API boundary and tenant-auth model |
+| [docs/HUBSPOT-SCOPES.md](docs/HUBSPOT-SCOPES.md) | Least-privilege scopes derived from the actual calls |
 | [docs/CONNECTIONS.md](docs/CONNECTIONS.md) | Every credential and data table, and how to create it |
 | [evals/README.md](evals/README.md) | The golden set and the promotion gate |
 

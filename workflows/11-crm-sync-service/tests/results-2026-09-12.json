@@ -1,16 +1,16 @@
 {
   "suite": "11-crm-sync-service",
-  "generated_at": "2026-09-11T15:49:21.860Z",
-  "n8n_execution_id": "551",
+  "generated_at": "2026-09-11T16:30:45.134Z",
+  "n8n_execution_id": "810",
   "workflow": "CRM Sync Service",
   "how_to_reproduce": "Open the workflow in n8n and run the 'Test Suite Trigger' manual trigger.",
-  "note": "Every case runs with dry_run=true, so no HubSpot call is made. C01/C02 share a run-scoped idempotency key; C08 sends the identical lead as a second tenant and C08x asserts the two are not conflated.",
+  "note": "Every case runs with dry_run=true, so no HubSpot call is made. C01/C02 share a run-scoped idempotency key; C08 sends the identical lead as a second tenant and C08x asserts the two are not conflated; C09 refuses a tenant id that could smuggle a separator into a composite key.",
   "total": 10,
   "passed": 10,
   "failed": 0,
   "all_passed": true,
   "latency_ms_p50_measured": 23,
-  "latency_ms_max_measured": 30,
+  "latency_ms_max_measured": 32,
   "cases": [
     {
       "case_id": "C01",
@@ -39,16 +39,16 @@
           "name": "simulated_id_prefix",
           "pass": true,
           "expected": "sim-*",
-          "actual": "sim-contact-4ab4d7021fb7"
+          "actual": "sim-contact-dd3696ff3eb7"
         },
         {
           "name": "trace_echoed",
           "pass": true,
           "expected": "trace-*",
-          "actual": "trace-551-mtx4t5ej-C01"
+          "actual": "trace-810-mtx6adhl-C01"
         }
       ],
-      "latency_ms": 24
+      "latency_ms": 27
     },
     {
       "case_id": "C02",
@@ -77,10 +77,10 @@
           "name": "trace_echoed",
           "pass": true,
           "expected": "trace-*",
-          "actual": "trace-551-mtx4t5ej-C02"
+          "actual": "trace-810-mtx6adhl-C02"
         }
       ],
-      "latency_ms": 30
+      "latency_ms": 21
     },
     {
       "case_id": "C03",
@@ -115,10 +115,10 @@
           "name": "trace_echoed",
           "pass": true,
           "expected": "trace-*",
-          "actual": "trace-551-mtx4t5ej-C03"
+          "actual": "trace-810-mtx6adhl-C03"
         }
       ],
-      "latency_ms": 14
+      "latency_ms": 12
     },
     {
       "case_id": "C04",
@@ -153,10 +153,10 @@
           "name": "trace_echoed",
           "pass": true,
           "expected": "trace-*",
-          "actual": "trace-551-mtx4t5ej-C04"
+          "actual": "trace-810-mtx6adhl-C04"
         }
       ],
-      "latency_ms": 30
+      "latency_ms": 23
     },
     {
       "case_id": "C05",
@@ -191,10 +191,10 @@
           "name": "trace_echoed",
           "pass": true,
           "expected": "trace-*",
-          "actual": "trace-551-mtx4t5ej-C05"
+          "actual": "trace-810-mtx6adhl-C05"
         }
       ],
-      "latency_ms": 12
+      "latency_ms": 11
     },
     {
       "case_id": "C06",
@@ -229,10 +229,10 @@
           "name": "trace_echoed",
           "pass": true,
           "expected": "trace-*",
-          "actual": "trace-551-mtx4t5ej-C06"
+          "actual": "trace-810-mtx6adhl-C06"
         }
       ],
-      "latency_ms": 25
+      "latency_ms": 32
     },
     {
       "case_id": "C07",
@@ -267,10 +267,10 @@
           "name": "trace_echoed",
           "pass": true,
           "expected": "trace-*",
-          "actual": "trace-551-mtx4t5ej-C07"
+          "actual": "trace-810-mtx6adhl-C07"
         }
       ],
-      "latency_ms": 10
+      "latency_ms": 9
     },
     {
       "case_id": "C08",
@@ -299,13 +299,13 @@
           "name": "simulated_id_prefix",
           "pass": true,
           "expected": "sim-*",
-          "actual": "sim-contact-4ab4d7021fb7"
+          "actual": "sim-contact-dd3696ff3eb7"
         },
         {
           "name": "trace_echoed",
           "pass": true,
           "expected": "trace-*",
-          "actual": "trace-551-mtx4t5ej-C08"
+          "actual": "trace-810-mtx6adhl-C08"
         }
       ],
       "latency_ms": 23
@@ -343,10 +343,10 @@
           "name": "trace_echoed",
           "pass": true,
           "expected": "trace-*",
-          "actual": "trace-551-mtx4t5ej-C09"
+          "actual": "trace-810-mtx6adhl-C09"
         }
       ],
-      "latency_ms": 9
+      "latency_ms": 13
     },
     {
       "case_id": "C08x",

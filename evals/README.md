@@ -8,6 +8,20 @@ is not changed on anybody's intuition.
 by a person and the commercial outcome that actually followed. The labels are
 the ground truth; the rubric is the thing being measured.
 
+> ## What twelve leads do and do not prove
+>
+> This is an evaluation **framework**. The current run proves the machinery
+> works: versioned rubrics, dual scoring through the real workflow, a gate that
+> rejects a regression, and a disagreement list that names the rows.
+>
+> It does **not** establish that rubric `1.2.0` is production-optimal, or that
+> its numbers would survive contact with real traffic. Twelve hand-labelled
+> leads from one labeller is a smoke test for the method, not a measurement of
+> the model. A 2-point move on this set is noise.
+>
+> The gate is trustworthy at any size — it is arithmetic. The *conclusions* only
+> become trustworthy as the set grows.
+
 [`15 Evaluation Harness`](../workflows/15-evaluation-harness/) scores the whole
 set twice — once under the production rubric, once under a candidate — by
 calling the real qualification workflow rather than a reimplementation of it.
@@ -58,15 +72,41 @@ G08 is the honest residue: a person would keep a tiny no-budget company in
 nurture, and production bins it. That is a real disagreement worth fixing — but
 by changing the small-company band, not by loosening every threshold.
 
-## Adding cases
+## Growing the set: 12 to 50 to thousands
+
+The schema is designed so this scales without redesigning anything. A case is
+`{case_id, expected_tier, outcome, lead, signals}` and nothing about the harness
+cares how many there are or where they came from.
+
+| Size | Source of labels | Storage | What changes | What does not |
+| --- | --- | --- | --- | --- |
+| **12** (now) | hand-labelled | `leads.json`, mirrored into workflow 15 | — | — |
+| **~50** | hand-labelled from real inbound | same | nothing; the loop is already per-case | schema, gate, metrics |
+| **~100–500** | real leads with CRM outcomes attached | `leads.json` gets large; move it to a Postgres `golden_cases` table and have 15 read a **stratified sample** | the loader node, and a `sample_size` / `seed` input for reproducibility | schema, gate, metrics |
+| **thousands** | outcomes ingested automatically from CRM stage changes | Postgres, partitioned by tenant and labelled period | add per-segment metrics (by size band, by source) and confidence intervals; run nightly rather than on demand | schema, gate, metrics |
+
+Three things are deliberately stable across all four rows, because they are what
+would be expensive to change later:
+
+1. **The case shape.** `signals` are supplied, so a case is replayable forever
+   at zero model cost and a rubric change is the only variable.
+2. **The metric set.** Accuracy, HOT precision, HOT recall, HOT conversion.
+   Adding per-segment breakdowns is additive.
+3. **The gate.** No regression, at least one improvement. It does not get
+   weaker as `n` grows; it gets more meaningful.
+
+What will need adding at ~100+ and is not built: statistical significance. At
+twelve, a difference of one case is 8 percentage points and means nothing. The
+gate should eventually require a difference larger than a confidence interval,
+not merely larger than zero. That is the honest next step, and it is a change to
+the *comparison*, not to the schema.
+
+## Adding cases today
 
 Edit `evals/golden/leads.json`, then mirror the change into workflow 15's
 `Load Golden Set` node. `scripts/validate-evals.py` fails if the two disagree,
 so the file stays authoritative and the drift is caught in CI rather than in a
 number nobody can reproduce.
-
-Twelve leads is enough to catch a direction and not enough to trust a decimal
-place. Treat a two-point move as noise until the set is several times larger.
 
 ## What this does not measure
 

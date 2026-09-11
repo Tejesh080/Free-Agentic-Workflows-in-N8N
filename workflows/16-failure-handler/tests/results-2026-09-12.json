@@ -1,0 +1,112 @@
+{
+  "suite": "16-failure-handler",
+  "generated_at": "2026-09-11T16:29:36.423Z",
+  "n8n_execution_id": "795",
+  "workflow": "Failure Handler",
+  "how_to_reproduce": "Open the workflow in n8n and run the 'Test Suite Trigger' manual trigger.",
+  "note": "Covers the replay leg only. n8n fires an error workflow for production executions, so the Error Trigger leg cannot be exercised from a manual test without deliberately breaking a live run.",
+  "total": 3,
+  "passed": 3,
+  "failed": 0,
+  "all_passed": true,
+  "latency_ms_p50_measured": 11,
+  "latency_ms_max_measured": 34125,
+  "cases": [
+    {
+      "case_id": "R01",
+      "note": "a valid replay reaches the orchestrator and is processed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "replayed",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "outcome",
+          "pass": true,
+          "expected": "processed",
+          "actual": "processed"
+        },
+        {
+          "name": "replay_stays_dry",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "trace_recorded",
+          "pass": true,
+          "expected": "a trace id",
+          "actual": "t-797-s5a5lt46"
+        }
+      ],
+      "latency_ms": 34125
+    },
+    {
+      "case_id": "R02",
+      "note": "a replay with no lead is refused with a reason",
+      "passed": true,
+      "checks": [
+        {
+          "name": "replayed",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "outcome",
+          "pass": true,
+          "expected": "replay_refused",
+          "actual": "replay_refused"
+        },
+        {
+          "name": "replay_stays_dry",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "refusal_explained",
+          "pass": true,
+          "expected": ">0 problems",
+          "actual": 1
+        }
+      ],
+      "latency_ms": 11
+    },
+    {
+      "case_id": "R03",
+      "note": "a malformed tenant is refused before anything is replayed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "replayed",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "outcome",
+          "pass": true,
+          "expected": "replay_refused",
+          "actual": "replay_refused"
+        },
+        {
+          "name": "replay_stays_dry",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "refusal_explained",
+          "pass": true,
+          "expected": ">0 problems",
+          "actual": 1
+        }
+      ],
+      "latency_ms": 8
+    }
+  ]
+}

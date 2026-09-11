@@ -13,7 +13,7 @@ One checklist. Work top to bottom; everything marked optional can wait.
 | **Firecrawl** | Live web search and scrape; company enrichment | 04, 12 | **Required** for 04 | Covered by Gateway credits. Otherwise a *Firecrawl* credential |
 | **GitHub** | Fetches versioned prompts at run time | 08 → 01, 03, 04, 06, 07, 10, 12, 13 | No credential for a public repo | Anonymous. Add a token only for a private prompt repo or to raise the rate limit |
 | **Telegram** | Human approval channel; the one wired outreach channel | 05, 13 | **Optional** | Create a bot with @BotFather, add a *Telegram* credential, then set the chat id (below) |
-| **HubSpot** | CRM writes: contact upsert, deal create, follow-up task | 11 → 14 | **Optional** — the swarm runs end to end in dry run without it | Create a private app in HubSpot, add a *HubSpot App Token* credential to the three nodes in 11, then enable them |
+| **HubSpot** | CRM writes: contact upsert, deal create, follow-up task | 11 → 14 | **Optional** — the pipeline runs end to end in dry run without it | Private app with **two scopes**, derived from the actual calls: [docs/HUBSPOT-SCOPES.md](HUBSPOT-SCOPES.md) |
 | **Qdrant** | Persistent vector store | 03 | **Optional** | Demo uses the in-memory store. For production swap the two vector store nodes and add a *Qdrant* credential |
 | **Postgres** | Real analytics warehouse | 07 | **Optional** | Demo uses an n8n Data Table. For production swap *Read Analytics Rows* for a Postgres node on a **read-only role** |
 | **Google Search Console** | Real analytics source | 07 | **Optional** | Not wired by default; the query compiler emits portable SQL you can adapt |
@@ -134,6 +134,19 @@ One row per lead decision: the score with its full breakdown, the CRM objects
 created, the outreach outcome and the governance verdict. This is the table a
 dashboard reads; it is not a log, it is the record.
 
+### `swarm_failures` — used by 16
+
+`failure_id` string, `trace_id` string, `tenant_id` string, `workflow_id` string,
+`workflow_name` string, `node_name` string, `error_message` string,
+`error_detail` string, `execution_id` string, `execution_url` string,
+`execution_mode` string, `replay_payload` string, `replayable` boolean,
+`status` string, `created_at` string, `replayed_at` string,
+`replay_execution_id` string
+
+Append-only. A replay adds a row referencing the original `failure_id` rather
+than overwriting it, so the history of what broke and what was done about it
+stays intact.
+
 ### `swarm_eval_runs` — used by 15
 
 `run_id` string, `golden_set` string, `golden_version` string,
@@ -243,3 +256,17 @@ skips the check, because a caller reaching it is already inside n8n.
 - **A local model** (Ollama, vLLM) in the router. The candidate registry has a
   commented example and the privacy gate already refuses `privacy=local_only`
   rather than silently using a cloud provider — but no local branch is wired.
+
+---
+
+## 7. Error workflow
+
+Workflow 16 is set as the error workflow on 11-15, so a production failure lands
+in `swarm_failures` with the failing node, the error and the execution URL.
+
+n8n fires an error workflow for **production** executions only — never for a
+manual test run. That is deliberate on n8n's part and worth knowing: a failed
+run you triggered by hand will not appear in the dead-letter table.
+
+To wire it on a fresh import: open each of 11-15 → Settings → Error workflow →
+*[Platform] 16 Failure Handler*.

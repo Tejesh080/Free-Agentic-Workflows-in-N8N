@@ -46,6 +46,15 @@ ALLOWED_EMAIL_DOMAINS = {
     "users.noreply.github.com", "noreply.github.com",
 }
 
+# Two fixtures need an address at a *real* free-email provider, because the
+# thing under test is the consumer-domain penalty and a reserved domain would
+# not trigger it. Both are synthetic and named here rather than allowing the
+# whole domain, which is the one most likely to carry a genuine leak.
+ALLOWED_EMAIL_ADDRESSES = {
+    "ada.lovelace@gmail.com",   # 12 Q08: asserts the -8 consumer-domain modifier
+    "strong.buyer@gmail.com",   # golden G12: a strong buyer on a personal address
+}
+
 SECRET_PATTERNS: list[tuple[str, str, str]] = [
     # (id, severity, regex)
     ("openai_key", "critical", r"\bsk-[A-Za-z0-9_\-]{20,}"),
@@ -136,6 +145,8 @@ def scan_text(rel: str, text: str) -> list[dict]:
         for m in EMAIL_RE.finditer(line):
             domain = m.group(1).lower()
             if domain in ALLOWED_EMAIL_DOMAINS or domain.endswith(".example"):
+                continue
+            if m.group(0).lower() in ALLOWED_EMAIL_ADDRESSES:
                 continue
             findings.append({
                 "file": rel, "line": idx, "rule": "personal_email",

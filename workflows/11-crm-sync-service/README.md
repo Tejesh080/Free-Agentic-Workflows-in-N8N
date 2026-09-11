@@ -43,9 +43,9 @@ Credentials and data tables: [docs/CONNECTIONS.md](../../docs/CONNECTIONS.md)
 
 | Result | Raw output |
 | --- | --- |
-| 10/10 fixtures passed | [`tests/results-2026-09-12.json`](tests/results-2026-09-12.json) · execution `551` |
+| 10/10 fixtures passed | [`tests/results-2026-09-12.json`](tests/results-2026-09-12.json) · execution `810` |
 
-Every case runs with dry_run=true, so no HubSpot call is made. C01/C02 share a run-scoped idempotency key; C08 sends the identical lead as a second tenant and C08x asserts the two are not conflated.
+Every case runs with dry_run=true, so no HubSpot call is made. C01/C02 share a run-scoped idempotency key; C08 sends the identical lead as a second tenant and C08x asserts the two are not conflated; C09 refuses a tenant id that could smuggle a separator into a composite key.
 
 ## Limitations
 

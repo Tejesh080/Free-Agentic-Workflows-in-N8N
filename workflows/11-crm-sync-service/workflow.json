@@ -401,7 +401,7 @@
           }
         },
         "options": {
-          "resolveData": false
+          "resolveData": true
         }
       },
       "disabled": true
@@ -664,7 +664,7 @@
         "color": 6,
         "width": 760,
         "height": 460,
-        "content": "## Self-test suite\n\nSeven fixtures run through this same service, one at a time. They prove the\nparts that do not need a HubSpot credential: deterministic simulation, replay\non a repeated idempotency key, validation rejection before any CRM call, and\nthe switch fallback for an unknown operation.\n\nC01 and C02 share a run-scoped key, so the suite gives the same verdict however\nmany times it is run."
+        "content": "## Self-test suite\n\nNine fixtures plus a derived cross-tenant assertion, run through this same\nservice one at a time. They prove the parts that do not need a HubSpot\ncredential: deterministic simulation, replay on a repeated idempotency key,\nvalidation rejection before any CRM call, the switch fallback, and that two\ntenants sending the identical lead are never conflated.\n\nC01 and C02 share a run-scoped key, so the suite gives the same verdict however\nmany times it is run."
       }
     }
   ],

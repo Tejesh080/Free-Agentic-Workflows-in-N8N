@@ -1,16 +1,16 @@
 {
   "suite": "12-lead-qualification",
-  "generated_at": "2026-09-11T15:52:54.306Z",
-  "n8n_execution_id": "561",
+  "generated_at": "2026-09-11T16:33:43.463Z",
+  "n8n_execution_id": "820",
   "workflow": "Lead Qualification Agent",
   "how_to_reproduce": "Open the workflow in n8n and run the 'Test Suite Trigger' manual trigger.",
-  "note": "Q01-Q08 supply signals directly, so each asserts an exact rubric score and makes no model call. Q09 runs the real model. Q10/Q11 exercise rubric overrides; Q10x and Q11x assert the A/B property and the malformed-rubric fallback across case pairs.",
-  "total": 13,
-  "passed": 13,
+  "note": "Q01-Q08 supply signals directly, so each asserts an exact rubric score and makes no model call. Q09 runs the real model. Q10/Q11 exercise rubric overrides. Q12/Q13 point enrichment at a cloud metadata address and a reserved suffix and assert both are refused without a network call.",
+  "total": 15,
+  "passed": 15,
   "failed": 0,
   "all_passed": true,
   "latency_ms_p50_measured": 242,
-  "latency_ms_max_measured": 10088,
+  "latency_ms_max_measured": 10177,
   "cases": [
     {
       "case_id": "Q01",
@@ -60,7 +60,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 242
+      "latency_ms": 258
     },
     {
       "case_id": "Q02",
@@ -110,7 +110,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 221
+      "latency_ms": 265
     },
     {
       "case_id": "Q03",
@@ -160,7 +160,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 215
+      "latency_ms": 259
     },
     {
       "case_id": "Q04",
@@ -210,7 +210,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 218
+      "latency_ms": 273
     },
     {
       "case_id": "Q05",
@@ -260,7 +260,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 216
+      "latency_ms": 283
     },
     {
       "case_id": "Q06",
@@ -318,7 +318,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 230
+      "latency_ms": 269
     },
     {
       "case_id": "Q07",
@@ -368,7 +368,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 12
+      "latency_ms": 13
     },
     {
       "case_id": "Q08",
@@ -426,7 +426,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 286
+      "latency_ms": 228
     },
     {
       "case_id": "Q09",
@@ -476,7 +476,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 10088
+      "latency_ms": 10177
     },
     {
       "case_id": "Q10",
@@ -526,7 +526,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 247
+      "latency_ms": 238
     },
     {
       "case_id": "Q11",
@@ -576,7 +576,131 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 326
+      "latency_ms": 232
+    },
+    {
+      "case_id": "Q12",
+      "note": "enrichment aimed at a cloud metadata address is refused, not fetched",
+      "passed": true,
+      "checks": [
+        {
+          "name": "score",
+          "pass": true,
+          "expected": 69,
+          "actual": 69
+        },
+        {
+          "name": "tier",
+          "pass": true,
+          "expected": "WARM",
+          "actual": "WARM"
+        },
+        {
+          "name": "recommended_action",
+          "pass": true,
+          "expected": "nurture",
+          "actual": "nurture"
+        },
+        {
+          "name": "outreach_allowed",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "requires_human_review",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "rubric_version",
+          "pass": true,
+          "expected": "1.2.0",
+          "actual": "1.2.0"
+        },
+        {
+          "name": "enrichment_refused",
+          "pass": true,
+          "expected": "a refusal mentioning IP literal",
+          "actual": "host 169.254.169.254 is an IP literal, not a company domain"
+        },
+        {
+          "name": "no_enrichment_used",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        }
+      ],
+      "latency_ms": 242
+    },
+    {
+      "case_id": "Q13",
+      "note": "enrichment aimed at a reserved internal suffix is refused",
+      "passed": true,
+      "checks": [
+        {
+          "name": "score",
+          "pass": true,
+          "expected": 69,
+          "actual": 69
+        },
+        {
+          "name": "tier",
+          "pass": true,
+          "expected": "WARM",
+          "actual": "WARM"
+        },
+        {
+          "name": "recommended_action",
+          "pass": true,
+          "expected": "nurture",
+          "actual": "nurture"
+        },
+        {
+          "name": "outreach_allowed",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        },
+        {
+          "name": "requires_human_review",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "rubric_version",
+          "pass": true,
+          "expected": "1.2.0",
+          "actual": "1.2.0"
+        },
+        {
+          "name": "enrichment_refused",
+          "pass": true,
+          "expected": "a refusal mentioning reserved suffix",
+          "actual": "host internal-crm.local uses the reserved suffix .local"
+        },
+        {
+          "name": "no_enrichment_used",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        },
+        {
+          "name": "tenant_echoed",
+          "pass": true,
+          "expected": "acme",
+          "actual": "acme"
+        }
+      ],
+      "latency_ms": 218
     },
     {
       "case_id": "Q10x",
@@ -596,7 +720,7 @@
           "actual": "WARM -> HOT"
         }
       ],
-      "latency_ms": 247
+      "latency_ms": 238
     },
     {
       "case_id": "Q11x",
@@ -622,7 +746,7 @@
           "actual": "rubric_override is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)"
         }
       ],
-      "latency_ms": 326
+      "latency_ms": 232
     }
   ],
   "rubric_version": "1.2.0"
