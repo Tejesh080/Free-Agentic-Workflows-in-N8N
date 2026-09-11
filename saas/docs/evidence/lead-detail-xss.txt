@@ -1,0 +1,43 @@
+$ GET http://localhost:3000/leads/lead_xss
+
+mallory@probe.example                                         COLD  score 10
+
+Evidence
+  authority  unknown  unsupported                                            0
+    no quote returned for this signal
+
+  budget  approved  supported                                               +25
+    "<img src=x onerror="alert(1)"> Our budget is approved"
+
+  timeline  none  unsupported                                                0
+    no quote returned for this signal
+
+  icp_fit  unknown  unsupported                                              0
+    no quote returned for this signal
+
+Lead data as received
+Email      mallory@probe.example
+Company    <script>alert("company")</script>
+Title      img onerror probe
+Source     api
+Received   2026-09-11 17:28
+
+NOTES
+Evaluating vendors. <img src=x onerror="alert(1)"> Our budget is approved.
+
+--- what this shows ---
+Three hostile strings reach the DOM through three different paths — the company
+name (lead field), an evidence quote (model output echoing attacker text), and
+the notes body — and all three render as visible text. Browser console after
+loading this page contained no dialog and no error other than React's
+development-mode eval() notice.
+
+The escaping is React's. The second layer is the Content-Security-Policy in
+next.config.ts, which forbids object-src, frame-ancestors and external script
+origins, so a future templating mistake in one of these fields does not become
+script execution.
+
+Note also what the model did here: it quoted the hostile span verbatim, which is
+correct. A quote must be what the source actually said. Sanitising evidence at
+capture time would corrupt the audit trail; it is rendered inert at display time
+instead.

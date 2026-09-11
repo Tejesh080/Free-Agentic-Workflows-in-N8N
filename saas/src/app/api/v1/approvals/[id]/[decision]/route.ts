@@ -1,0 +1,69 @@
+/**
+ * POST /v1/approvals/{id}/approve
+ * POST /v1/approvals/{id}/reject
+ *
+ * Deciding requires a signed-in human member. The row level security policy on
+ * approval_requests denies a machine principal outright, so an API key cannot
+ * approve the action its own run asked for.
+ */
+import { authenticate, requireRole } from '@/lib/auth/request';
+import { withOrgContext } from '@/lib/db/client';
+import { decideApproval } from '@/lib/approvals/decide';
+import { ApprovalDecision } from '@/lib/schemas';
+import { fail, internal, invalid, notFound, ok } from '@/lib/http';
+
+const DECISIONS = { approve: 'approved', reject: 'rejected' } as const;
+
+export async function POST(
+  req: Request,
+  ctx: { params: Promise<{ id: string; decision: string }> },
+): Promise<Response> {
+  const { id, decision } = await ctx.params;
+  const kind = DECISIONS[decision as keyof typeof DECISIONS];
+  if (!kind) return notFound();
+
+  const auth = await authenticate(req);
+  if (!auth.ok) return fail(auth.status, auth.error, auth.detail);
+  const roleError = requireRole(auth.principal, ['owner', 'admin', 'member']);
+  if (roleError) return fail(roleError.status, roleError.error, roleError.detail);
+
+  let body: unknown = {};
+  const text = await req.text();
+  if (text.trim().length > 0) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      return invalid('body must be JSON');
+    }
+  }
+  const parsed = ApprovalDecision.safeParse(body);
+  if (!parsed.success) return invalid('invalid decision body', parsed.error.issues);
+
+  try {
+    const outcome = await withOrgContext(auth.principal, (tx) =>
+      decideApproval(tx, auth.principal, id, kind, parsed.data.note),
+    );
+
+    switch (outcome.kind) {
+      case 'not_found':
+        return notFound();
+      case 'expired':
+        return fail(409, 'conflict', 'this approval request has expired');
+      case 'already_decided':
+        // Replaying an approval click must not produce a second authorization.
+        return fail(409, 'conflict', `this request was already ${outcome.status}`);
+      case 'decided':
+        return ok({
+          status: outcome.approval.status,
+          approval_id: outcome.approval.id,
+          action: outcome.approval.action,
+          trace_id: outcome.approval.trace_id,
+          // The authorized action has not run yet. It runs when the engine's
+          // continuation picks up this approval; see docs/CALLBACK-CONTRACT.md.
+          action_executed: false,
+        });
+    }
+  } catch (err) {
+    return internal(err, `POST /v1/approvals/${id}/${decision}`);
+  }
+}

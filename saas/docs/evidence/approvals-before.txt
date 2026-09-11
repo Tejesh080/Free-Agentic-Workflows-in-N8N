@@ -1,0 +1,26 @@
+$ GET http://localhost:3000/approvals   (before any decision)
+
+Approvals
+
+Pending
+HIGH  outreach_send  HOT  score 90
+dana@northwind.example · Northwind Robotics
+requested 2026-09-11 17:28
+expires   2026-09-12 17:28
+
+Why a human is being asked: action_type send is HIGH risk; a human approves
+every real send by default
+
+EXACTLY WHAT WILL BE SENT
+Frozen when the request was made. The database refuses any change to it, so this
+approval cannot be harvested and applied to different content.
+
+{
+  "body": "Hi there — you mentioned Our budget is approved for this quarter and I own the decisi…",
+  "subject": "Following up on Northwind Robotics"
+}
+
+[Approve] [Reject]
+
+History
+No decisions yet.

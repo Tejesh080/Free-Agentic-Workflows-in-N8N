@@ -1,0 +1,21 @@
+$ GET http://localhost:3000/approvals   (after clicking Approve in the UI)
+
+Approvals
+
+Anything that leaves the building stops here first. Approval state lives in
+Postgres, not in the transport that delivered the notification, so the record of
+who authorised what survives changing or losing the notification channel.
+
+Pending
+
+Nothing is waiting.
+
+History
+ACTION          LEAD                    STATUS    DECIDED BY                NOTE  EXECUTED  DECIDED
+outreach_send   dana@northwind.example  approved  demo@revenueswarm.test    —     not yet   2026-09-11 17:39
+
+--- what this shows ---
+* the decision is attributed to a real user row, not to the process
+* EXECUTED is "not yet": a human said yes, and the send has not happened.
+  Those are separate facts and the schema keeps them separate.
+* the audit log gained one append-only row: approval.approved / approval_request / user

@@ -25,6 +25,13 @@ workflows/**/*.live.json
 
 # Build and tooling
 node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+
+# Local PGlite data directory. A real Postgres cluster on disk, seeded by
+# scripts/seed-demo.ts; regenerate it rather than committing it.
+saas/.pglite/
 .build/
 __pycache__/
 *.pyc

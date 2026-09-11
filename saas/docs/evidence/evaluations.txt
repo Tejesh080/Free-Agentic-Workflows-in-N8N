@@ -1,0 +1,50 @@
+$ GET http://localhost:3000/evaluations
+
+Evaluations
+
+What this dataset can and cannot support. The golden set holds 12 labelled leads.
+That is enough to exercise the gate and to catch a gross regression. It is not
+enough for a confidence interval, and no statistical claim is made from it.
+
+Rubric versions
+VERSION  STATUS     DECISIONS CITING IT  PUBLISHED   NOTES
+2.0.0    draft      0                    —           Candidate. Lower thresholds; rejected by the gate.
+1.2.0    published  7                    2026-09-11  Incumbent. Four signals, ICP fit can go negative.
+
+Runs
+gate: reject     1.2.0 vs 2.0.0                     2026-09-11 17:52
+Dataset          revenue-swarm-b2b-v1@1.0.0 · 12 cases · seed supplied-signals
+Counts           production 4 predicted HOT · candidate 6 predicted HOT
+
+METRIC          PRODUCTION  CANDIDATE  DELTA
+Tier accuracy   0.917       0.833      -0.084
+HOT precision   1.000       0.667      -0.333
+HOT recall      1.000       1.000      —
+HOT conversion  1.000       0.667      -0.333
+
+WHY THE GATE DECIDED THAT
+  accuracy regressed 0.917 -> 0.833
+  hot_precision regressed 1.000 -> 0.667
+  hot_conversion regressed 1.000 -> 0.667
+  no tracked metric improved
+
+Promotion is blocked. There is no override in the product; a candidate that
+regressed has to be changed and re-evaluated.
+
+--- what this shows ---
+These are the numbers workflow 15 actually measured, in n8n execution 718; see
+../../../workflows/15-evaluation-harness/tests/results-2026-09-12.json. The
+dashboard is not showing invented demo metrics.
+
+Read the shape of the regression rather than just the sign. HOT recall is
+unchanged at 1.000: the candidate still finds every genuinely HOT lead. What it
+adds is two false positives — it predicts 6 HOT where production predicts 4 —
+and those two are what drop precision from 1.000 to 0.667.
+
+A candidate that "surfaces more hot leads" is exactly how this change would be
+described by whoever proposed it, and it would be true. The gate rejects it
+anyway, because more HOT is not a tracked metric and precision is.
+
+"DECISIONS CITING IT: 7" is why the published rubric is immutable: seven stored
+receipts reference version 1.2.0 by foreign key, and the database refuses both an
+edit to its definition and a delete of the row.

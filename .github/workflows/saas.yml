@@ -1,0 +1,133 @@
+name: saas
+
+on:
+  push:
+    branches: [main]
+    paths: ['saas/**', '.github/workflows/saas.yml']
+  pull_request:
+    paths: ['saas/**', '.github/workflows/saas.yml']
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: saas
+
+jobs:
+  control-plane:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: saas/package-lock.json
+
+      - run: npm ci
+
+      - name: Types
+        run: npm run typecheck
+
+      # The suite runs against PGlite — real Postgres in WebAssembly — so the
+      # row level security policies under test are the same ones a Supabase
+      # project would receive. No service container, no connection string, and
+      # the tenant isolation assertions are not mocked.
+      - name: Tests (real Postgres policies)
+        run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          # The build must not need a database. A page that reaches Postgres at
+          # build time would be a page serving one tenant's data to everyone.
+          DATABASE_URL: ""
+
+      - name: Dependency vulnerabilities (runtime dependencies)
+        run: npm audit --omit=dev --audit-level=high
+
+  invariants:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Grep-level checks for the handful of properties that are easy to break
+      # by accident and expensive to notice. Each one has a comment saying what
+      # regression it is guarding against, because a nameless assertion gets
+      # deleted the first time it is inconvenient.
+      - name: Trust-boundary invariants
+        run: |
+          python - <<'PY'
+          import json, re, sys
+          from pathlib import Path
+
+          root = Path("saas")
+          failures = []
+
+          # 1. Tenant context must never be string-interpolated into SQL.
+          #    SET LOCAL takes no parameters, which is exactly how organization
+          #    context becomes an injection point in most designs. We use
+          #    set_config with bound parameters instead.
+          for path in root.rglob("*.ts"):
+              if "node_modules" in path.parts:
+                  continue
+              text = path.read_text(encoding="utf-8")
+              if re.search(r"set\s+local\s+app\.", text, re.I):
+                  failures.append(f"{path}: SET LOCAL app.* found; use select set_config($1,$2,true)")
+
+          # 2. Request schemas must be strict, or mass assignment comes back.
+          schemas = (root / "src/lib/schemas.ts").read_text(encoding="utf-8")
+          if "z.object(shape).strict()" not in schemas:
+              failures.append("schemas.ts: the strict() helper is gone")
+          for name in ("LeadIngest", "CallbackPayload", "DispatchPayload"):
+              if f"export const {name} = strict({{" not in schemas:
+                  failures.append(f"schemas.ts: {name} is no longer built with strict()")
+
+          # 3. No contract may accept an organization from its caller.
+          for forbidden in ("org_id:", "tenant_id:", "organization_slug:"):
+              if forbidden in schemas.replace("organization_id: z.string().uuid()", ""):
+                  failures.append(f"schemas.ts: a schema accepts {forbidden} from a caller")
+
+          # 4. The callback must fail closed with no secret configured.
+          hmac = (root / "src/lib/hmac.ts").read_text(encoding="utf-8")
+          if "if (!opts.secret) return { ok: false, reason: 'no_secret' }" not in hmac:
+              failures.append("hmac.ts: verifyRequest no longer fails closed without a secret")
+
+          # 5. Every tenant-owned table must have RLS enabled AND forced, and a
+          #    WITH CHECK on its write policies. A policy that only filters
+          #    reads would let one organization insert a row owned by another.
+          rls = (root / "supabase/migrations/0004_rls.sql").read_text(encoding="utf-8")
+          tables = set(re.findall(r"alter table (\w+) enable row level security", rls))
+          forced = set(re.findall(r"alter table (\w+) force row level security", rls))
+          if tables != forced:
+              failures.append(f"0004_rls.sql: enabled but not forced: {sorted(tables - forced)}")
+          for stmt in re.findall(r"create policy .*?;", rls, re.S):
+              if re.search(r"for (insert|update)", stmt) and "with check" not in stmt:
+                  name = re.match(r"create policy (\w+)", stmt)
+                  failures.append(f"0004_rls.sql: policy {name.group(1) if name else '?'} writes without WITH CHECK")
+
+          # 6. The application role must not be able to read a key hash.
+          grants = (root / "supabase/migrations/0005_grants.sql").read_text(encoding="utf-8")
+          select_grant = re.search(r"grant select \((.*?)\) on api_keys", grants, re.S)
+          if not select_grant:
+              failures.append("0005_grants.sql: the column-level select grant on api_keys is gone")
+          elif "secret_hash" in select_grant.group(1):
+              failures.append("0005_grants.sql: secret_hash is now selectable by the application role")
+
+          # 7. Pages must not be cached; a cached tenant page is a cross-tenant leak.
+          for page in root.rglob("src/app/**/page.tsx"):
+              if "force-dynamic" not in page.read_text(encoding="utf-8"):
+                  failures.append(f"{page}: not force-dynamic")
+
+          if failures:
+              print("FAIL  trust-boundary invariants")
+              for f in failures:
+                  print(f"  - {f}")
+              sys.exit(1)
+          print(f"PASS  invariants intact ({len(list(root.rglob('src/app/**/page.tsx')))} pages dynamic, RLS forced on {len(tables)} tables)")
+          PY
+        working-directory: .

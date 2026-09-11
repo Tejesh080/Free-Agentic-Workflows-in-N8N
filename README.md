@@ -3,7 +3,8 @@
 Sixteen AI workflows for n8n: agents, RAG, model routing, output verification,
 human approval, and a revenue pipeline that will not email anyone without one.
 
-`16 workflows` · `372 nodes` · `Live tested in n8n` · `Tenant-aware` · `Evaluated`
+`16 workflows` · `372 nodes` · `Live tested in n8n` · `Postgres control plane` ·
+`RLS-enforced isolation` · `Evaluated`
 
 <!-- Hero image goes here once there is a real screenshot of a workflow canvas.
      Leave it empty rather than filling it with a mockup. -->
@@ -69,9 +70,29 @@ only if it regresses on nothing and improves something. The last candidate was
 rejected — [evals/README.md](evals/README.md) has the numbers and the rows
 behind them.
 
+## The control plane
+
+[`saas/`](saas/) is a standalone Next.js and Postgres application: the
+authenticated API, the schema, the row level security policies, the approval
+domain, and the product screens. n8n sits behind it as an execution engine.
+
+```
+client ──Bearer rsk_…──▶ POST /v1/leads ──▶ 202 { trace_id }
+                                │
+                                └─ signed dispatch ─▶ n8n (workflows 11–16)
+                                                        │
+     Postgres ◀── receipt, evidence, approval ◀── signed callback
+```
+
+It runs with no infrastructure at all — `npm install && npx tsx
+scripts/seed-demo.ts && npm run dev` — because `DATABASE_URL=pglite://.pglite`
+runs real Postgres compiled to WebAssembly, applying the same migrations and the
+same policies a Supabase project would get. See [saas/README.md](saas/README.md).
+
 ## Stack
 
-n8n · OpenAI · Anthropic · Gemini · HubSpot · Firecrawl · Qdrant · Postgres · Python
+n8n · OpenAI · Anthropic · Gemini · HubSpot · Firecrawl · Qdrant · Next.js ·
+Postgres · Supabase · Python
 
 ## Setup and safety
 
@@ -85,11 +106,17 @@ and drafts messages without touching a CRM or an inbox. And 13 treats a send as 
 HIGH-risk action, which means a human approves every outreach until an operator
 decides otherwise.
 
-**On tenancy, precisely:** execution is tenant-aware — keys, ledgers and dedupe
-are scoped to a workspace, and fixtures fail if two are ever conflated. That is
-not the same as secure SaaS multi-tenancy, which needs an authenticated API and
-database-enforced isolation. `tenant_id` is still caller-asserted. See
-[docs/SECURITY.md](docs/SECURITY.md) and [docs/SAAS-DESIGN.md](docs/SAAS-DESIGN.md).
+**On tenancy, precisely:** in the n8n engine, execution is tenant-aware — keys,
+ledgers and dedupe are scoped to a workspace, and fixtures fail if two are ever
+conflated. But at the n8n boundary `tenant_id` is asserted by the caller, and a
+caller naming an organization is not authentication.
+
+The control plane in [`saas/`](saas/) is where that boundary is actually drawn:
+organization identity comes from a credential, never from a request body, and
+Postgres row level security enforces it again. Twenty-seven adversarial
+assertions run against the real policies —
+[saas/docs/MULTI-TENANCY.md](saas/docs/MULTI-TENANCY.md) lists each one and is
+equally explicit about what is still not proven.
 
 ## Documentation
 
@@ -98,8 +125,14 @@ database-enforced isolation. `tenant_id` is still caller-asserted. See
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layers, and exactly what decides what |
 | [docs/SECURITY.md](docs/SECURITY.md) | Severity-rated assessment, including what was found and fixed |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Stage A/B/C, scored, including what not to build |
-| [docs/SAAS-DESIGN.md](docs/SAAS-DESIGN.md) | Proposed schema, API boundary and tenant-auth model |
-| [docs/HUBSPOT-SCOPES.md](docs/HUBSPOT-SCOPES.md) | Least-privilege scopes derived from the actual calls |
+| [docs/SAAS-DESIGN.md](docs/SAAS-DESIGN.md) | The design the control plane was built from |
+| [docs/HUBSPOT-SCOPES.md](docs/HUBSPOT-SCOPES.md) | API-generation decision and least-privilege scopes derived from the actual calls |
+| [saas/README.md](saas/README.md) | The control plane: run it, and what is where |
+| [saas/docs/MULTI-TENANCY.md](saas/docs/MULTI-TENANCY.md) | Every isolation assertion, and what is still unproven |
+| [saas/docs/CONTRACTS.md](saas/docs/CONTRACTS.md) | The four boundaries: public API, dispatch, callback, continuation |
+| [saas/docs/SECURITY.md](saas/docs/SECURITY.md) | Control-plane findings, fixed and open |
+| [saas/docs/N8N-STATE-MIGRATION.md](saas/docs/N8N-STATE-MIGRATION.md) | Which n8n state moves to Postgres, which does not, and why |
+| [saas/docs/EVALUATION.md](saas/docs/EVALUATION.md) | The gate, the dataset's limits, and the closed loop |
 | [docs/CONNECTIONS.md](docs/CONNECTIONS.md) | Every credential and data table, and how to create it |
 | [evals/README.md](evals/README.md) | The golden set and the promotion gate |
 

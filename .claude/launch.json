@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "revenue-swarm",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "saas", "run", "dev"],
+      "port": 3000
+    }
+  ]
+}

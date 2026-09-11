@@ -1,0 +1,55 @@
+$ GET http://localhost:3000/leads/lead_unsupported
+
+quinn@adventure.example                                      WARM  score 47
+Director of Revenue Operations at Adventure Works · lead_unsupported
+
+Decision trace                                            trc_lead_unsupported
+  ✓  Ingest         accepted from api
+  ✓  Qualification  4 constrained signals returned
+                    the model chose from a closed value set per signal; it never
+                    returned a number
+  ◐  Evidence       3/4 quotes located in the source text
+                    an unsupported quote earns no points and can incur a penalty
+  ✓  Score          47 — WARM
+                    deterministic rubric 1.2.0; thresholds, not judgement
+  ✓  Governance     allow (risk LOW)
+                    no outward action requested
+  ✓  CRM            crm_upsert_contact → sim-contact-lead_unsupported
+                    dry run: the id is derived from the payload digest, no CRM
+                    call was made
+  ○  CRM            crm_create_deal skipped
+                    tier WARM is below the deal-creation threshold of HOT
+
+Score breakdown                     Reproducibility
+SIGNAL     VALUE          POINTS    Rubric version    1.2.0
+budget     approved       -10       Provider / model  openai / gpt-5-mini
+authority  influencer     +10       Model config      reasoning_effort=low
+timeline   this_quarter   +14       Prompt versions   revenue/lead-qualifier @ 7b1c4e9
+icp_fit    core           +25       Mode              dry run
+Total                     47        Latency           52840 ms
+                                    Cost              $0.004120
+
+Evidence            Quotes are verbatim from the lead's own text and are rendered as inert text.
+
+  budget  approved  unsupported                                            -10
+    "we have a signed purchase order ready to go"
+    This span was not found in the source text, so the signal earned no points
+    and the rubric's penalty applied instead.
+
+  authority  influencer  supported                                         +10
+    "I report to the CRO"
+
+  timeline  this_quarter  supported                                        +14
+    "Timing is probably Q3"
+
+  icp_fit  core  supported                                                 +25
+    "lead scoring"
+
+--- what this shows ---
+This is the case that distinguishes the product. The model asserted budget =
+approved, which is worth +25, and supplied a quote to justify it. The quote is
+not in the lead's text. Verification caught that, the points were not awarded,
+and the rubric's unsupported_penalty of -10 applied instead — so a confident
+fabrication moved the score DOWN by 35 points relative to being believed.
+
+The claim is not deleted. Why a lead lost points is part of the audit trail.

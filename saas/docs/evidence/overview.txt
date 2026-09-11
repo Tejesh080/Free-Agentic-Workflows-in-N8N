@@ -1,0 +1,38 @@
+$ GET http://localhost:3000/
+
+Overview
+
+LEADS PROCESSED   QUALIFIED RATE    AWAITING APPROVAL   EVIDENCE SUPPORTED
+7                 43%               1                   71%
+7 runs finished,  HOT or WARM,      none expired        20 of 28 quotes
+0 failed          of all leads                          located in source
+
+Tier distribution
+HOT           1   14%
+WARM          2   29%
+COLD          3   43%
+DISQUALIFIED  1   14%
+
+Run health
+In flight      0
+Latency p50    52840 ms
+Latency p95    52840 ms
+Model spend    $0.0288
+CRM            hubspot: disconnected   no successful write yet
+
+Outcomes            Outcomes feed evaluation. They never change production scoring on their own.
+no_reply         2
+replied          2
+meeting_booked   1
+disqualified     1
+
+--- what this shows ---
+The seed created EIGHT leads: seven in Northwind Robotics and one in Contoso Ltd.
+This page reports seven. There is no organization filter in the page's SQL — the
+WHERE clause is `archived_at is null` and nothing else. The eighth row is excluded
+by the row level security policy on `leads`, using the organization installed in
+the transaction by withOrgContext().
+
+The "evidence supported" tile is 20/28 rather than 100% because three of the
+seeded leads deliberately fail verification: one hostile lead returned no quotes
+at all, and one returned a quote that is not present in its source text.
