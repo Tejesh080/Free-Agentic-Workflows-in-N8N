@@ -35,9 +35,50 @@ jobs:
           failures = []
 
           crm = json.loads(Path("workflows/11-crm-sync-service/workflow.json").read_text(encoding="utf-8"))
+
+          # Matched on whether a node can AUTHENTICATE to HubSpot, not on its
+          # node type and not on whether a URL string appears in it.
+          #
+          # Two earlier versions of this check were wrong in opposite
+          # directions. Testing for `n8n-nodes-base.hubspot` began passing
+          # vacuously the moment those nodes were replaced with HTTP Request
+          # nodes. Testing for the string "hubapi.com" matched the Code node
+          # that BUILDS the url — which cannot call anything — and missed the
+          # three HTTP nodes, whose urls are expressions.
+          #
+          # The credential is the thing that matters: a node holding a HubSpot
+          # token is a node that can write to a customer's CRM.
+          can_authenticate = []
           for node in crm["nodes"]:
-              if node["type"] == "n8n-nodes-base.hubspot" and not node.get("disabled"):
-                  failures.append(f"11: HubSpot node {node['name']!r} is enabled in the published export")
+              params = node.get("parameters", {})
+              holds_token = (
+                  params.get("nodeCredentialType") == "hubspotAppToken"
+                  or node["type"] == "n8n-nodes-base.hubspot"
+                  or "hubspotAppToken" in json.dumps(node.get("credentials", {}))
+              )
+              if holds_token:
+                  can_authenticate.append(node["name"])
+                  if not node.get("disabled"):
+                      failures.append(f"11: {node['name']!r} can authenticate to HubSpot and is enabled in the published export")
+
+          if len(can_authenticate) != 3:
+              failures.append(
+                  f"11: expected exactly 3 nodes able to authenticate to HubSpot, found "
+                  f"{len(can_authenticate)} ({can_authenticate}). Every CRM call in the "
+                  "platform is supposed to live in those three."
+              )
+
+          # The API version is meant to be configuration with a current default.
+          for node in crm["nodes"]:
+              if node["name"] == "Normalise CRM Request":
+                  code = node["parameters"]["jsCode"]
+                  if "2026-09" not in code:
+                      failures.append("11: the default HubSpot API version is no longer 2026-09")
+                  if "/contacts/v1/" in code or "/deals/v1/" in code or "/engagements/v1/" in code:
+                      failures.append("11: a legacy HubSpot v1 endpoint has come back")
+                  break
+          else:
+              failures.append("11: the Normalise CRM Request node is missing from the published export")
 
           swarm = json.loads(Path("workflows/14-revenue-swarm-orchestrator/workflow.json").read_text(encoding="utf-8"))
           for node in swarm["nodes"]:

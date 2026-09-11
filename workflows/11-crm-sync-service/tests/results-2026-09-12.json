@@ -1,16 +1,16 @@
 {
   "suite": "11-crm-sync-service",
-  "generated_at": "2026-09-11T16:30:45.134Z",
-  "n8n_execution_id": "810",
+  "generated_at": "2026-09-11T17:46:41.075Z",
+  "n8n_execution_id": "901",
   "workflow": "CRM Sync Service",
   "how_to_reproduce": "Open the workflow in n8n and run the 'Test Suite Trigger' manual trigger.",
-  "note": "Every case runs with dry_run=true, so no HubSpot call is made. C01/C02 share a run-scoped idempotency key; C08 sends the identical lead as a second tenant and C08x asserts the two are not conflated; C09 refuses a tenant id that could smuggle a separator into a composite key.",
+  "note": "Re-run after replacing the legacy HubSpot v1 nodes with 2026-09 CRM API calls. No regression: the three HubSpot calls themselves remain unexercised (no credential on this instance).",
   "total": 10,
   "passed": 10,
   "failed": 0,
   "all_passed": true,
   "latency_ms_p50_measured": 23,
-  "latency_ms_max_measured": 32,
+  "latency_ms_max_measured": 57,
   "cases": [
     {
       "case_id": "C01",
@@ -39,16 +39,16 @@
           "name": "simulated_id_prefix",
           "pass": true,
           "expected": "sim-*",
-          "actual": "sim-contact-dd3696ff3eb7"
+          "actual": "sim-contact-13de55881a14"
         },
         {
           "name": "trace_echoed",
           "pass": true,
           "expected": "trace-*",
-          "actual": "trace-810-mtx6adhl-C01"
+          "actual": "trace-901-mtx900u1-C01"
         }
       ],
-      "latency_ms": 27
+      "latency_ms": 57
     },
     {
       "case_id": "C02",
@@ -77,10 +77,10 @@
           "name": "trace_echoed",
           "pass": true,
           "expected": "trace-*",
-          "actual": "trace-810-mtx6adhl-C02"
+          "actual": "trace-901-mtx900u1-C02"
         }
       ],
-      "latency_ms": 21
+      "latency_ms": 28
     },
     {
       "case_id": "C03",
@@ -115,7 +115,7 @@
           "name": "trace_echoed",
           "pass": true,
           "expected": "trace-*",
-          "actual": "trace-810-mtx6adhl-C03"
+          "actual": "trace-901-mtx900u1-C03"
         }
       ],
       "latency_ms": 12
@@ -153,10 +153,10 @@
           "name": "trace_echoed",
           "pass": true,
           "expected": "trace-*",
-          "actual": "trace-810-mtx6adhl-C04"
+          "actual": "trace-901-mtx900u1-C04"
         }
       ],
-      "latency_ms": 23
+      "latency_ms": 22
     },
     {
       "case_id": "C05",
@@ -191,7 +191,7 @@
           "name": "trace_echoed",
           "pass": true,
           "expected": "trace-*",
-          "actual": "trace-810-mtx6adhl-C05"
+          "actual": "trace-901-mtx900u1-C05"
         }
       ],
       "latency_ms": 11
@@ -229,10 +229,10 @@
           "name": "trace_echoed",
           "pass": true,
           "expected": "trace-*",
-          "actual": "trace-810-mtx6adhl-C06"
+          "actual": "trace-901-mtx900u1-C06"
         }
       ],
-      "latency_ms": 32
+      "latency_ms": 24
     },
     {
       "case_id": "C07",
@@ -267,10 +267,10 @@
           "name": "trace_echoed",
           "pass": true,
           "expected": "trace-*",
-          "actual": "trace-810-mtx6adhl-C07"
+          "actual": "trace-901-mtx900u1-C07"
         }
       ],
-      "latency_ms": 9
+      "latency_ms": 11
     },
     {
       "case_id": "C08",
@@ -299,13 +299,13 @@
           "name": "simulated_id_prefix",
           "pass": true,
           "expected": "sim-*",
-          "actual": "sim-contact-dd3696ff3eb7"
+          "actual": "sim-contact-13de55881a14"
         },
         {
           "name": "trace_echoed",
           "pass": true,
           "expected": "trace-*",
-          "actual": "trace-810-mtx6adhl-C08"
+          "actual": "trace-901-mtx900u1-C08"
         }
       ],
       "latency_ms": 23
@@ -343,10 +343,10 @@
           "name": "trace_echoed",
           "pass": true,
           "expected": "trace-*",
-          "actual": "trace-810-mtx6adhl-C09"
+          "actual": "trace-901-mtx900u1-C09"
         }
       ],
-      "latency_ms": 13
+      "latency_ms": 10
     },
     {
       "case_id": "C08x",

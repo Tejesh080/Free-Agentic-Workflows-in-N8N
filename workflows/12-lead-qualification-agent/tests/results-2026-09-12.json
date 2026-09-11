@@ -1,16 +1,16 @@
 {
   "suite": "12-lead-qualification",
-  "generated_at": "2026-09-11T16:40:32.629Z",
-  "n8n_execution_id": "873",
+  "generated_at": "2026-09-11T17:48:47.488Z",
+  "n8n_execution_id": "965",
   "workflow": "Lead Qualification Agent",
   "how_to_reproduce": "Open the workflow in n8n and run the 'Test Suite Trigger' manual trigger.",
-  "note": "Q01-Q08 supply signals directly, so each asserts an exact rubric score and makes no model call. Q09 runs the real model through the GitHub-hosted prompt registry rather than the bundled fallback. Q10/Q11 exercise rubric overrides. Q12/Q13 point enrichment at a cloud metadata address and a reserved suffix and assert both are refused without a network call.",
+  "note": "Regression after the workflow 11 change; 12 does not touch the CRM boundary.",
   "total": 15,
   "passed": 15,
   "failed": 0,
   "all_passed": true,
-  "latency_ms_p50_measured": 251,
-  "latency_ms_max_measured": 22338,
+  "latency_ms_p50_measured": 235,
+  "latency_ms_max_measured": 11493,
   "cases": [
     {
       "case_id": "Q01",
@@ -60,7 +60,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 255
+      "latency_ms": 231
     },
     {
       "case_id": "Q02",
@@ -110,7 +110,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 280
+      "latency_ms": 225
     },
     {
       "case_id": "Q03",
@@ -160,7 +160,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 252
+      "latency_ms": 227
     },
     {
       "case_id": "Q04",
@@ -210,7 +210,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 233
+      "latency_ms": 216
     },
     {
       "case_id": "Q05",
@@ -260,7 +260,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 238
+      "latency_ms": 224
     },
     {
       "case_id": "Q06",
@@ -318,7 +318,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 236
+      "latency_ms": 242
     },
     {
       "case_id": "Q07",
@@ -368,7 +368,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 10
+      "latency_ms": 11
     },
     {
       "case_id": "Q08",
@@ -476,7 +476,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 22338
+      "latency_ms": 11493
     },
     {
       "case_id": "Q10",
@@ -526,7 +526,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 257
+      "latency_ms": 330
     },
     {
       "case_id": "Q11",
@@ -576,7 +576,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 226
+      "latency_ms": 235
     },
     {
       "case_id": "Q12",
@@ -638,7 +638,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 251
+      "latency_ms": 240
     },
     {
       "case_id": "Q13",
@@ -700,7 +700,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 237
+      "latency_ms": 225
     },
     {
       "case_id": "Q10x",
@@ -720,7 +720,7 @@
           "actual": "WARM -> HOT"
         }
       ],
-      "latency_ms": 257
+      "latency_ms": 330
     },
     {
       "case_id": "Q11x",
@@ -746,7 +746,7 @@
           "actual": "rubric_override is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)"
         }
       ],
-      "latency_ms": 226
+      "latency_ms": 235
     }
   ],
   "rubric_version": "1.2.0"

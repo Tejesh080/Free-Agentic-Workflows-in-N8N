@@ -1,16 +1,16 @@
 {
   "suite": "14-revenue-swarm",
-  "generated_at": "2026-09-11T16:03:07.969Z",
-  "n8n_execution_id": "664",
+  "generated_at": "2026-09-11T17:47:59.336Z",
+  "n8n_execution_id": "911",
   "workflow": "Revenue Swarm Orchestrator",
   "how_to_reproduce": "Open the workflow in n8n and run the 'Test Suite Trigger' manual trigger.",
-  "note": "Six leads through the whole pipeline in dry run plus a second-workspace case. S01-S05 fix the tier by supplying signals so the CRM assertions are exact; S06 runs the real model; S07/S07x assert workspace isolation.",
+  "note": "Regression after the workflow 11 change. The orchestrator calls 11 for every CRM write, so this is the suite that would break if the new adapter changed the service contract.",
   "total": 8,
   "passed": 8,
   "failed": 0,
   "all_passed": true,
-  "latency_ms_p50_measured": 5533,
-  "latency_ms_max_measured": 55687,
+  "latency_ms_p50_measured": 10634,
+  "latency_ms_max_measured": 24235,
   "cases": [
     {
       "case_id": "S01",
@@ -74,11 +74,11 @@
         {
           "name": "trace_echoed",
           "pass": true,
-          "expected": "trace-664mtx58vsy-S01",
-          "actual": "trace-664mtx58vsy-S01"
+          "expected": "trace-911mtx90ghz-S01",
+          "actual": "trace-911mtx90ghz-S01"
         }
       ],
-      "latency_ms": 12207
+      "latency_ms": 15502
     },
     {
       "case_id": "S02",
@@ -122,7 +122,7 @@
           "actual": "acme"
         }
       ],
-      "latency_ms": 30
+      "latency_ms": 26
     },
     {
       "case_id": "S03",
@@ -186,11 +186,11 @@
         {
           "name": "trace_echoed",
           "pass": true,
-          "expected": "trace-664mtx58vsy-S03",
-          "actual": "trace-664mtx58vsy-S03"
+          "expected": "trace-911mtx90ghz-S03",
+          "actual": "trace-911mtx90ghz-S03"
         }
       ],
-      "latency_ms": 55687
+      "latency_ms": 6633
     },
     {
       "case_id": "S04",
@@ -254,11 +254,11 @@
         {
           "name": "trace_echoed",
           "pass": true,
-          "expected": "trace-664mtx58vsy-S04",
-          "actual": "trace-664mtx58vsy-S04"
+          "expected": "trace-911mtx90ghz-S04",
+          "actual": "trace-911mtx90ghz-S04"
         }
       ],
-      "latency_ms": 517
+      "latency_ms": 451
     },
     {
       "case_id": "S05",
@@ -322,11 +322,11 @@
         {
           "name": "trace_echoed",
           "pass": true,
-          "expected": "trace-664mtx58vsy-S05",
-          "actual": "trace-664mtx58vsy-S05"
+          "expected": "trace-911mtx90ghz-S05",
+          "actual": "trace-911mtx90ghz-S05"
         }
       ],
-      "latency_ms": 1013
+      "latency_ms": 891
     },
     {
       "case_id": "S06",
@@ -366,11 +366,11 @@
         {
           "name": "trace_echoed",
           "pass": true,
-          "expected": "trace-664mtx58vsy-S06",
-          "actual": "trace-664mtx58vsy-S06"
+          "expected": "trace-911mtx90ghz-S06",
+          "actual": "trace-911mtx90ghz-S06"
         }
       ],
-      "latency_ms": 17154
+      "latency_ms": 24235
     },
     {
       "case_id": "S07",
@@ -434,11 +434,11 @@
         {
           "name": "trace_echoed",
           "pass": true,
-          "expected": "trace-664mtx58vsy-S07",
-          "actual": "trace-664mtx58vsy-S07"
+          "expected": "trace-911mtx90ghz-S07",
+          "actual": "trace-911mtx90ghz-S07"
         }
       ],
-      "latency_ms": 5533
+      "latency_ms": 10634
     },
     {
       "case_id": "S07x",
@@ -464,7 +464,7 @@
           "actual": "acme vs globex"
         }
       ],
-      "latency_ms": 5533
+      "latency_ms": 10634
     }
   ]
 }
