@@ -43,9 +43,9 @@ Credentials and data tables: [docs/CONNECTIONS.md](../../docs/CONNECTIONS.md)
 
 | Result | Raw output |
 | --- | --- |
-| 10/10 fixtures passed | [`tests/results-2026-09-12.json`](tests/results-2026-09-12.json) · execution `810` |
+| 10/10 fixtures passed | [`tests/results-2026-09-12.json`](tests/results-2026-09-12.json) · execution `901` |
 
-Every case runs with dry_run=true, so no HubSpot call is made. C01/C02 share a run-scoped idempotency key; C08 sends the identical lead as a second tenant and C08x asserts the two are not conflated; C09 refuses a tenant id that could smuggle a separator into a composite key.
+Every case runs with dry_run=true, so no HubSpot call is made. C01/C02 share a run-scoped idempotency key; C08 sends the identical lead as a second tenant and C08x asserts the two are not conflated; C09 refuses a tenant id that could smuggle a separator into a composite key. Re-run on this execution after the three HubSpot nodes were replaced with 2026-09 CRM API calls: no regression, and the HubSpot calls themselves remain unexercised because no credential exists on this instance.
 
 ## Limitations
 

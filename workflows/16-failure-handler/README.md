@@ -41,9 +41,9 @@ Credentials and data tables: [docs/CONNECTIONS.md](../../docs/CONNECTIONS.md)
 
 | Result | Raw output |
 | --- | --- |
-| 3/3 fixtures passed | [`tests/results-2026-09-12.json`](tests/results-2026-09-12.json) · execution `795` |
+| 3/3 fixtures passed | [`tests/results-2026-09-12.json`](tests/results-2026-09-12.json) · execution `1018` |
 
-Covers the replay leg only. n8n fires an error workflow for production executions, so the Error Trigger leg cannot be exercised from a manual test without deliberately breaking a live run.
+Covers the replay leg only. n8n fires an error workflow for production executions, so the Error Trigger leg cannot be exercised from a manual test without deliberately breaking a live run. Re-run on this execution after the workflow 11 change: the replay path re-submits a lead through 14, which calls 11 for every CRM write.
 
 ## Limitations
 

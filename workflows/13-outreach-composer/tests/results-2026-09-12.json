@@ -4,7 +4,7 @@
   "n8n_execution_id": "981",
   "workflow": "Outreach Composer",
   "how_to_reproduce": "Open the workflow in n8n and run the 'Test Suite Trigger' manual trigger.",
-  "note": "Regression after the workflow 11 change; 13 reaches the CRM only through 11.",
+  "note": "Every stage a send can be stopped at. O09 proves the governance risk scan reads the draft text too, so copy offering to \"delete\" something is escalated to CRITICAL and denied; that false positive is deliberate. Re-run on this execution as a regression after the workflow 11 change; 13 reaches the CRM only through 11.",
   "total": 10,
   "passed": 10,
   "failed": 0,

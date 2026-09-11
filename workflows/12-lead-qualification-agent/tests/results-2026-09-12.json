@@ -4,7 +4,7 @@
   "n8n_execution_id": "965",
   "workflow": "Lead Qualification Agent",
   "how_to_reproduce": "Open the workflow in n8n and run the 'Test Suite Trigger' manual trigger.",
-  "note": "Regression after the workflow 11 change; 12 does not touch the CRM boundary.",
+  "note": "Eight exact rubric scores, one live model run, a candidate-rubric A/B, a malformed override that must not corrupt production scoring, and two enrichment targets that must be refused. Q04 is the one to show someone: a CTO with an approved budget and an immediate timeline still scores 15, because the use case is outside the ICP. Re-run on this execution as a regression after the workflow 11 change; 12 does not touch the CRM boundary.",
   "total": 15,
   "passed": 15,
   "failed": 0,

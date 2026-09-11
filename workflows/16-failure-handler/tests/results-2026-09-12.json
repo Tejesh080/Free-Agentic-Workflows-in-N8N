@@ -4,7 +4,7 @@
   "n8n_execution_id": "1018",
   "workflow": "Failure Handler",
   "how_to_reproduce": "Open the workflow in n8n and run the 'Test Suite Trigger' manual trigger.",
-  "note": "Regression after the workflow 11 change. The replay path re-submits a lead through 14, which calls 11 for every CRM write.",
+  "note": "Covers the replay leg only. n8n fires an error workflow for production executions, so the Error Trigger leg cannot be exercised from a manual test without deliberately breaking a live run. Re-run on this execution after the workflow 11 change: the replay path re-submits a lead through 14, which calls 11 for every CRM write.",
   "total": 3,
   "passed": 3,
   "failed": 0,

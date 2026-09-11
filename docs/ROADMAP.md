@@ -37,6 +37,26 @@ instance; no new infrastructure.
 The gap between this and a product is not more agents. It is an authenticated
 API boundary, a place to put customer configuration, and a screen.
 
+> **Status, 2026-09-12: the trust boundary, the schema and the screens are
+> built** — [`../saas/`](../saas/). What this section describes as future work
+> is now mostly past work, and the honest remainder is short:
+>
+> | Item | State |
+> | --- | --- |
+> | Schema, RLS, adversarial isolation tests | **Done.** 16 tables, RLS forced on all, 27 assertions against the real policies |
+> | Organization-scoped API keys | **Done.** Hash-only, no column privilege on the digest |
+> | Async lead API, signed dispatch, signed callback | **Done.** Dispatch has never run against a live n8n webhook |
+> | Approvals as a domain object with a database-enforced state machine | **Done.** Telegram is no longer in the authorization path for control-plane traffic |
+> | Rate limiting | **Done.** Per credential and per organization, counted in Postgres |
+> | Dashboard: Overview, Leads, Lead Detail, Approvals, Evaluations, Settings | **Done** |
+> | HubSpot OAuth connect flow | **Not built.** A private-app token placed in the engine, recorded as an integration row |
+> | Retiring the duplicated n8n state | **Not done**, and it is now the largest correctness debt — see [`../saas/docs/N8N-STATE-MIGRATION.md`](../saas/docs/N8N-STATE-MIGRATION.md) |
+> | Deployment (Supabase project, Vercel target) | **Not done.** Nothing here has run against a real Postgres server |
+> | Stripe, Sentry, usage metering | **Not started**, and correctly so — no customer yet |
+>
+> The stack below was followed, with four deliberate divergences recorded in
+> [SAAS-DESIGN.md](SAAS-DESIGN.md).
+
 ### Architecture
 
 ```
@@ -86,6 +106,16 @@ usage_events(org_id, kind, cost_usd, occurred_at)
 Every table carries `org_id` with an RLS policy. The receipt, ledger, outreach
 and eval tables already have this shape — that is the point of doing tenancy at
 the execution layer first.
+
+The shipped schema is close to this sketch and differs in four ways worth
+knowing: `crm_connections` became `integrations` and stores **no token at all**
+(the credential stays in the engine's credential store; the row records that it
+exists and what it is scoped to); `icp_profiles` and `rubrics` merged into one
+`rubric_versions` table, because an ICP that is not part of the scoring artifact
+cannot be cited by a decision; `lead_evidence` was added as its own table so a
+quote and its verification result are queryable rather than buried in JSON; and
+`usage_events` was not built, because cost per execution is already on
+`executions` and a separate event stream has no consumer yet.
 
 ### Onboarding
 

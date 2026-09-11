@@ -40,6 +40,10 @@ SKIP_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".zip", ".ico
 SELF = "scripts/security-check.py"
 
 # Domains that are safe to appear in documentation and fixtures.
+# Reserved by RFC 2606 and RFC 6761: guaranteed never to be delegated, so an
+# address here is a fixture by construction rather than by convention.
+RESERVED_TLDS = (".example", ".test", ".invalid", ".localhost")
+
 ALLOWED_EMAIL_DOMAINS = {
     "example.com", "example.org", "example.net", "invalid",
     "acme-supplies.example", "northwind.example", "vendor.example",
@@ -144,7 +148,13 @@ def scan_text(rel: str, text: str) -> list[dict]:
                 })
         for m in EMAIL_RE.finditer(line):
             domain = m.group(1).lower()
-            if domain in ALLOWED_EMAIL_DOMAINS or domain.endswith(".example"):
+            # RFC 2606 reserves .test, .example, .invalid and .localhost for
+            # testing and documentation. None of them can resolve to a real
+            # host, so an address in one cannot belong to a real person. The
+            # list previously allowed .example only, which flagged every
+            # fixture in the control plane's test suite while letting an
+            # identical .example address through.
+            if domain in ALLOWED_EMAIL_DOMAINS or domain.endswith(RESERVED_TLDS):
                 continue
             if m.group(0).lower() in ALLOWED_EMAIL_ADDRESSES:
                 continue

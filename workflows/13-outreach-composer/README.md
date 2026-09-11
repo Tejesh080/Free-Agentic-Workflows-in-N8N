@@ -48,9 +48,9 @@ Credentials and data tables: [docs/CONNECTIONS.md](../../docs/CONNECTIONS.md)
 
 | Result | Raw output |
 | --- | --- |
-| 10/10 fixtures passed | [`tests/results-2026-09-12.json`](tests/results-2026-09-12.json) · execution `848` |
+| 10/10 fixtures passed | [`tests/results-2026-09-12.json`](tests/results-2026-09-12.json) · execution `981` |
 
-Every case runs with dry_run=true and asserts sent=false. O01-O09 supply the draft; O10 drafts with the real model. Governance decisions for HIGH and CRITICAL cases use simulate_decision in place of the Telegram round trip.
+Every stage a send can be stopped at. O09 proves the governance risk scan reads the draft text too, so copy offering to "delete" something is escalated to CRITICAL and denied; that false positive is deliberate. Re-run on this execution as a regression after the workflow 11 change; 13 reaches the CRM only through 11.
 
 ## Limitations
 

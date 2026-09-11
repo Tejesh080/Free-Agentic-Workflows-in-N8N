@@ -1,7 +1,33 @@
 # Stage B design: schema, API boundary, tenant authentication
 
-Proposed, not built. This document exists to be argued with before any of it is
-written, because these three decisions are the expensive ones to reverse.
+**Built.** This was the design document; the implementation is in
+[`../saas/`](../saas/) and it is what to read for what actually exists —
+[`../saas/README.md`](../saas/README.md) for the shape,
+[`../saas/docs/CONTRACTS.md`](../saas/docs/CONTRACTS.md) for the four boundaries,
+[`../saas/docs/MULTI-TENANCY.md`](../saas/docs/MULTI-TENANCY.md) for what is
+proven.
+
+This file is kept as the reasoning behind the decisions rather than a
+description of the result. Where the two differ, the code is right and this is
+history. Four differences worth naming, because each was a change of mind during
+the build:
+
+1. **A session GUC, not a JWT claim, is the primary context.** Policies read
+   `app.current_org_id()`, set by the API server with `set_config`, falling back
+   to `request.jwt.claim.sub` for a human. That keeps the same policies working
+   for an API-key principal, which has no JWT at all.
+2. **API key authentication goes through a security-definer function.** The
+   design had the server reading `api_keys` directly, which cannot work: reading
+   that table needs an organization, and finding the organization is what the
+   read is for. `app.authenticate_api_key` is the resolution of that circularity,
+   and it also means the application role holds no privilege on `secret_hash`.
+3. **The write ledger stays in n8n.** The design said all state moves to
+   Postgres. One table should not: it is checked synchronously immediately before
+   the HubSpot call, and moving it would put a network round trip inside the
+   window it exists to close. See
+   [`../saas/docs/N8N-STATE-MIGRATION.md`](../saas/docs/N8N-STATE-MIGRATION.md).
+4. **Rate limiting is a Postgres counter, not a platform feature.** Deferring it
+   to the deployment meant deferring it indefinitely.
 
 Standalone by construction: this product owns its own database, its own auth,
 its own API and its own workflows. It shares an n8n host with other things as

@@ -79,13 +79,25 @@ surface, the latency and the cost, and buy nothing a reader could point at.
 
 ## Tenancy
 
-**Implemented: tenant-aware execution. Not implemented: secure multi-tenancy.**
-The distinction matters. What follows removes a class of correctness bug — two
-customers silently sharing a record. It does not authorise anything, because
-`tenant_id` is still whatever the caller says it is. Authorisation arrives with
-the API boundary in [ROADMAP.md](ROADMAP.md) Stage B, and the rule there is:
-**never trust a `tenant_id` in a request body — derive it from the authenticated
-API key or session, and let the database enforce isolation with RLS.**
+Tenancy is now two layers with two different jobs, and conflating them is the
+mistake this section exists to prevent.
+
+**In the engine: tenant-aware execution.** What follows removes a class of
+correctness bug — two customers silently sharing a record. It does not authorise
+anything, because at the n8n boundary `tenant_id` is whatever the caller says it
+is.
+
+**In front of the engine: authorisation.** The control plane in
+[`../saas/`](../saas/) derives the organization from an API key or a verified
+session, never from a request body, and Postgres row level security enforces it
+again against a non-owning role. The engine still receives an organization id,
+but as execution data that scopes its own state — it is not asked to decide
+whether the caller may act on it, because that was settled before dispatch.
+
+The rule the control plane implements: **never trust a `tenant_id` in a request
+body — derive it from the authenticated credential, and let the database enforce
+isolation with RLS.** Evidence:
+[`../saas/docs/MULTI-TENANCY.md`](../saas/docs/MULTI-TENANCY.md).
 
 Every service takes `tenant_id`, validated against `^[a-z0-9][a-z0-9_-]{0,62}$`
 — restricted rather than escaped, because a tenant id that can smuggle a

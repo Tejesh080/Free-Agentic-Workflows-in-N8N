@@ -4,7 +4,7 @@
   "n8n_execution_id": "911",
   "workflow": "Revenue Swarm Orchestrator",
   "how_to_reproduce": "Open the workflow in n8n and run the 'Test Suite Trigger' manual trigger.",
-  "note": "Regression after the workflow 11 change. The orchestrator calls 11 for every CRM write, so this is the suite that would break if the new adapter changed the service contract.",
+  "note": "HOT/WARM/COLD/disqualified routing, duplicate suppression, workspace isolation, and one fully live end-to-end run with the real model. Re-run on this execution after the workflow 11 change — the orchestrator calls 11 for every CRM write, so this is the suite that would break if the new adapter had altered the service contract.",
   "total": 8,
   "passed": 8,
   "failed": 0,

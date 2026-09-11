@@ -49,9 +49,9 @@ Credentials and data tables: [docs/CONNECTIONS.md](../../docs/CONNECTIONS.md)
 
 | Result | Raw output |
 | --- | --- |
-| 8/8 fixtures passed | [`tests/results-2026-09-12.json`](tests/results-2026-09-12.json) · execution `664` |
+| 8/8 fixtures passed | [`tests/results-2026-09-12.json`](tests/results-2026-09-12.json) · execution `911` |
 
-Six leads through the whole pipeline in dry run plus a second-workspace case. S01-S05 fix the tier by supplying signals so the CRM assertions are exact; S06 runs the real model; S07/S07x assert workspace isolation.
+HOT/WARM/COLD/disqualified routing, duplicate suppression, workspace isolation, and one fully live end-to-end run with the real model. Re-run on this execution after the workflow 11 change — the orchestrator calls 11 for every CRM write, so this is the suite that would break if the new adapter had altered the service contract.
 
 ## Limitations
 

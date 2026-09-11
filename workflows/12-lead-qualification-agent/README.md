@@ -45,9 +45,9 @@ Credentials and data tables: [docs/CONNECTIONS.md](../../docs/CONNECTIONS.md)
 
 | Result | Raw output |
 | --- | --- |
-| 15/15 fixtures passed | [`tests/results-2026-09-12.json`](tests/results-2026-09-12.json) · execution `873` |
+| 15/15 fixtures passed | [`tests/results-2026-09-12.json`](tests/results-2026-09-12.json) · execution `965` |
 
-Q01-Q08 supply signals directly, so each asserts an exact rubric score and makes no model call. Q09 runs the real model through the GitHub-hosted prompt registry rather than the bundled fallback. Q10/Q11 exercise rubric overrides. Q12/Q13 point enrichment at a cloud metadata address and a reserved suffix and assert both are refused without a network call.
+Eight exact rubric scores, one live model run, a candidate-rubric A/B, a malformed override that must not corrupt production scoring, and two enrichment targets that must be refused. Q04 is the one to show someone: a CTO with an approved budget and an immediate timeline still scores 15, because the use case is outside the ICP. Re-run on this execution as a regression after the workflow 11 change; 12 does not touch the CRM boundary.
 
 ## Limitations
 
