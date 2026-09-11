@@ -63,10 +63,26 @@ the application is ever misconfigured to connect as the owner.
 
 ### The assertions
 
+Backend for the run recorded below: **PostgreSQL 17.11**, application role
+`revenue_swarm_app`, one database per test cloned from a migrated template.
+
 `tests/rls-tenancy.test.ts`, 27 assertions, run against the real migrations as
-the real non-owning role. PGlite is used as the server: genuine Postgres, so
-`create policy`, `force row level security`, `set role` and `current_setting`
-behave exactly as they do in production. Nothing is stubbed.
+the real non-owning role.
+
+**As of 2026-09-12 these run against a real Postgres server**, not only against
+PGlite: PostgreSQL 17.11, reached through the same `pg` pool the application
+uses in production, with `revenue_swarm_app` authenticating over TCP with its
+own password. No implementation change was needed to get there — nothing behaved
+differently between the two backends.
+
+That closes three gaps PGlite cannot cover: the production driver and pool code
+path, a genuine second login role rather than `SET ROLE` from a superuser, and
+server-side database-level privileges. `TEST_DATABASE_URL` selects the server;
+without it the suite still runs on PGlite, so CI and a laptop with no database
+run the same assertions.
+
+**It is still not the deployed Supabase project** — see "What this does not yet
+prove". Nothing is stubbed in either case.
 
 | What was attempted | Result |
 | --- | --- |
@@ -116,31 +132,71 @@ oracle, because it looks identical to "no such row". The tests assert the
 error, because asserting an error where none should occur would be asserting the
 wrong thing.
 
+## The HTTP boundary
+
+Added 2026-09-12: `tests/http-boundary.test.ts`, **32 assertions against a
+running server** and the same real database. These complement the policy tests
+and do not replace them — the policy suite proves the database refuses a
+cross-tenant read, this one proves the API in front of it does too, which is a
+different failure mode (a route that forgets to open an organization context
+would pass the first suite and fail this one).
+
+| Attempted over HTTP | Result |
+| --- | --- |
+| No credential | `401` |
+| Malformed credential | `401` |
+| Well-formed key, wrong secret | `401` |
+| Revoked key | `401` |
+| Expired key | `401` |
+| All four failure modes | byte-identical response bodies |
+| Org A's key lists leads | only A's, B's absent |
+| Org A's key fetches B's lead by id | `404` |
+| Org B's key fetches A's lead by id | `404` |
+| Cross-org id vs. an id that never existed | identical status and body |
+| Org A's key fetches B's execution by trace | `404` (own trace: `200`) |
+| Body carrying `org_id` | `400 invalid_request`, not a silent drop |
+| Body carrying `tenant_id` | `400` |
+| Body carrying `latest_score` / `latest_tier` | `400` |
+| Machine principal approves an action | `403`, approval still `pending` |
+| Org A's key approves B's approval | `403`/`404`, B's still `pending` |
+| Rate limit exceeded | `429` with `Retry-After` and `X-RateLimit-*` |
+| Security headers on an API response | `nosniff`, `DENY`, `no-referrer`, CSP, no `X-Powered-By` |
+| Provoked database error | no Postgres text, no stack trace |
+
 ## What this does not yet prove
 
 Stated plainly, because the difference matters:
 
-- **No live database.** These assertions run against PGlite. The migrations are
-  byte-identical to what a Supabase project would receive, but no Supabase
-  project exists yet, and Supabase adds its own roles (`anon`, `authenticated`,
-  `service_role`) and its own PostgREST path. Applying the migrations there and
-  re-running the suite against it is the next step.
-- **No HTTP-level test of the boundary.** The suite exercises the service layer
-  and the policies. It does not spin up the Next server and fire requests at
-  `/v1/leads` with a forged bearer token. The layer it covers is the one where a
-  mistake would be exploitable; the layer it does not cover is thin.
-- **`service_role` bypasses RLS.** That is true of any Supabase project, and it
-  is why no code path in this application uses a service-role key. If one is ever
-  introduced for an administrative job, these policies stop protecting it.
+- **Not the deployed Supabase project.** The server these assertions run against
+  is PostgreSQL 17.11 in a container. The migrations are byte-identical to what a
+  Supabase project would receive, and `scripts/deploy-db.ts` applies them the
+  same way — but Supabase adds its own roles (`anon`, `authenticated`,
+  `service_role`), its own PostgREST path and a connection pooler, and none of
+  that has been exercised. **Until it has, the wording here stays "a real
+  Postgres server" rather than "the deployed Postgres policies".**
+- **`service_role` bypasses RLS.** True of any Supabase project, and why no code
+  path in this application uses a service-role key. If one is ever introduced for
+  an administrative job, these policies stop protecting it.
 - **Connection-pool assumptions.** Transaction-scoped `set_config` is correct for
-  both session and transaction pooling. It has not been tested under PgBouncer in
-  transaction mode against a real pool.
+  both session and transaction pooling, and the suite now runs through a real
+  `pg` pool. It has still not been tested under PgBouncer in *transaction* mode,
+  which is what Supabase's pooler port does.
+- **One cross-tenant leak was found here and is worth remembering.** The
+  `dead_letter_timeline` view returned every organization's rows, because a
+  Postgres view runs with its owner's privileges unless declared
+  `security_invoker`. Every policy underneath it was correct. Fixed in migration
+  0009, and now asserted both in CI over the migrations and by
+  `scripts/verify-db.ts` against a live database. The lesson generalises: RLS on
+  a table says nothing about what a view over it exposes.
 
 ## The sentence that may and may not be written
 
 May: *"Tenant isolation is enforced by row level security, with 27 adversarial
-assertions running against the real policies."*
+assertions against the real policies on a real Postgres server, plus 32
+HTTP-level assertions against the running API."*
 
-May not, yet: *"Revenue Swarm is a secure multi-tenant SaaS."* That claim needs
-the policies verified on the real database, an authenticated HTTP surface tested
-end to end, and a deployment to point at.
+May not, yet: *"Revenue Swarm is a secure multi-tenant SaaS."* Two things are
+still missing and both are the same missing thing — a deployment. The policies
+have not run on the Supabase project that will actually hold customer data, and
+the public n8n webhook is still reachable from the internet alongside the
+authenticated API.

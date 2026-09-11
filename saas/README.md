@@ -24,6 +24,19 @@ npx tsx scripts/seed-demo.ts
 npm run dev
 ```
 
+Against a real Postgres server instead — which is what CI and the integration
+tests use:
+
+```bash
+docker run -d --name revswarm-pg -e POSTGRES_PASSWORD=...   -e POSTGRES_DB=revenue_swarm -p 55432:5432 postgres:17
+
+export ADMIN_DATABASE_URL=postgres://postgres:...@127.0.0.1:55432/revenue_swarm
+export APP_DB_PASSWORD=...
+npm run db:deploy      # applies every migration, records a checksum for each
+npm run db:verify      # 24 structural checks: RLS, FORCE RLS, privileges, triggers
+npx tsx scripts/seed-org.ts "Acme" acme owner@example.com crm_write
+```
+
 `DATABASE_URL=pglite://.pglite` runs [PGlite](https://pglite.dev) — real
 Postgres compiled to WebAssembly. The same migrations, the same
 `revenue_swarm_app` role and the same row level security policies apply as on a
@@ -31,7 +44,7 @@ server; only the driver differs (`src/lib/db/local.ts`). The seed prints an API
 key once and stores only its hash.
 
 ```bash
-npm test        # 89 tests, all against real Postgres policies
+npm test        # 137 tests, against real Postgres policies
 npm run typecheck
 npm run build
 ```
@@ -49,7 +62,9 @@ npm run build
 | `src/app/api/` | HTTP surface. Thin: parse, authenticate, delegate. |
 | `src/app/` | The product screens. |
 | `tests/` | Adversarial suites. See `docs/MULTI-TENANCY.md` for what each one proves. |
-| `docs/evidence/` | Output captured from the running application. |
+| `docs/evidence/` | Output captured from the running application, including the live round trip and the HubSpot objects it created. |
+| `scripts/deploy-db.ts` | Applies the migrations to a real server, checksummed. Never rewrites one. |
+| `scripts/verify-db.ts` | Asserts the deployed structures exist, so a green test run cannot be green because a policy failed to apply. |
 
 ## The three ideas worth reading the code for
 
@@ -75,7 +90,13 @@ penalty applies, so a confident fabrication moves the score *down*. See
 
 | Area | State |
 | --- | --- |
-| Schema, RLS, adversarial tenancy tests | Done, 27 assertions against real policies |
+| Schema deployed to a real Postgres server | Done — PostgreSQL 17.11, 9 migrations, 24 structural checks |
+| Schema deployed to Supabase | **Not done** — no project credentials |
+| Adversarial tenancy tests | Done, 27 assertions against real policies on a real server |
+| HTTP-level tenancy and callback tests | Done, 32 assertions against a running server |
+| Live HubSpot round trip | Done — contact, deal and association in a real portal with synthetic data |
+| End-to-end API → engine → CRM | Done. The callback hop from n8n Cloud is blocked by its SSRF guard until there is a public URL |
+| Dead-letter queue and replay | Done, in Postgres, preserving the original failure |
 | API keys (hash-only storage, column-level privilege) | Done |
 | Async lead ingest, dispatch contract, signed callback | Done; dispatch is unexercised against a live n8n webhook |
 | Rate limiting on ingestion | Done — per-credential and per-organization, counted in Postgres |
@@ -83,7 +104,7 @@ penalty applies, so a confident fabrication moves the score *down*. See
 | Product screens | Overview, Leads, Lead Detail, Approvals, Evaluations, Settings |
 | Human authentication | HS256 Supabase tokens verified; asymmetric JWKS keys not implemented |
 | Engine-side approval continuation | Contract defined, engine half not built |
-| Deployment | Never deployed; no Supabase project or Vercel target configured |
+| Deployment | Not deployed; no Supabase project and no Vercel credentials |
 
 Read `docs/SECURITY.md` for the open findings rather than inferring from this
 table.

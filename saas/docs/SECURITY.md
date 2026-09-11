@@ -13,6 +13,26 @@ not, it says so.
 
 None open.
 
+### Fixed — a view bypassed row level security
+
+*Was:* `dead_letter_timeline`, added in migration 0008, returned **every
+organization's rows to any caller**. A Postgres view runs with its owner's
+privileges unless declared `security_invoker`, and the owner is the migration
+role, which the policies do not constrain. Every policy on the underlying
+`dead_letters`, `executions` and `leads` tables was correct, and was being
+bypassed one level up.
+
+*Found by:* a test written in the same commit as the view —
+`the timeline view is subject to row level security`. Not by review.
+
+*Now:* `security_invoker = true` (migration 0009), and the class of bug is
+asserted in two independent places: a CI invariant over every migration, and
+`scripts/verify-db.ts` against a live database.
+
+*The generalisable lesson:* RLS on a table says nothing about what a view over
+it exposes. Any future view over tenant data needs the same declaration, which
+is why this is now a build failure rather than a code-review habit.
+
 ### Fixed — caller-asserted organization identity
 
 *Was:* at the n8n boundary, `tenant_id` arrives in the request body. Any caller
@@ -40,10 +60,32 @@ comparison, ±300s window in both directions, single-use nonce enforced by a
 unique index, and the organization resolved from the stored execution via a
 security-definer function. The payload schema *rejects* `org_id` and `lead_id`.
 
-*Evidence:* `tests/callback-security.test.ts` — 18 assertions covering wrong
-secret, mutated body, signature captured from a different endpoint, stale and
-future timestamps, missing headers, absent secret, replayed nonce, and a second
-completion with a fresh nonce attempting to overwrite a finished decision.
+**The signing key is per-execution**, not shared: the engine receives
+`HMAC(master, execution_id)` in its dispatch payload and the master never leaves
+the control plane. This began as a constraint — n8n Code nodes cannot read
+credentials and this instance has no variables — and ended up stronger than what
+it replaced. n8n persists execution data, so a shared secret would sit in every
+execution log; this puts one execution's key in one log, and that key is useless
+elsewhere because the signature also binds the path, which carries the trace id.
+
+A consequence worth understanding: the handler resolves the execution *before*
+verifying, because it cannot know which key to expect until it does. Both
+"unknown trace" and "bad signature" therefore return the same `401` with the
+same body, so the ordering cannot be used to enumerate trace ids.
+
+*Evidence:* `tests/callback-security.test.ts` — 18 unit assertions — plus **13
+assertions over real HTTP** against a running server: unsigned, bad signature,
+body mutated after signing, stale and future timestamps, replayed nonce, a
+second completion attempting to overwrite a terminal result, unknown trace with
+a byte-identical body to a bad signature, a callback signed with another
+execution's token, and a payload carrying an `org_id`.
+
+The engine's signing code is verified before it ships:
+`scripts/verify-callback-node.ts` runs the exact Code-node source against
+`node:crypto` and against this application's own verifier — 54 SHA-256/HMAC
+vectors, plus tamper detection and cross-execution key isolation. It has to be,
+because that node implements SHA-256 by hand rather than relying on
+`require('crypto')`, which is not dependable in an n8n sandbox.
 
 ### Fixed — API key storage
 
@@ -114,18 +156,41 @@ enrichment to a service we control.
 
 *Stated so nobody reads the workflow test as more than it is.*
 
-### Open — HIGH-3: the engine trusts its ingress key alone
+### Partly fixed — HIGH-3: the public engine ingress
 
-The n8n webhook is on the public internet and authenticates with one shared
-static secret, with no rotation mechanism and no per-tenant scoping. It is
-fail-closed when the variable is unset (verified), which is the right default and
-not sufficient.
+*Was, and worse than documented:* the webhook compared `x-swarm-key` against
+`$vars.SWARM_INGEST_KEY`. **n8n variables are a licensed feature this instance
+does not have**, so the comparison could never succeed and the endpoint refused
+every inbound lead. Fail-closed, and therefore also entirely non-functional.
+Execution `1033` recorded its own diagnosis.
 
-*Fix:* the architecture already points at it — internet → authenticated SaaS API
-→ private dispatch → n8n, with public n8n ingress removed. Blocked on a
-deployment where "private" means something.
+*Now:* n8n's own header authentication with an `httpHeaderAuth` credential,
+enforced before any node runs, with the secret in the encrypted credential store
+rather than a plaintext instance variable. Verified against the production URL:
+`403` with no key, `403` with a wrong key, `200` with the right one. A CI
+invariant asserts the webhook still has header auth, a credential attached, and
+immediate acknowledgement.
 
----
+*Still open:* the endpoint is reachable from the internet, the secret is shared
+across all tenants, and there is no rotation mechanism. The fix is the
+architecture already described — internet → authenticated SaaS API → private
+dispatch → n8n, public ingress removed — and it needs a deployment where
+"private" means something. **The existing protection stays until its replacement
+is verified, and it has not been.**
+
+### Observed working — n8n's own egress protection
+
+Not a finding; recorded because it is why one leg of the end-to-end path is
+unproven. n8n Cloud refused to deliver the completion callback:
+
+> The target 127.0.0.1 is not allowed. This is a security measure to prevent
+> Server-Side Request Forgery.
+
+Correct behaviour, and worth noting beside HIGH-2: the platform does enforce
+network-level egress restriction for requests it originates. It does **not**
+close HIGH-2 — that concerns a URL the *lead* influences, fetched by the
+enrichment step, and this is a fixed private-range denylist rather than an
+allowlist we control.
 
 ## MEDIUM
 
@@ -174,10 +239,19 @@ keeps spans of it. Both are deliberate — reproducibility needs the actual inpu
 and both are personal data with no retention policy, no redaction, and no erasure
 endpoint beyond the admin-only `DELETE` policy on `leads`.
 
-`ON DELETE CASCADE` from `leads` reaches evidence and executions, so deleting a
-lead does erase its derived data. `decision_receipts` also cascades, which means
-erasure destroys audit records — a conflict between two legitimate requirements
-that someone has to decide rather than inherit.
+*Partly addressed since.* Erasure was in fact **impossible**: `delete from
+organizations` cascaded into append-only tables and was refused, so there was no
+mechanism at all. Migration 0007 makes erasure a named operation —
+`app.erase_organization()` declares itself in a session setting the append-only
+trigger honours — so history stays uneditable while deletion remains possible,
+and an ordinary `DELETE` still fails.
+
+Still undecided rather than unimplemented: erasing an organization destroys its
+`decision_receipts` and `audit_events` along with its leads. That is a real
+conflict between two legitimate requirements, and an erasure log that outlives
+the tenant needs a store outside this database. There is no retention policy and
+no redaction, and `leads.raw_payload` still keeps the caller's payload verbatim
+because reproducibility needs the actual input.
 
 ### Fixed — mass assignment
 
