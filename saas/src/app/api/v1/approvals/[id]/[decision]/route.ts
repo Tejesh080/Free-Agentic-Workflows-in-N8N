@@ -9,6 +9,7 @@
 import { authenticate, requireRole } from '@/lib/auth/request';
 import { withOrgContext } from '@/lib/db/client';
 import { decideApproval } from '@/lib/approvals/decide';
+import { executeApprovedAction } from '@/lib/approvals/execute';
 import { ApprovalDecision } from '@/lib/schemas';
 import { fail, internal, invalid, notFound, ok } from '@/lib/http';
 
@@ -40,9 +41,19 @@ export async function POST(
   if (!parsed.success) return invalid('invalid decision body', parsed.error.issues);
 
   try {
-    const outcome = await withOrgContext(auth.principal, (tx) =>
-      decideApproval(tx, auth.principal, id, kind, parsed.data.note),
-    );
+    const { outcome, execution } = await withOrgContext(auth.principal, async (tx) => {
+      const decided = await decideApproval(tx, auth.principal, id, kind, parsed.data.note);
+      // A rejection performs nothing, by construction: executeApprovedAction
+      // refuses any status other than 'approved'. The two facts stay separate —
+      // the decision is already committed above whether or not this succeeds.
+      if (decided.kind !== 'decided' || kind !== 'approved') {
+        return { outcome: decided, execution: null };
+      }
+      return {
+        outcome: decided,
+        execution: await executeApprovedAction(tx, auth.principal, id),
+      };
+    });
 
     switch (outcome.kind) {
       case 'not_found':
@@ -58,9 +69,13 @@ export async function POST(
           approval_id: outcome.approval.id,
           action: outcome.approval.action,
           trace_id: outcome.approval.trace_id,
-          // The authorized action has not run yet. It runs when the engine's
-          // continuation picks up this approval; see docs/CALLBACK-CONTRACT.md.
-          action_executed: false,
+          // Reported as it actually is, never assumed. A rejection executes
+          // nothing; an approval runs the action exactly once; and with no
+          // outbound channel configured the action is simulated and says so
+          // rather than quietly claiming to have sent something.
+          action_executed: execution?.kind === 'executed',
+          action_simulated: execution?.kind === 'executed' ? execution.simulated : null,
+          action_result: execution?.kind === 'executed' ? execution.result : null,
         });
     }
   } catch (err) {

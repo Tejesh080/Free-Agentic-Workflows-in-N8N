@@ -22,7 +22,7 @@ const EXPECTED_TABLES = [
   'api_keys', 'approval_requests', 'audit_events', 'callback_deliveries',
   'decision_receipts', 'evaluation_runs', 'executions', 'integrations',
   'lead_evidence', 'lead_outcomes', 'leads', 'memberships', 'organizations',
-  'rate_limit_counters', 'rubric_versions', 'users',
+  'rate_limit_counters', 'rubric_versions', 'users', 'dead_letters',
 ];
 
 const SECURITY_DEFINER = [
