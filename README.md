@@ -10,12 +10,12 @@ latency. Where something was estimated rather than measured, it says so.
 ```mermaid
 flowchart LR
   IN([request]) --> D["domain workflow<br/>01 · 03 · 04 · 06 · 07 · 10"]
-  P8["08 Prompt Registry<br/><i>versioned in Git, by SHA</i>"] --> D
-  D --> P2["02 Model Router<br/><i>deterministic provider choice</i>"]
+  P8["08 Prompt Registry<br/>versioned in Git, by SHA"] --> D
+  D --> P2["02 Model Router<br/>deterministic provider choice"]
   P2 --> LLM[("model provider")]
-  LLM --> P9["09 Verification<br/><i>deterministic checks first</i>"]
+  LLM --> P9["09 Verification<br/>deterministic checks first"]
   P9 -->|verified| OUT([output])
-  P9 -->|risky| P5["05 Governance<br/><i>human decision, audited</i>"]
+  P9 -->|risky| P5["05 Governance<br/>human decision, audited"]
   P5 --> OUT
 ```
 
