@@ -6,11 +6,13 @@
  * involves a model call and possibly enrichment; holding an HTTP connection
  * open for it would make the endpoint's latency the provider's latency.
  */
+import { NextResponse } from 'next/server';
 import { authenticate, requireScope } from '@/lib/auth/request';
 import { withOrgContext } from '@/lib/db/client';
 import { ingestLead } from '@/lib/leads/ingest';
 import { callbackUrlFor, dispatchExecution } from '@/lib/n8n/dispatch';
 import { fail, internal, invalid, ok } from '@/lib/http';
+import { consumeIngestBudget, retryAfterSeconds } from '@/lib/rate-limit';
 import { LeadIngest, LeadListQuery, DispatchPayload } from '@/lib/schemas';
 
 export async function POST(req: Request): Promise<Response> {
@@ -18,6 +20,31 @@ export async function POST(req: Request): Promise<Response> {
   if (!auth.ok) return fail(auth.status, auth.error, auth.detail);
   const scopeError = requireScope(auth.principal, 'leads:write');
   if (scopeError) return fail(scopeError.status, scopeError.error, scopeError.detail);
+
+  // Throttle before parsing, so a flood of malformed bodies costs the same as a
+  // flood of valid ones. This is the endpoint worth protecting: each accepted
+  // request buys a model call.
+  const budget = await consumeIngestBudget(auth.principal);
+  if (!budget.allowed) {
+    const retryAfter = retryAfterSeconds(budget);
+    return NextResponse.json(
+      {
+        error: 'rate_limited',
+        detail: `${budget.limit} requests per window exceeded`,
+        limit: budget.limit,
+        reset_at: budget.resetAt.toISOString(),
+      },
+      {
+        status: 429,
+        headers: {
+          'retry-after': String(retryAfter),
+          'x-ratelimit-limit': String(budget.limit),
+          'x-ratelimit-remaining': '0',
+          'x-ratelimit-reset': String(Math.floor(budget.resetAt.getTime() / 1000)),
+        },
+      },
+    );
+  }
 
   let raw: unknown;
   try {

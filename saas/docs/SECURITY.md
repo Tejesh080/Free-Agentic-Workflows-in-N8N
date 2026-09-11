@@ -28,7 +28,7 @@ state, and enforced again by RLS.
 
 *Residual:* the n8n webhook still exists and still trusts its body. It is
 protected only by `SWARM_INGEST_KEY`. Until direct public ingress is removed
-(see MEDIUM-1), the weaker boundary is still reachable.
+(HIGH-3), the weaker boundary is still reachable.
 
 ### Fixed — callback forgery
 
@@ -61,23 +61,40 @@ one identical `401`.
 
 ## HIGH
 
-### Open — HIGH-1: no rate limiting anywhere
+### Fixed — rate limiting on lead ingestion
 
-`POST /v1/leads` has no throttle. A valid key can enqueue unbounded executions,
-each of which costs a model call. This is both a cost-exhaustion and a
-denial-of-service vector, and it is the most exploitable gap in the system.
+*Was:* `POST /v1/leads` had no throttle. A valid key could enqueue unbounded
+executions, each costing a model call — cost exhaustion and denial of service in
+one.
 
-*Why not fixed:* doing it properly needs a shared counter, and the honest options
-are Vercel's platform rate limiting (deployment-dependent, and there is no
-deployment) or a Postgres token bucket (a write per request). Adding Redis for it
-would violate the "no new infrastructure without a requirement" rule, and a
-per-process in-memory limiter on a serverless platform is decoration.
+*Now:* a fixed-window counter in Postgres, consumed through a security-definer
+function in a single atomic statement, applied before the body is even parsed so
+a flood of malformed requests costs the same as a flood of valid ones.
 
-*Interim:* `api_keys.expires_at` exists and is enforced, so a key can be issued
-short-lived. That is mitigation, not a fix.
+Two subjects are checked, not one: `key:<id>` so a single credential cannot
+exhaust the organization's budget, and `org:<id>` so minting more keys is not a
+way around the limit. Defaults are 60/key and 300/org per minute, both
+configurable.
 
-*Fix:* a Postgres token bucket keyed on `api_key_id`, checked in the same
-transaction as the insert. One extra row write per request, no new dependency.
+Rejected alternatives, and why: an in-process counter is decoration on a
+serverless platform where the next request may run elsewhere; Redis would be new
+infrastructure bought for one counter; platform rate limiting is real but
+deployment-specific and there is no deployment yet.
+
+*Known trade, stated rather than hidden:* a fixed window lets a caller burst up
+to 2× the limit across a window boundary. A sliding window would need either a
+sorted set of timestamps or two counters, and the burst is acceptable for an
+endpoint whose cost is bounded by the model call behind it.
+
+*Evidence:* `tests/rate-limit.test.ts` — 8 assertions covering the limit
+boundary, subject independence, window reset (reset, not resume), exact counting
+across ten sequential consumes, refusal of a zero limit rather than treating it
+as unlimited, and that the application role has no table privilege at all, so
+one organization cannot read another's request volume.
+
+*Residual:* only ingestion is throttled. Read endpoints and the callback are
+not, on the grounds that their cost is a query rather than a model call. If the
+callback ever becomes expensive, that reasoning stops holding.
 
 ### Open — HIGH-2: no DNS-level SSRF protection
 
@@ -193,7 +210,7 @@ is no deployment to ship logs from.
 | --- | --- |
 | `api_keys` prefix collision at 64 bits | Open. A unique index turns a collision into an insert error rather than a mix-up; there is no retry, so key creation would fail. Probability is negligible; the fix is a retry loop. |
 | Timing side channel on hash comparison | Accepted. `authenticate_api_key` compares digests with `<>` in SQL. Exploiting it requires already knowing the hash, not the secret. The Node-side `digestsEqual` uses `timingSafeEqual` where it is used. |
-| No account lockout on repeated bad keys | Open, and subsumed by HIGH-1. |
+| No account lockout on repeated bad keys | Open. Authentication failures are not counted, so a stolen prefix can be brute-forced against at the rate limiter's ceiling. Guessing a 256-bit secret is not the threat; the missing signal is. |
 | `audit_events` uses `bigserial` | Accepted. Gaps reveal rolled-back transactions; the table is append-only by trigger, so a gap cannot hide a deletion. |
 | Error messages distinguish `400` from `404` | Accepted. A malformed body and a missing object are genuinely different, and neither leaks cross-tenant existence. |
 | `.pglite` directory is git-ignored, not encrypted | Accepted. Local development data, seeded from a script, contains no real customer data. |

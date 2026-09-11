@@ -97,18 +97,33 @@ jobs:
           if "if (!opts.secret) return { ok: false, reason: 'no_secret' }" not in hmac:
               failures.append("hmac.ts: verifyRequest no longer fails closed without a secret")
 
-          # 5. Every tenant-owned table must have RLS enabled AND forced, and a
-          #    WITH CHECK on its write policies. A policy that only filters
-          #    reads would let one organization insert a row owned by another.
-          rls = (root / "supabase/migrations/0004_rls.sql").read_text(encoding="utf-8")
-          tables = set(re.findall(r"alter table (\w+) enable row level security", rls))
-          forced = set(re.findall(r"alter table (\w+) force row level security", rls))
-          if tables != forced:
-              failures.append(f"0004_rls.sql: enabled but not forced: {sorted(tables - forced)}")
-          for stmt in re.findall(r"create policy .*?;", rls, re.S):
-              if re.search(r"for (insert|update)", stmt) and "with check" not in stmt:
-                  name = re.match(r"create policy (\w+)", stmt)
-                  failures.append(f"0004_rls.sql: policy {name.group(1) if name else '?'} writes without WITH CHECK")
+          # 5. Every table must have RLS enabled AND forced, and every write
+          #    policy must carry a WITH CHECK. A policy that only filters reads
+          #    would let one organization insert a row owned by another.
+          #
+          #    Scans ALL migrations, not just 0004. An earlier version read only
+          #    0004_rls.sql, which meant a table introduced by a later migration
+          #    was silently exempt — exactly what happened when the rate limit
+          #    table arrived in 0006.
+          migrations = sorted((root / "supabase/migrations").glob("*.sql"))
+          created = set()
+          enabled = set()
+          forced = set()
+          for path in migrations:
+              sql = path.read_text(encoding="utf-8")
+              created |= set(re.findall(r"^create table (\w+)", sql, re.M))
+              enabled |= set(re.findall(r"alter table (\w+) enable row level security", sql))
+              forced |= set(re.findall(r"alter table (\w+) force row level security", sql))
+              for stmt in re.findall(r"create policy .*?;", sql, re.S):
+                  if re.search(r"for (insert|update)", stmt) and "with check" not in stmt:
+                      name = re.match(r"create policy (\w+)", stmt)
+                      failures.append(f"{path.name}: policy {name.group(1) if name else '?'} writes without WITH CHECK")
+
+          if created - enabled:
+              failures.append(f"tables created without RLS enabled: {sorted(created - enabled)}")
+          if enabled - forced:
+              failures.append(f"RLS enabled but not forced: {sorted(enabled - forced)}")
+          tables = enabled
 
           # 6. The application role must not be able to read a key hash.
           grants = (root / "supabase/migrations/0005_grants.sql").read_text(encoding="utf-8")

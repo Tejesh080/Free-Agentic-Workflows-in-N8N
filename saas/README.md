@@ -31,7 +31,7 @@ server; only the driver differs (`src/lib/db/local.ts`). The seed prints an API
 key once and stores only its hash.
 
 ```bash
-npm test        # 81 tests, all against real Postgres policies
+npm test        # 89 tests, all against real Postgres policies
 npm run typecheck
 npm run build
 ```
@@ -78,6 +78,7 @@ penalty applies, so a confident fabrication moves the score *down*. See
 | Schema, RLS, adversarial tenancy tests | Done, 27 assertions against real policies |
 | API keys (hash-only storage, column-level privilege) | Done |
 | Async lead ingest, dispatch contract, signed callback | Done; dispatch is unexercised against a live n8n webhook |
+| Rate limiting on ingestion | Done — per-credential and per-organization, counted in Postgres |
 | Approvals, outcomes, receipts, audit log | Done |
 | Product screens | Overview, Leads, Lead Detail, Approvals, Evaluations, Settings |
 | Human authentication | HS256 Supabase tokens verified; asymmetric JWKS keys not implemented |
