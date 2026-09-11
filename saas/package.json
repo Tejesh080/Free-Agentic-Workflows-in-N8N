@@ -2,7 +2,7 @@
   "name": "revenue-swarm",
   "version": "0.1.0",
   "private": true,
-  "description": "Revenue Swarm — auditable AI revenue operations. SaaS control plane.",
+  "description": "Revenue Swarm \u2014 auditable AI revenue operations. SaaS control plane.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,7 +10,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:reset": "tsx scripts/local-db.ts reset"
+    "db:deploy": "tsx scripts/deploy-db.ts",
+    "db:status": "tsx scripts/deploy-db.ts --status",
+    "db:verify": "tsx scripts/verify-db.ts",
+    "test:pg": "vitest run"
   },
   "dependencies": {
     "next": "^16.3.4",

@@ -210,12 +210,8 @@ describe('absent and forged context', () => {
   it('a malformed organization context is treated as absent, not as a wildcard', async () => {
     // app.current_org_id() swallows the cast failure and returns null. The
     // failure mode of a bad context must be "no access", never "all access".
-    await db.raw.exec('begin');
-    await db.raw.query('select set_config($1, $2, true)', ['app.org_id', 'not-a-uuid']);
-    await db.raw.exec('set local role revenue_swarm_app');
-    const res = await db.raw.query<{ id: string }>('select id from leads');
-    await db.raw.exec('rollback');
-    expect(res.rows).toEqual([]);
+    const rows = await db.asRawContext('not-a-uuid', '', 'select id from leads');
+    expect(rows).toEqual([]);
   });
 });
 

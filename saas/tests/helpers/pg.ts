@@ -1,40 +1,25 @@
 /**
  * Test database harness.
  *
- * These tests run against PGlite — real Postgres 17 compiled to WebAssembly,
- * not a mock and not an emulation. `create policy`, `force row level security`,
- * `set role` and `current_setting` behave exactly as they do on a server, which
- * is the whole point: a tenant isolation test that runs against a stubbed
- * policy function proves nothing about the policy.
+ * Runs against real Postgres either way. With TEST_DATABASE_URL set it is a
+ * real server, reached through the production `pg` pool as a real login role;
+ * without it, PGlite — Postgres 17 compiled to WebAssembly, where
+ * `create policy`, `force row level security`, `set role` and `current_setting`
+ * behave exactly as they do on a server.
  *
- * The same migration files are applied here and on Supabase.
+ * Neither is a mock. The point of the split is that CI and a laptop with no
+ * database still run the same assertions as a deployment does.
  */
 import { PGlite } from '@electric-sql/pglite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import type { Tx } from '../../src/lib/db/client';
+import { realDatabaseUrl, type Principal, type TestDb } from './backend';
+import { createPostgresTestDb } from './postgres-backend';
 
-const MIGRATIONS_DIR = join(import.meta.dirname, '..', '..', 'supabase', 'migrations');
+export type { Principal, TestDb } from './backend';
 
-export type Principal =
-  | { kind: 'api_key'; orgId: string }
-  | { kind: 'user'; userId: string; orgId?: string }
-  | { kind: 'anonymous' };
-
-export interface TestDb {
-  raw: PGlite;
-  /** Run SQL with no principal and no RLS — migration and fixture setup only. */
-  admin<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]>;
-  /**
-   * Run SQL the way the application does: as the non-owning `revenue_swarm_app`
-   * role, with the principal expressed only as session settings.
-   */
-  as<T = Record<string, unknown>>(
-    principal: Principal,
-    sql: string,
-    params?: unknown[],
-  ): Promise<T[]>;
-  close(): Promise<void>;
-}
+const MIGRATIONS_DIR = join(process.cwd(), 'supabase', 'migrations');
 
 /** Assert-and-unwrap for fixture queries that must return exactly one row. */
 export function first<T>(rows: T[], what = 'row'): T {
@@ -49,48 +34,41 @@ export function migrationFiles(): string[] {
     .sort();
 }
 
+export function migrationSql(): string[] {
+  return migrationFiles().map((f) => readFileSync(join(MIGRATIONS_DIR, f), 'utf8'));
+}
+
 export async function createTestDb(): Promise<TestDb> {
+  const url = realDatabaseUrl();
+  if (url) return createPostgresTestDb(url);
+  return createPGliteTestDb();
+}
+
+async function createPGliteTestDb(): Promise<TestDb> {
   const pg = await PGlite.create();
 
-  for (const file of migrationFiles()) {
-    const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf8');
+  const files = migrationFiles();
+  for (const [i, sql] of migrationSql().entries()) {
     try {
       await pg.exec(sql);
     } catch (err) {
-      throw new Error(`migration ${file} failed: ${(err as Error).message}`);
+      throw new Error(`migration ${files[i]} failed: ${(err as Error).message}`);
     }
   }
 
-  async function admin<T>(sql: string, params: unknown[] = []): Promise<T[]> {
-    const res = await pg.query<T>(sql, params);
-    return res.rows;
-  }
-
-  async function as<T>(
-    principal: Principal,
-    sql: string,
-    params: unknown[] = [],
-  ): Promise<T[]> {
-    // Deliberately mirrors src/lib/db/context.ts. Context is applied with
-    // set_config so the value travels as a bound parameter and can never be
-    // concatenated into SQL, and is scoped to the transaction so it cannot leak
-    // into the next request on a pooled connection.
-    const orgId =
-      principal.kind === 'api_key'
-        ? principal.orgId
-        : principal.kind === 'user'
-          ? (principal.orgId ?? '')
-          : '';
-    const userId = principal.kind === 'user' ? principal.userId : '';
-
+  async function inTx<T>(
+    orgId: string,
+    userId: string,
+    body: (run: (sql: string, params: unknown[]) => Promise<unknown[]>) => Promise<T>,
+  ): Promise<T> {
     await pg.exec('begin');
     try {
       await pg.query('select set_config($1, $2, true)', ['app.org_id', orgId]);
       await pg.query('select set_config($1, $2, true)', ['app.user_id', userId]);
       await pg.exec('set local role revenue_swarm_app');
-      const res = await pg.query<T>(sql, params);
+      const out = await body(async (sql, params) => (await pg.query(sql, params)).rows);
       await pg.exec('commit');
-      return res.rows;
+      return out;
     } catch (err) {
       await pg.exec('rollback').catch(() => undefined);
       throw err;
@@ -98,9 +76,35 @@ export async function createTestDb(): Promise<TestDb> {
   }
 
   return {
-    raw: pg,
-    admin,
-    as,
+    backend: 'pglite',
+    async admin<T>(sql: string, params: unknown[] = []) {
+      return (await pg.query<T>(sql, params)).rows;
+    },
+    async as<T>(principal: Principal, sql: string, params: unknown[] = []) {
+      const orgId =
+        principal.kind === 'api_key'
+          ? principal.orgId
+          : principal.kind === 'user'
+            ? (principal.orgId ?? '')
+            : '';
+      const userId = principal.kind === 'user' ? principal.userId : '';
+      return inTx(orgId, userId, async (run) => (await run(sql, params)) as T[]);
+    },
+    async asRawContext<T>(orgId: string, userId: string, sql: string, params: unknown[] = []) {
+      return inTx(orgId, userId, async (run) => (await run(sql, params)) as T[]);
+    },
+    withAppTx<T>(orgId: string, userId: string, fn: (tx: Tx) => Promise<T>) {
+      return inTx(orgId, userId, (run) =>
+        fn({
+          async query<R>(sql: string, params: unknown[] = []) {
+            return (await run(sql, params)) as R[];
+          },
+          async one<R>(sql: string, params: unknown[] = []) {
+            return (await run(sql, params))[0] as R | undefined;
+          },
+        }),
+      );
+    },
     close: () => pg.close(),
   };
 }
@@ -137,15 +141,14 @@ export async function seedTwoOrgs(db: TestDb): Promise<TwoOrgFixture> {
     'organization',
   );
 
-  const mkUser = async (email: string) => {
-    return first(
+  const mkUser = async (email: string) =>
+    first(
       await db.admin<{ id: string }>(
         `insert into users (id, email) values (gen_random_uuid(), $1) returning id`,
         [email],
       ),
       'user',
     ).id;
-  };
   const userA = await mkUser('owner-a@example.test');
   const userB = await mkUser('owner-b@example.test');
   const memberA = await mkUser('member-a@example.test');
@@ -155,8 +158,8 @@ export async function seedTwoOrgs(db: TestDb): Promise<TwoOrgFixture> {
     [orgA, userA, orgB, userB, memberA],
   );
 
-  const mkLead = async (org: string, publicId: string, email: string) => {
-    return first(
+  const mkLead = async (org: string, publicId: string, email: string) =>
+    first(
       await db.admin<{ id: string }>(
         `insert into leads (org_id, public_id, dedupe_key, email, company_name)
          values ($1,$2,$3,$4,'Acme Test') returning id`,
@@ -164,12 +167,11 @@ export async function seedTwoOrgs(db: TestDb): Promise<TwoOrgFixture> {
       ),
       'lead',
     ).id;
-  };
   const leadA = await mkLead(orgA, 'lead_a1', 'a1@example.test');
   const leadB = await mkLead(orgB, 'lead_b1', 'b1@example.test');
 
-  const mkExec = async (org: string, lead: string, trace: string) => {
-    return first(
+  const mkExec = async (org: string, lead: string, trace: string) =>
+    first(
       await db.admin<{ id: string }>(
         `insert into executions (org_id, lead_id, trace_id, idempotency_key)
          values ($1,$2,$3,$4) returning id`,
@@ -177,7 +179,6 @@ export async function seedTwoOrgs(db: TestDb): Promise<TwoOrgFixture> {
       ),
       'execution',
     ).id;
-  };
   const executionA = await mkExec(orgA, leadA, 'trc_a1');
   const executionB = await mkExec(orgB, leadB, 'trc_b1');
 
