@@ -12,6 +12,7 @@ import { withOrgContext } from '@/lib/db/client';
 import { ingestLead } from '@/lib/leads/ingest';
 import { callbackUrlFor, dispatchExecution } from '@/lib/n8n/dispatch';
 import { callbackTokenFor } from '@/lib/hmac';
+import { recordDeadLetter } from '@/lib/executions/dead-letter';
 import { fail, internal, invalid, ok } from '@/lib/http';
 import { consumeIngestBudget, retryAfterSeconds } from '@/lib/rate-limit';
 import { LeadIngest, LeadListQuery, DispatchPayload } from '@/lib/schemas';
@@ -120,14 +121,32 @@ export async function POST(req: Request): Promise<Response> {
 
     const dispatched = await dispatchExecution(payload);
 
-    await withOrgContext(auth.principal, (tx) =>
-      tx.query(
-        dispatched.ok
-          ? `update executions set status = 'dispatched', dispatched_at = now(), engine_execution_id = coalesce($2, engine_execution_id) where id = $1`
-          : `update executions set status = 'failed', error = jsonb_build_object('stage','dispatch','reason',$2::text) where id = $1`,
-        [result.executionId, dispatched.ok ? dispatched.engineExecutionId : dispatched.detail],
-      ),
-    );
+    await withOrgContext(auth.principal, async (tx) => {
+      if (dispatched.ok) {
+        await tx.query(
+          `update executions set status = 'dispatched', dispatched_at = now(),
+                  engine_execution_id = coalesce($2, engine_execution_id)
+            where id = $1`,
+          [result.executionId, dispatched.engineExecutionId],
+        );
+        return;
+      }
+      // A lead that was accepted and then could not be handed over is exactly
+      // what the dead-letter queue is for: it is stored, it is not processed,
+      // and somebody has to decide whether to retry.
+      await tx.query(
+        `update executions set status = 'failed',
+                error = jsonb_build_object('stage','dispatch','reason',$2::text) where id = $1`,
+        [result.executionId, dispatched.detail],
+      );
+      await recordDeadLetter(tx, auth.principal, {
+        executionId: result.executionId,
+        leadId: result.leadId,
+        traceId: result.traceId,
+        stage: 'dispatch',
+        error: { reason: dispatched.reason, detail: dispatched.detail },
+      });
+    });
 
     if (!dispatched.ok) {
       // The lead is durably stored and the failure is recorded against the

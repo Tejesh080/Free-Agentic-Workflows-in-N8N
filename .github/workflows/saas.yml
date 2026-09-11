@@ -125,7 +125,30 @@ jobs:
               failures.append(f"RLS enabled but not forced: {sorted(enabled - forced)}")
           tables = enabled
 
-          # 6. The application role must not be able to read a key hash.
+          # 6. Every view over tenant data must be security_invoker.
+          #    A Postgres view runs with its OWNER's privileges by default, so a
+          #    view over an RLS-protected table returns every organization's rows
+          #    regardless of who asks — the policies underneath working perfectly
+          #    and being bypassed one level up. This was a real cross-tenant leak
+          #    in dead_letter_timeline, caught by a test, fixed in 0009.
+          #
+          #    Migrations are cumulative, so what matters is each view's LAST
+          #    definition, not every occurrence of it. Checking occurrences would
+          #    flag the original definition of a view that a later migration has
+          #    already corrected.
+          view_defs = {}
+          for path in migrations:
+              sql = path.read_text(encoding="utf-8")
+              for m in re.finditer(r"create (?:or replace )?view (\w+)(.*?) as", sql, re.S | re.I):
+                  view_defs[m.group(1)] = (path.name, m.group(2))
+          for view, (origin, opts) in sorted(view_defs.items()):
+              if "security_invoker" not in opts:
+                  failures.append(
+                      f"{origin}: view {view} is not security_invoker; "
+                      "it would bypass row level security on its base tables"
+                  )
+
+          # 7. The application role must not be able to read a key hash.
           grants = (root / "supabase/migrations/0005_grants.sql").read_text(encoding="utf-8")
           select_grant = re.search(r"grant select \((.*?)\) on api_keys", grants, re.S)
           if not select_grant:
@@ -133,7 +156,7 @@ jobs:
           elif "secret_hash" in select_grant.group(1):
               failures.append("0005_grants.sql: secret_hash is now selectable by the application role")
 
-          # 7. Pages must not be cached; a cached tenant page is a cross-tenant leak.
+          # 8. Pages must not be cached; a cached tenant page is a cross-tenant leak.
           for page in root.rglob("src/app/**/page.tsx"):
               if "force-dynamic" not in page.read_text(encoding="utf-8"):
                   failures.append(f"{page}: not force-dynamic")

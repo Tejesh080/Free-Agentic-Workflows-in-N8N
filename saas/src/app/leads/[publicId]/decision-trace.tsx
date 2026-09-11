@@ -60,19 +60,35 @@ export function buildSteps(input: {
     detail: `accepted from ${input.source}`,
   });
 
+  const terminalFailure =
+    input.executionStatus === 'failed' || input.executionStatus === 'dead_letter';
+
   if (!input.receipt) {
     steps.push({
-      mark: input.executionStatus === 'failed' ? 'fail' : 'held',
+      mark: terminalFailure ? 'fail' : 'held',
       name: 'Qualification',
-      detail:
-        input.executionStatus === 'failed'
-          ? 'execution failed; see the dead-letter record'
-          : `execution ${input.executionStatus ?? 'queued'}`,
+      detail: terminalFailure
+        ? input.executionStatus === 'dead_letter'
+          ? 'execution dead-lettered; it can be replayed'
+          : 'execution failed'
+        : `execution ${input.executionStatus ?? 'queued'}`,
+      why: terminalFailure
+        ? 'the lead is stored and was not processed; nothing was sent and no CRM record was written by this attempt'
+        : undefined,
     });
     return steps;
   }
 
   const r = input.receipt;
+
+  if (input.executionStatus === 'dead_letter') {
+    steps.push({
+      mark: 'fail',
+      name: 'Run',
+      detail: 'this attempt was dead-lettered',
+      why: 'what it managed before failing is below; a replay creates a new attempt rather than editing this one',
+    });
+  }
 
   steps.push({
     mark: 'done',
@@ -81,20 +97,46 @@ export function buildSteps(input: {
     why: 'the model chose from a closed value set per signal; it never returned a number',
   });
 
+  // The engine reports verification in one of two shapes depending on which
+  // service produced it, and neither is guessed at: a count pair when quotes
+  // were checked individually, or a verdict when the deterministic verifier ran
+  // over the whole output. Anything else is reported as absent rather than
+  // rendered as a zero, which would read as "nothing was supported".
   const supported = num(r.verification['supported']);
-  const total = num(r.verification['total']) ?? input.evidenceCount;
-  const allSupported = supported !== undefined && total !== undefined && supported === total;
-  steps.push({
-    mark: supported === undefined ? 'skip' : allSupported ? 'done' : 'held',
-    name: 'Evidence',
-    detail:
-      supported === undefined
-        ? 'no verification recorded'
-        : `${supported}/${total} quotes located in the source text`,
-    why: allSupported
-      ? undefined
-      : 'an unsupported quote earns no points and can incur a penalty',
-  });
+  const total = num(r.verification['total']) ?? (input.evidenceCount || undefined);
+  const verdict = r.verification['verified'];
+  const mode = str(r.verification['mode']);
+  const issues = Array.isArray(r.verification['issues'])
+    ? (r.verification['issues'] as unknown[]).length
+    : undefined;
+
+  if (supported !== undefined && total !== undefined) {
+    const allSupported = supported === total;
+    steps.push({
+      mark: allSupported ? 'done' : 'held',
+      name: 'Evidence',
+      detail: `${supported}/${total} quotes located in the source text`,
+      why: allSupported ? undefined : 'an unsupported quote earns no points and can incur a penalty',
+    });
+  } else if (typeof verdict === 'boolean') {
+    steps.push({
+      mark: verdict && !issues ? 'done' : 'held',
+      name: 'Evidence',
+      detail: verdict
+        ? `verified${mode ? ` (${mode})` : ''}${issues ? `, ${issues} issue(s)` : ''}`
+        : `not verified${issues ? `, ${issues} issue(s)` : ''}`,
+      why:
+        input.evidenceCount === 0
+          ? 'the model returned no quoted evidence for this lead'
+          : 'an unsupported quote earns no points and can incur a penalty',
+    });
+  } else {
+    steps.push({
+      mark: 'skip',
+      name: 'Evidence',
+      detail: 'no verification recorded',
+    });
+  }
 
   steps.push({
     mark: 'done',

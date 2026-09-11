@@ -111,6 +111,18 @@ async function main() {
     writeWithoutCheck.map((p) => `${p.tablename}.${p.policyname}`).join(', '),
   );
 
+  // A view over RLS-protected tables runs as its owner unless it is
+  // security_invoker, which silently returns every tenant's rows.
+  const views = await c.query<{ viewname: string; opts: string[] | null }>(
+    `select c.relname as viewname, c.reloptions as opts
+       from pg_class c join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relkind = 'v' order by 1`,
+  );
+  const leaky = views.rows
+    .filter((v) => !(v.opts ?? []).some((o) => o.replace(/\s/g, '') === 'security_invoker=true'))
+    .map((v) => v.viewname);
+  check('every view is security_invoker', leaky.length === 0, leaky.join(', '));
+
   // -- functions ------------------------------------------------------------
   console.log('\nFUNCTIONS');
   const fns = await c.query<{ proname: string; secdef: boolean; provolatile: string; config: string[] | null }>(

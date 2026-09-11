@@ -8,6 +8,7 @@
  */
 import type { Principal, Tx } from '../db/client';
 import type { CallbackPayload } from '../schemas';
+import { recordDeadLetter, resolveDeadLetterForReplay } from './dead-letter';
 
 export interface CallbackTarget {
   executionId: string;
@@ -74,10 +75,12 @@ export async function applyCompletion(
         started_at = coalesce($7::timestamptz, started_at),
         completed_at = coalesce($8::timestamptz, now()),
         cost_usd = coalesce($9, cost_usd),
-        latency_ms = case
-          when $7::timestamptz is not null
-          then (extract(epoch from (coalesce($8::timestamptz, now()) - $7::timestamptz)) * 1000)::int
-          else latency_ms end
+        -- Prefer the engine's own start time; fall back to when we queued the
+        -- job, so a completion that omits started_at still yields a real
+        -- end-to-end number rather than a blank. Never invent one.
+        latency_ms = (extract(epoch from (
+            coalesce($8::timestamptz, now()) - coalesce($7::timestamptz, queued_at)
+          )) * 1000)::int
       where id = $1`,
     [
       target.executionId,
@@ -203,6 +206,30 @@ export async function applyCompletion(
       }),
     ],
   );
+
+  // A completion that reports failure is a dead letter, not just a status. The
+  // receipt above is still written: knowing what the engine got as far as
+  // before failing is most of the diagnosis.
+  if (failed) {
+    const trace = await tx.one<{ trace_id: string }>(
+      'select trace_id from executions where id = $1',
+      [target.executionId],
+    );
+    await recordDeadLetter(tx, systemPrincipal(target.orgId, 'engine_callback'), {
+      executionId: target.executionId,
+      leadId: target.leadId,
+      // From the execution we dispatched, not from anything the payload said.
+      traceId: trace?.trace_id ?? '',
+      stage: 'callback',
+      error: payload.error ?? { message: 'the engine reported a failure with no detail' },
+      failingNode: (payload.error?.['failing_node'] as string | undefined) ?? null,
+      engineExecutionId: payload.engine_execution_id ?? null,
+    });
+  }
+
+  // If this execution was itself a replay, the dead letter it came from now has
+  // an answer.
+  await resolveDeadLetterForReplay(tx, target.executionId, !failed);
 
   return { kind: 'applied', receiptId: receipt.id, approvalId };
 }
