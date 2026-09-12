@@ -1,10 +1,16 @@
-# n8n AI Workflows
+# An auditable AI decision and action engine
 
-Sixteen AI workflows for n8n: agents, RAG, model routing, output verification,
-human approval, and a revenue pipeline that will not email anyone without one.
+Infrastructure for letting a model influence a real business system without
+letting it decide anything. A model interprets ambiguous input; deterministic
+rules decide; evidence is verified before it counts; irreversible actions need a
+human; and every decision leaves a record you can reconstruct months later.
 
-`16 workflows` · `372 nodes` · `Live tested in n8n` · `Postgres control plane` ·
-`RLS-enforced isolation` · `Evaluated`
+Sixteen n8n workflows implement the engine. A Next.js and Postgres control plane
+owns the trust boundary in front of it. A lead-scoring pipeline is the worked
+example the whole thing is demonstrated on — not the point of it.
+
+`16 workflows` · `372 nodes` · `144 control-plane tests on real Postgres` ·
+`RLS-enforced isolation` · `Live CRM round-trip` · `Evaluated`
 
 <!-- Hero image goes here once there is a real screenshot of a workflow canvas.
      Leave it empty rather than filling it with a mockup. -->
@@ -40,7 +46,28 @@ human approval, and a revenue pipeline that will not email anyone without one.
 To take the whole set at once, `python scripts/import-workflows.py` creates all
 sixteen and relinks the sub-workflow references for you.
 
-## Shared components
+## What the engine is actually made of
+
+The reusable part is not the lead pipeline. It is these, each implemented once
+and callable by anything:
+
+| Capability | Where | What it guarantees |
+| --- | --- | --- |
+| Model routing with cross-vendor fallback | `02` | A provider outage degrades instead of failing; model identity is recorded for reproducibility |
+| Output verification | `09` | Deterministic checks run before any LLM judge; a claim without support scores zero |
+| Evidence grounding | `12` | Every model label carries a verbatim quote, and a quote absent from the source costs points |
+| Deterministic scoring from model labels | `12` | The model returns labels from a closed set; fixed weights produce the number. The model cannot emit a score |
+| Human approval as a domain object | `05`, control plane | Approval state lives in Postgres, not in the notification transport; approval and execution are separate auditable facts |
+| Decision receipts | control plane | One immutable record per run: inputs, evidence, score components, rubric/prompt/model versions, what ran, and what was skipped with the reason |
+| Evaluation with a promotion gate | `15` | A scoring change is promoted by arithmetic or not at all |
+| Idempotency and replay | `11`, `14`, `16`, control plane | Tenant-scoped keys; a dead letter preserves the original failure while a replay creates a new attempt |
+| Authenticated multi-tenancy | control plane | Organization identity comes from a credential, never a request body; Postgres RLS enforces it again |
+| A CRM boundary | `11` | Every HubSpot call in the system lives in three nodes behind one contract |
+
+Point this at a different problem and most of it survives; only the rubric, the
+prompts and the action at the end change.
+
+### How the workflows compose
 
 These are not sixteen standalone templates. Nine of them are services the
 others call over Execute Sub-workflow — Model Router, Verification, Governance,
@@ -49,9 +76,18 @@ Evaluation Harness and the Failure Handler — so routing, checking, approval,
 prompt versioning, every CRM write, rubric promotion and every dead letter are
 each implemented once.
 
-The revenue pipeline (11–15) is what that buys you: 14 reads as a list of steps
+The revenue pipeline (11–16) is what that buys you: 14 reads as a list of steps
 because the judgement lives in the services underneath it. Every HubSpot call in
 the whole system happens in three nodes inside 11.
+
+**Status, stated plainly:** the engine is proven — a real lead went from an
+authenticated API request through qualification, evidence verification and
+deterministic scoring to a real HubSpot contact and associated deal, and back as
+a signed callback and a persisted receipt
+([saas/docs/evidence/live-round-trip.md](saas/docs/evidence/live-round-trip.md)).
+Lead scoring as a *product* is not being pursued: the incumbents already do it,
+and the interesting question is which problem this engine should be pointed at
+instead. Nothing here is deployed, and it is not trying to be.
 
 The division of labour is the point. A model turns lead text into labels from a
 closed set, with a verbatim quote for each. A fixed rubric turns labels into a
